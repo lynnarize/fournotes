@@ -64,16 +64,6 @@ The app works without any key. When a request comes in, the first available opti
 
 Every option is documented in `.env.example`. Keys live on the server or in the user's browser — never in the bundle, never in a backup, never in sync.
 
-## Deploy
-
-Netlify works out of the box (`netlify.toml`). Set your environment variables in the Netlify UI, not in a file:
-
-- `OPENROUTER_API_KEY` for free shared AI, or `ANTHROPIC_API_KEY` for the paid one
-- `NEXT_PUBLIC_GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` for Drive sync
-- `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` for cloud sync and shared spaces
-
-Add the deployed URL to your Google OAuth **Authorized redirect URIs** as `https://your-site/api/google/callback`.
-
 ## Project layout
 
 ```
@@ -111,5 +101,3 @@ GUIDE.md                      Setup guides, architecture and roadmap
 ## Privacy
 
 Data lives in your browser unless you turn on sync. Google Drive sync uses the hidden **appDataFolder**, so it is private to this app and invisible in your Drive. Receipt thumbnails stay on the device. Photos and recordings are sent to whichever AI provider is configured, and Settings → Data & privacy lets you export everything or delete it.
-
-See **GUIDE.md** for setup walkthroughs and what's next.

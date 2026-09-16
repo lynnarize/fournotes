@@ -1,0 +1,205 @@
+// Shared data model. Keep this file free of browser/server-only imports so it
+// can later be copied into a shared package for the mobile and Mac apps.
+
+export type Tab = "today" | "notes" | "todo" | "finance";
+
+export interface BaseItem {
+  id: string;
+  createdAt: string; // ISO
+  updatedAt: string; // ISO
+  deletedAt?: string | null; // soft delete -> makes sync easier
+  spaceId?: string | null; // null = personal, otherwise a shared space
+  sample?: boolean; // part of the optional sample data; removable in one click, never synced
+}
+
+export type NoteSource = "manual" | "chat" | "ocr" | "recording" | "share";
+
+export interface Note extends BaseItem {
+  title: string;
+  content: string; // plain text / light markdown
+  source: NoteSource;
+  tags: string[];
+  imageDataUrl?: string; // thumbnail of the scanned page (local only for now)
+}
+
+export type Priority = "low" | "medium" | "high";
+
+/** A to-do that also logs spending when completed (rent, internet, subscriptions). */
+export interface Bill {
+  amount: number;
+  currency?: string;
+  category: ExpenseCategory;
+}
+
+export interface Todo extends BaseItem {
+  title: string;
+  notes?: string;
+  done: boolean;
+  completedAt?: string | null; // ISO, used for smart reminder timing
+  dueAt?: string | null; // ISO
+  remindAt?: string | null; // ISO
+  reminded?: boolean;
+  priority: Priority;
+  source: NoteSource;
+  rrule?: string | null; // subset of RFC 5545, e.g. "FREQ=MONTHLY;INTERVAL=1"
+  bill?: Bill | null;
+  noteId?: string | null; // link back to the note it came from
+}
+
+/** Built-in categories. Users can add their own (Settings → Categories). */
+export const EXPENSE_CATEGORIES = [
+  "Food & Drink",
+  "Groceries",
+  "Transport",
+  "Shopping",
+  "Bills & Utilities",
+  "Health",
+  "Entertainment",
+  "Education",
+  "Income",
+  "Other",
+] as const;
+// A category is any name: the built-ins above plus whatever the user adds.
+export type ExpenseCategory = string;
+
+export const CURRENCIES = ["IDR", "USD", "SGD", "MYR", "EUR", "JPY", "AUD", "GBP", "THB", "KRW", "CNY", "SAR"] as const;
+
+export interface LineItem {
+  name: string;
+  qty?: number;
+  price?: number;
+}
+
+export interface Split {
+  name: string;
+  amount: number; // in the transaction's currency
+  settled: boolean;
+}
+
+export interface Transaction extends BaseItem {
+  merchant: string;
+  amount: number; // positive = spend, negative = income
+  currency: string; // ISO 4217, e.g. IDR
+  fxRate?: number | null; // 1 unit of `currency` in the base currency (only when currency differs)
+  category: ExpenseCategory;
+  date: string; // YYYY-MM-DD
+  items: LineItem[];
+  source: NoteSource;
+  imageDataUrl?: string;
+  splits?: Split[]; // other people's shares of this bill
+  noteId?: string | null;
+}
+
+export type StickyColor = "yellow" | "pink" | "blue" | "green";
+
+export interface Sticky extends BaseItem {
+  text: string;
+  color: StickyColor;
+  pinned?: boolean; // pinned stickies show in the daily brief
+}
+
+export interface MonthlySummary {
+  month: string; // YYYY-MM
+  total: number;
+  currency: string;
+  byCategory: Record<string, number>;
+  text: string; // AI written summary
+  createdAt: string;
+}
+
+export interface DailyBrief {
+  date: string; // YYYY-MM-DD
+  text: string;
+}
+
+export interface Settings {
+  currency: string; // base currency
+  budgets: Partial<Record<ExpenseCategory, number>>; // monthly, in base currency
+  categories?: string[]; // extra categories the user created
+  voiceReplies: boolean; // speak replies aloud in voice mode
+  updatedAt?: string; // last change, so sync can keep the newer settings
+  name?: string;
+}
+
+export interface Space {
+  id: string;
+  name: string;
+  inviteCode?: string;
+}
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+// ---- Actions the AI can ask the client to apply --------------------------
+// The server never writes to storage directly in the base version; it returns
+// actions, and the client store applies them. When you add a sync backend,
+// the server can write to the database instead and the client just re-syncs.
+
+export type AIAction =
+  | { type: "create_note"; title: string; content: string; tags?: string[]; ref?: string }
+  | {
+      type: "create_todo";
+      title: string;
+      notes?: string;
+      dueAt?: string | null;
+      remindAt?: string | null;
+      priority?: Priority;
+      rrule?: string | null;
+      bill?: Bill | null;
+      noteRef?: string; // `ref` of a create_note in the same batch
+    }
+  | {
+      type: "add_transaction";
+      merchant: string;
+      amount: number;
+      currency?: string;
+      category: ExpenseCategory;
+      date: string;
+      items?: LineItem[];
+      splitWith?: string[]; // split equally with these people
+      noteRef?: string;
+    }
+  | { type: "create_sticky"; text: string; color?: StickyColor }
+  | { type: "complete_todo"; titleContains: string }
+  | { type: "set_budget"; category: ExpenseCategory; amount: number }
+  | { type: "split_transaction"; merchantContains: string; people: string[]; includeMe?: boolean };
+
+export interface ChatResponse {
+  reply: string;
+  actions: AIAction[];
+  demo?: boolean;
+}
+
+export interface CaptureResult {
+  kind: "receipt" | "handwritten_note" | "todo_list" | "other";
+  reply: string;
+  actions: AIAction[];
+  demo?: boolean;
+}
+
+// Compact context the client sends so the AI can answer questions about data.
+export interface ClientContext {
+  now: string;
+  timezone: string;
+  currency: string;
+  notes: { title: string; snippet: string }[];
+  /** Full text of the notes most relevant to the question (retrieval / RAG). */
+  relevantNotes?: { title: string; content: string; updatedAt: string }[];
+  todos: { title: string; done: boolean; dueAt?: string | null; rrule?: string | null }[];
+  transactions: { merchant: string; amount: number; category: string; date: string }[];
+  budgets?: Partial<Record<ExpenseCategory, number>>;
+  categories?: string[];
+}
+
+export interface BriefInput {
+  now: string;
+  timezone: string;
+  currency: string;
+  name?: string;
+  tasksToday: { title: string; dueAt?: string | null; overdue: boolean }[];
+  yesterdaySpend: { merchant: string; amount: number; category: string }[];
+  stickies: string[];
+  alerts: string[]; // budgets near limit, subscriptions due, money owed
+}

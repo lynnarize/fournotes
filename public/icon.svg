@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#ffffff"/>
+  <!-- Logo scaled to stay inside the maskable-icon safe zone -->
+  <g transform="translate(53.5 44.8) scale(0.33)">
+    <polygon points="535,375 625,375 985,898 988,378 1073,378 1075,1012 950,1012 601,493 601,1012 535,1012" fill="#000000"/>
+    <path fill="#fe2629" fill-rule="evenodd" d="M460 375H535V795H631V867H535V1012H450V870H145V795Z M452 500L450 795H232Z"/>
+    <circle cx="1031" cy="318" r="50" fill="#fe2629"/>
+  </g>
+</svg>

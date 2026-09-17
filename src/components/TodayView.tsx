@@ -2,6 +2,7 @@
 // Daily brief: today's tasks, yesterday's spending, pinned stickies, heads-up
 // alerts (budgets, subscriptions, money owed) and a 3-line AI summary.
 import { useEffect, useMemo, useRef, useState } from "react";
+import { looksLikeThinking } from "@/lib/ai/text";
 import { api, fmtDateTime } from "@/lib/client";
 import { useOnline } from "@/lib/hooks";
 import { budgetStatus, detectSubscriptions, myShare, owedToMe } from "@/lib/insights";
@@ -52,7 +53,8 @@ export default function TodayView({ setTab }: { setTab: (t: Tab) => void }) {
     return out;
   }, [transactions, settings, cur]);
 
-  const brief = briefs.find((b) => b.date === today);
+  // A brief written by a model thinking out loud is treated as missing, so it's rewritten.
+  const brief = briefs.find((b) => b.date === today && !looksLikeThinking(b.text));
 
   const generate = async () => {
     setLoading(true);

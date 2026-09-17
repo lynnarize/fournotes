@@ -57,7 +57,7 @@ The app works without any key. When a request comes in, the first available opti
 |---|---|---|
 | 1 | **User's own key** (Settings → API keys) | Their key, their allowance. Stored only in their browser, never synced or backed up |
 | 2 | **`ANTHROPIC_API_KEY`** on the server | Best quality — chat, OCR, summaries |
-| 3 | **`OPENROUTER_API_KEY`** on the server | Free `:free` models. Shared across visitors, so it's rate-limited (see below) |
+| 3 | **`OPENROUTER_API_KEY`** on the server | Free models from a tested list (`npm run probe:models`). Shared across visitors, so it's rate-limited (see below) |
 | 4 | Nothing set | **Demo mode**: rule-based replies, no OCR. Everything else still works |
 
 **If you put a shared key on the server**, the guards in `src/lib/ai/shared.ts` keep it from costing you money or being abused: requests must come from your own site, free models only unless `OPENROUTER_ALLOW_PAID=true`, and per-visitor (`SHARED_AI_PER_IP_DAILY`), per-account (`SHARED_AI_PER_USER_DAILY`) and app-wide (`SHARED_AI_DAILY_LIMIT`) daily caps. Set `SHARED_AI_REQUIRE_SIGNIN=true` to require a Google sign-in first.

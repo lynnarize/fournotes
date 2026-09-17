@@ -2,6 +2,7 @@
 // Settings → Bring your own API key.
 // OpenRouter's free models come first: one free key and the app is fully working.
 import { useEffect, useState } from "react";
+import { MODELS_CHECKED_AT } from "@/lib/ai/models";
 import {
   clearUserKeys, isValidKey, keyHeaders, maskKey, MODEL_OPTIONS, OPENROUTER_FREE_MODELS, OPENROUTER_KEYS_URL,
   saveUserKeys, useUserKeys, type SttProvider, type UserKeys,
@@ -157,7 +158,7 @@ export default function ApiKeysSection() {
           {resultLine("openrouter")}
           <label className="mt-1 flex flex-col gap-1 text-xs text-[var(--muted)]">Free model
             <select
-              value={draft.openrouterModel ?? ""}
+              value={OPENROUTER_FREE_MODELS.some((m) => m.id === draft.openrouterModel) ? draft.openrouterModel : ""}
               disabled={!draft.openrouterKey}
               onChange={(e) => set({ openrouterModel: e.target.value || undefined })}
               className={inputBox}
@@ -167,8 +168,9 @@ export default function ApiKeysSection() {
             </select>
           </label>
           <p className="text-xs leading-relaxed text-[var(--muted)]">
-            Free models cost nothing but have daily limits and can be busy at times. Only models marked &ldquo;reads photos&rdquo; can scan receipts;
-            the app switches to a free vision model for photos automatically.
+            Free models cost nothing but have daily limits and can be busy at times. Only models that correctly add to-dos and
+            transactions are listed{MODELS_CHECKED_AT ? ` (tested ${new Date(MODELS_CHECKED_AT).toLocaleDateString()})` : ""}. If one is busy,
+            the app moves on to the next. Photos always go to a model that reads them.
           </p>
         </div>
 

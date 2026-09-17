@@ -3,7 +3,7 @@ import "server-only";
 // set in Settings → API keys) wins, then the server's own keys, then demo mode.
 // OpenRouter's free models are the default when no Anthropic key is present.
 import {
-  ANTHROPIC_USER_MODELS, DEFAULT_OPENROUTER_FAST_MODEL, DEFAULT_OPENROUTER_MODEL, OPENROUTER_FREE_MODELS, visionModelFor,
+  ANTHROPIC_USER_MODELS, DEFAULT_OPENROUTER_FAST_MODEL, DEFAULT_OPENROUTER_MODEL, isFreeModel, OPENROUTER_FREE_MODELS, visionModelFor,
 } from "./models";
 
 export type KeySource = "user" | "server" | "none";
@@ -51,11 +51,11 @@ export function resolveKeys(req: Request): ResolvedKeys {
   const openRouterKey = userOpenRouter || env.OPENROUTER_API_KEY || undefined;
   const orModel = (userOpenRouter && allowed(header(req, "x-openrouter-model"), USER_OPENROUTER_MODELS)) || env.OPENROUTER_MODEL || DEFAULT_OPENROUTER_MODEL;
   const orFastModel = env.OPENROUTER_FAST_MODEL || DEFAULT_OPENROUTER_FAST_MODEL;
-  // The deployment's own key is shared by every visitor: keep it on ":free"
+  // The deployment's own key is shared by every visitor: keep it on free
   // models unless the owner opts in, so it can never spend credits.
   const sharedFreeOnly = !userOpenRouter && env.OPENROUTER_ALLOW_PAID !== "true";
-  const safeModel = sharedFreeOnly && !orModel.endsWith(":free") ? DEFAULT_OPENROUTER_MODEL : orModel;
-  const safeFastModel = sharedFreeOnly && !orFastModel.endsWith(":free") ? DEFAULT_OPENROUTER_FAST_MODEL : orFastModel;
+  const safeModel = sharedFreeOnly && !isFreeModel(orModel) ? DEFAULT_OPENROUTER_MODEL : orModel;
+  const safeFastModel = sharedFreeOnly && !isFreeModel(orFastModel) ? DEFAULT_OPENROUTER_FAST_MODEL : orFastModel;
 
   const userVoyage = header(req, "x-voyage-key");
   const userStt = header(req, "x-stt-key");

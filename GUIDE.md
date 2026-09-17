@@ -260,12 +260,38 @@ Three ideas cover most of it:
 
 1. **The user's own key**, sent per-request as `x-anthropic-key` / `x-openrouter-key`. Saved in their browser only — excluded from backups and from sync.
 2. **`ANTHROPIC_API_KEY`** on the server — best quality.
-3. **`OPENROUTER_API_KEY`** on the server — free `:free` models, shared by all visitors.
+3. **`OPENROUTER_API_KEY`** on the server — free models from the tested list, shared by all visitors. See "Free models" below.
 4. **Demo mode** — rule-based replies in `src/lib/ai/demo.ts`, no OCR.
 
 A shared server key is guarded by `src/lib/ai/shared.ts`: same-site requests only, free models unless `OPENROUTER_ALLOW_PAID=true`, and three daily caps (per IP, per signed-in account, per app). Free OpenRouter models allow roughly 20 requests/minute and 50/day, so keep `SHARED_AI_PER_IP_DAILY` small.
 
 Never commit a key. Put it in `.env.local` locally and in the Netlify UI for production, and set a $0 credit limit on the OpenRouter key so a shared key can never bill you.
+
+#### Free models
+
+Free models differ a lot. Some call tools properly; others write *about* calling a tool ("we need to create_todo…") and nothing gets saved. So Settings only offers models that passed a real test, listed in `src/lib/ai/verified-models.json`.
+
+To refresh the list (do it when a model stops working, or every few weeks):
+
+```bash
+npm run dev                                                # in one terminal
+read -s OPENROUTER_API_KEY && export OPENROUTER_API_KEY    # in another; paste key, Enter
+npm run probe:models                                       # or: -- --only a:free,b:free / --limit 6 / --dry
+```
+
+Every free model that claims tool support is sent the app's real prompts through `/api/ai/probe` (dev only, free models only, no fallbacks):
+
+| Test | Pass when |
+|---|---|
+| chat | "remind me… umbrella… spent 45k on lunch" creates the to-do **and** a 45,000 transaction, with no planning text in the reply |
+| capture | a meeting transcript becomes a note through the forced capture tool |
+| vision | (photo-capable models) `scripts/probe-receipt.jpg` becomes a 128,500 transaction |
+
+Passing models are written in order (consistent first, then photo-capable, then fastest); the first is the default. A wrong chat answer gets one retry: a model that only passes on retry is marked *inconsistent* and ranked lower. A model whose free provider is busy upstream (OpenRouter 429 with `limit_source: upstream…`, or "overloaded") is reported as **BUSY**, left as it is, and can be re-tested later with `--only`. With `--only`, models you didn't test keep their place. A free account allows about 50 requests a day and each model uses 2–4, so use `--limit` or `--only` if needed. Commit the updated JSON so the deployed app uses the same list.
+
+At runtime, requests still recover on their own: OpenRouter's `models` fallback moves down the tested list and then to `openrouter/free` (with `provider.require_parameters`, so only tool-capable providers), `<think>` blocks are stripped, and a reply that describes a tool call is retried once with `tool_choice: "required"`. Planning text is never shown to the user.
+
+The daily brief and monthly review ask for the answer inside `<answer>` tags with `reasoning.exclude`, then check it (`src/lib/ai/text.ts`): a brief must be three emoji lines, a review must be short and not read like reasoning. If a free model fails that, the app writes the data-only version from `src/lib/ai/local.ts` instead, and a thinking-style brief or review already saved on a device is regenerated automatically.
 
 ### 3.3 Get an Anthropic key
 

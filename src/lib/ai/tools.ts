@@ -153,7 +153,7 @@ export const FILE_CAPTURE_TOOL = {
       },
       receipt: {
         type: "object",
-        description: "For receipts only.",
+        description: "For receipts only. Always fill this for a receipt, including total.",
         properties: {
           merchant: { type: "string" },
           total: { type: "number", description: "Grand total actually paid, number only. Negative if money was received." },
@@ -166,7 +166,7 @@ export const FILE_CAPTURE_TOOL = {
       },
       todos: {
         type: "array",
-        description: "Tasks / action items found (checklists, or action items in a recording).",
+        description: "Tasks / action items found (checklists, or action items in a recording). Never put receipt line items here; they go in receipt.items.",
         items: {
           type: "object",
           properties: {

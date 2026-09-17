@@ -3,6 +3,7 @@
 // month-end review to the server (cron + push notifications) so they work when
 // the app is closed — see GUIDE.md.
 import { useEffect, useRef } from "react";
+import { looksLikeThinking } from "@/lib/ai/text";
 import { api } from "@/lib/client";
 import { baseAmount } from "@/lib/insights";
 import { alive, useStore } from "@/lib/store";
@@ -49,7 +50,7 @@ export default function BackgroundJobs() {
     d.setDate(0); // last day of previous month
     const prev = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     const { transactions, summaries, settings, saveSummary } = storeRef.current;
-    if (summaries.some((s) => s.month === prev)) return;
+    if (summaries.some((s) => s.month === prev && !looksLikeThinking(s.text))) return;
     const txs = alive(transactions).filter((t) => t.date.startsWith(prev));
     if (txs.length === 0 || !navigator.onLine) return;
     const cur = settings.currency;

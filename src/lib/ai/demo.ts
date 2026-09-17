@@ -3,6 +3,7 @@ import { formatMoney, parseAmount } from "../money";
 import { guessCategory, parseWalletNotification } from "../wallet";
 import type { AIAction, BriefInput, CaptureResult, ChatMessage, ChatResponse, ClientContext, ExpenseCategory, Transaction } from "../types";
 import { EXPENSE_CATEGORIES } from "../types";
+import { localBrief, localMonthly } from "./local";
 import type { LLMProvider } from "./provider";
 
 // Rule-based stand-in used when no API key is set, so the UI is testable offline.
@@ -143,21 +144,10 @@ export class DemoProvider implements LLMProvider {
   }
 
   async monthlySummary(month: string, txs: Pick<Transaction, "amount" | "category">[], currency: string) {
-    const total = txs.reduce((s, t) => s + (t.amount > 0 ? t.amount : 0), 0);
-    const by: Record<string, number> = {};
-    for (const t of txs) if (t.amount > 0) by[t.category] = (by[t.category] ?? 0) + t.amount;
-    const top = Object.entries(by).sort((a, b) => b[1] - a[1]).slice(0, 3);
-    return `${month}: spent ${formatMoney(total, currency)}.\nTop: ${top.map(([c, v]) => `${c} ${formatMoney(v, currency)}`).join(", ") || "—"}.${DEMO}`;
+    return localMonthly(month, txs, currency) + DEMO;
   }
 
   async dailyBrief(input: BriefInput) {
-    const overdue = input.tasksToday.filter((t) => t.overdue).length;
-    const first = input.tasksToday[0]?.title;
-    const spent = input.yesterdaySpend.reduce((s, t) => s + Math.max(0, t.amount), 0);
-    return [
-      `🎯 ${input.tasksToday.length ? `${input.tasksToday.length} task(s) today${overdue ? `, ${overdue} overdue` : ""}. Start with “${first}”.` : "No tasks due today. A good day to plan ahead."}`,
-      `💸 Yesterday you spent ${formatMoney(spent, input.currency)} across ${input.yesterdaySpend.length} transaction(s).`,
-      `📌 ${input.alerts[0] ?? input.stickies[0] ?? "Nothing urgent. Have a good day!"}`,
-    ].join("\n") + DEMO;
+    return localBrief(input) + DEMO;
   }
 }

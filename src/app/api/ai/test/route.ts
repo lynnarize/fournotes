@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { resolveKeys } from "@/lib/ai/keys";
-import { OPENROUTER_FREE_MODELS } from "@/lib/ai/models";
+import { OPENROUTER_AUTO_MODEL, OPENROUTER_FREE_MODELS } from "@/lib/ai/models";
 import { rateLimit } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
@@ -41,6 +41,13 @@ export async function POST(req: Request) {
       const info = (await res.json().catch(() => ({}))) as { data?: { limit_remaining?: number | null; is_free_tier?: boolean } };
       const free = OPENROUTER_FREE_MODELS.find((m) => m.id === model);
       const remaining = info.data?.limit_remaining;
+      // A working key isn't enough: the chosen model has to still exist.
+      const listed = await fetch("https://openrouter.ai/api/v1/models", { signal: AbortSignal.timeout(15_000) })
+        .then((r) => (r.ok ? (r.json() as Promise<{ data?: { id: string }[] }>) : null))
+        .catch(() => null);
+      if (listed?.data && model !== OPENROUTER_AUTO_MODEL && !listed.data.some((m) => m.id === model)) {
+        return result(true, `Key works, but ${free?.label ?? model} is no longer offered. The app will use Auto instead.`);
+      }
       return result(
         true,
         `Key works. Using ${free?.label ?? model}.${typeof remaining === "number" ? ` ${remaining} credits left.` : " Free models have daily limits."}`,

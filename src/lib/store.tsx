@@ -111,8 +111,13 @@ function seed(): AppData {
 }
 
 // ---------------------------------------------------------------------------
+/** Where one filed item lives, so the chat can jump to it (null: nothing to show). */
+export type ChangeLink = { kind: ListKind; id: string } | { kind: "budget"; id: string } | null;
+
 export interface ApplyResult {
   filed: string[];
+  /** Same order and length as `filed`. */
+  links: ChangeLink[];
   transactionIds: string[];
   /** Ids of everything created/changed, so the UI can highlight it. */
   created: { kind: ListKind; id: string }[];
@@ -371,8 +376,14 @@ export function StoreProvider({ children, adapter = localAdapter }: { children: 
 
       applyActions(actions: AIAction[], extra?: { imageDataUrl?: string; source?: Note["source"] }): ApplyResult {
         const filed: string[] = [];
+        const links: ChangeLink[] = [];
         const transactionIds: string[] = [];
         const created: { kind: ListKind; id: string }[] = [];
+        const file = (label: string, link: ChangeLink) => {
+          filed.push(label);
+          links.push(link);
+          if (link && link.kind !== "budget") created.push(link);
+        };
         const source = extra?.source ?? "chat";
         const refs = new Map<string, string>(); // AI ref -> created note id
         // Notes first so tasks and spending in the same batch can link to them.
@@ -384,8 +395,7 @@ export function StoreProvider({ children, adapter = localAdapter }: { children: 
             case "create_note": {
               const n = addNote({ title: a.title, content: a.content, tags: a.tags ?? [], source, imageDataUrl: extra?.imageDataUrl });
               refs.set(a.ref ?? `note${refs.size}`, n.id);
-              created.push({ kind: "notes", id: n.id });
-              filed.push(`📝 Note: ${a.title}`);
+              file(`📝 Note: ${a.title}`, { kind: "notes", id: n.id });
               break;
             }
             case "create_todo": {
@@ -394,8 +404,7 @@ export function StoreProvider({ children, adapter = localAdapter }: { children: 
                 priority: a.priority ?? "medium", source, rrule: a.rrule ?? null, bill: a.bill ?? null,
                 noteId: (a.noteRef && refs.get(a.noteRef)) || fallbackNote(),
               });
-              created.push({ kind: "todos", id: todo.id });
-              filed.push(`${a.rrule ? "🔁" : "✅"} To-do: ${a.title}`);
+              file(`${a.rrule ? "🔁" : "✅"} To-do: ${a.title}`, { kind: "todos", id: todo.id });
               break;
             }
             case "add_transaction": {
@@ -407,28 +416,27 @@ export function StoreProvider({ children, adapter = localAdapter }: { children: 
                 noteId: (a.noteRef && refs.get(a.noteRef)) || fallbackNote(),
               });
               transactionIds.push(t.id);
-              created.push({ kind: "transactions", id: t.id });
-              filed.push(`💸 Finance: ${a.merchant}${a.splitWith?.length ? ` (split ${a.splitWith.length + 1})` : ""}`);
+              file(`💸 Finance: ${a.merchant}${a.splitWith?.length ? ` (split ${a.splitWith.length + 1})` : ""}`, { kind: "transactions", id: t.id });
               break;
             }
             case "create_sticky": {
               const sticky = addSticky({ text: a.text, color: a.color ?? "yellow" });
-              created.push({ kind: "stickies", id: sticky.id });
-              filed.push(`📌 Sticky: ${a.text.slice(0, 30)}`);
+              file(`📌 Sticky: ${a.text.slice(0, 30)}`, { kind: "stickies", id: sticky.id });
               break;
             }
             case "complete_todo": {
               const q = a.titleContains.toLowerCase();
               const hit = dataRef.current.todos.find((t) => !t.deletedAt && !t.done && t.title.toLowerCase().includes(q));
               if (hit) {
-                created.push({ kind: "todos", id: hit.id });
-                filed.push(`☑️ Done: ${hit.title}`, ...toggleTodo(hit.id, true));
+                file(`☑️ Done: ${hit.title}`, { kind: "todos", id: hit.id });
+                // Follow-ups (the next repeat, a bill logged) have no single row to show.
+                for (const extra of toggleTodo(hit.id, true)) file(extra, null);
               }
               break;
             }
             case "set_budget":
               setData((d) => ({ ...d, settings: { ...d.settings, budgets: { ...d.settings.budgets, [a.category]: a.amount }, updatedAt: nowIso() } }));
-              filed.push(`🎯 Budget: ${a.category}`);
+              file(`🎯 Budget: ${a.category}`, { kind: "budget", id: a.category });
               break;
             case "split_transaction": {
               const q = a.merchantContains.toLowerCase();
@@ -438,14 +446,13 @@ export function StoreProvider({ children, adapter = localAdapter }: { children: 
               if (hit) {
                 patchList("transactions", hit.id, { splits: equalSplit(hit.amount, a.people, a.includeMe ?? true) });
                 transactionIds.push(hit.id);
-                created.push({ kind: "transactions", id: hit.id });
-                filed.push(`👥 Split: ${hit.merchant} with ${a.people.join(", ")}`);
+                file(`👥 Split: ${hit.merchant} with ${a.people.join(", ")}`, { kind: "transactions", id: hit.id });
               }
               break;
             }
           }
         }
-        return { filed, transactionIds, created };
+        return { filed, links, transactionIds, created };
       },
 
       buildContext(relevantNotes?: Note[]): ClientContext {

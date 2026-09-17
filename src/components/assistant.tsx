@@ -3,16 +3,20 @@
 // chat (with retrieval over your notes), photo OCR auto-sorting, voice recording
 // -> summarized note, hands-free voice mode, and an offline outbox.
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { getUserKeys, isValidKey } from "@/lib/byok";
 import { api, resizeImage } from "@/lib/client";
-import { markFiled } from "@/lib/highlight";
+import { markFiled, pulseTabs } from "@/lib/highlight";
+import { openSettings } from "@/lib/nav";
 import { semanticNotes } from "@/lib/search";
-import { useStore } from "@/lib/store";
+import { useStore, type ChangeLink } from "@/lib/store";
 import type { AIAction, ChatMessage, NoteSource, Tab } from "@/lib/types";
 import { useToast } from "./ui";
 
 export type UIMessage = ChatMessage & {
   id: string;
   filed?: string[];
+  /** Same order as `filed`: where each item landed, for "Show" buttons. */
+  links?: ChangeLink[];
   imageUrl?: string;
   error?: boolean;
   queued?: boolean;
@@ -58,6 +62,40 @@ const getSpeechRecognition = () => {
   return W.SpeechRecognition ?? W.webkitSpeechRecognition;
 };
 
+// ---- Speech-to-text availability ---------------------------------------------
+// Recordings are transcribed on the server when there's a key (the user's or the
+// app's), otherwise live in the browser. Check before recording, not after.
+let serverStt: Promise<boolean> | null = null;
+const serverHasStt = () =>
+  (serverStt ??= fetch("/api/ai/status").then((r) => r.json()).then((d: { stt?: boolean }) => Boolean(d.stt)).catch(() => false));
+const userHasStt = () => {
+  const k = getUserKeys().sttKey;
+  return Boolean(k && isValidKey(k));
+};
+
+const NO_STT =
+  "Speech-to-text isn't set up, so recordings can't be turned into text. Add an OpenAI or Groq key in Settings → AI & API keys, or use Chrome, Edge or Safari.";
+const NO_BROWSER_SPEECH = "Voice mode uses your browser's speech recognition, which this browser doesn't have. Try Chrome, Edge or Safari.";
+
+/** Browser speech errors that mean it will never work here (others, like "no-speech", are normal). */
+function speechErrorMessage(code?: string): string | null {
+  switch (code) {
+    case "not-allowed":
+    case "audio-capture":
+      return "Microphone access is blocked. Allow the microphone for this site and try again.";
+    case "service-not-allowed":
+      return "This browser has speech recognition turned off. Add a speech-to-text key in Settings → AI & API keys, or try Chrome, Edge or Safari.";
+    case "network":
+      return "The browser's speech recognition couldn't connect (it needs internet, and some browsers such as Brave or Arc block it). Add a speech-to-text key in Settings → AI & API keys.";
+    case "language-not-supported":
+      return "The browser's speech recognition doesn't support this language. Add a speech-to-text key in Settings → AI & API keys.";
+    default:
+      return null;
+  }
+}
+
+const TAB_OF: Record<string, Tab | undefined> = { notes: "notes", todos: "todo", transactions: "finance", budget: "finance" };
+
 const OUTBOX = "four-notes:outbox";
 const readOutbox = (): string[] => { try { return JSON.parse(localStorage.getItem(OUTBOX) ?? "[]"); } catch { return []; } };
 const writeOutbox = (xs: string[]) => { try { localStorage.setItem(OUTBOX, JSON.stringify(xs)); } catch { /* ignore */ } };
@@ -82,10 +120,11 @@ export function AssistantProvider({ children, onFiled }: { children: ReactNode; 
 
   const handleResult = useCallback(
     (reply: string, actions: AIAction[], extra?: { imageDataUrl?: string; source?: NoteSource }) => {
-      const { filed, transactionIds, created } = storeRef.current.applyActions(actions, extra);
+      const { filed, links, transactionIds, created } = storeRef.current.applyActions(actions, extra);
       markFiled(created.map((c) => c.id));
+      pulseTabs([...new Set(links.map((l) => (l ? TAB_OF[l.kind] : undefined)).filter((t): t is Tab => Boolean(t)))]);
       const isCapture = extra?.source === "ocr" || extra?.source === "share";
-      push({ role: "assistant", content: reply, filed, splitTxId: isCapture ? transactionIds[0] : undefined });
+      push({ role: "assistant", content: reply, filed, links, splitTxId: isCapture ? transactionIds[0] : undefined });
       if (filed.length) toast(filed.join("\n"));
       const tab = tabFor(actions);
       if (tab && extra?.source !== "chat") onFiled(tab);
@@ -98,6 +137,15 @@ export function AssistantProvider({ children, onFiled }: { children: ReactNode; 
     push({ role: "assistant", content: `⚠️ ${msg}`, error: true });
     toast(msg, "error");
   }, [toast]);
+
+  /** A speech problem: say so in the chat, with a shortcut to the key settings. */
+  const failSpeech = useCallback((msg: string) => {
+    push({ role: "assistant", content: `⚠️ ${msg}`, error: true });
+    toast(msg, "error", /key/i.test(msg) ? { label: "Add a key", run: () => openSettings("api", "stt") } : undefined);
+  }, [toast]);
+
+  // Ask the server once, early, so the record button can answer instantly.
+  useEffect(() => { serverHasStt(); }, []);
 
   const send = useCallback(async (text: string): Promise<string | null> => {
     if (!navigator.onLine) {
@@ -157,14 +205,18 @@ export function AssistantProvider({ children, onFiled }: { children: ReactNode; 
   }, [handleResult, fail]);
 
   const startRecording = useCallback(async () => {
+    // Where will the text come from? Say so now if nowhere, before recording anything.
+    const SR = getSpeechRecognition();
+    const serverText = userHasStt() || (await serverHasStt());
+    if (!serverText && !SR) return failSpeech(NO_STT);
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const media = new MediaRecorder(stream);
-      const state = { media, speech: null as SpeechRec | null, chunks: [] as Blob[], finalText: "" };
+      const state = { media, speech: null as SpeechRec | null, chunks: [] as Blob[], finalText: "", cancelled: false };
       media.ondataavailable = (e) => e.data.size && state.chunks.push(e.data);
 
-      // Live transcription in the browser (fallback when no server STT is set).
-      const SR = getSpeechRecognition();
+      // Live transcription in the browser (the only source of text without a key).
       if (SR) {
         const speech = new SR();
         speech.lang = "en-US";
@@ -179,7 +231,16 @@ export function AssistantProvider({ children, onFiled }: { children: ReactNode; 
           }
           setLive(state.finalText + interim);
         };
-        speech.onerror = () => {};
+        speech.onerror = (e) => {
+          const msg = speechErrorMessage(e.error);
+          // With a key the server transcribes the audio anyway, unless the mic itself is blocked.
+          if (!msg || (serverText && e.error !== "not-allowed" && e.error !== "audio-capture")) return;
+          state.cancelled = true;
+          if (recRef.current === state) recRef.current = null;
+          setRecording(false);
+          if (media.state !== "inactive") media.stop();
+          failSpeech(msg);
+        };
         speech.onend = () => {};
         speech.start();
         state.speech = speech;
@@ -187,29 +248,36 @@ export function AssistantProvider({ children, onFiled }: { children: ReactNode; 
 
       media.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
+        setLive("");
+        if (state.cancelled) return;
+        const transcript = state.finalText.trim();
+        if (!serverText && !transcript) {
+          return failSpeech("I didn't catch any speech. Try again a little closer to the microphone.");
+        }
         const audio = new Blob(state.chunks, { type: media.mimeType || "audio/webm" });
         setBusy("Summarizing recording…");
-        push({ role: "user", content: `🎙️ Recording${state.finalText ? `: “${state.finalText.trim().slice(0, 120)}…”` : ""}` });
+        push({ role: "user", content: `🎙️ Recording${transcript ? `: “${transcript.slice(0, 120)}…”` : ""}` });
         try {
-          const res = await api.captureAudio(audio, state.finalText.trim(), storeRef.current.buildContext());
+          const res = await api.captureAudio(audio, transcript, storeRef.current.buildContext());
           handleResult(res.reply, res.actions, { source: "recording" });
-        } catch (e) { fail(e); } finally { setBusy(null); setLive(""); }
+        } catch (e) { fail(e); } finally { setBusy(null); }
       };
 
       media.start(1000);
       recRef.current = state;
       setRecording(true);
     } catch (e) {
-      fail(new Error("Microphone not available: " + (e instanceof Error ? e.message : e)));
+      failSpeech(speechErrorMessage("not-allowed")!);
+      console.warn("[recording]", e);
     }
-  }, [handleResult, fail]);
+  }, [handleResult, fail, failSpeech]);
 
   const stopRecording = useCallback(() => {
     const s = recRef.current;
     if (!s) return;
     s.speech?.stop();
     // Give speech recognition a moment to deliver its last final result.
-    setTimeout(() => s.media.stop(), 400);
+    setTimeout(() => { if (s.media.state !== "inactive") s.media.stop(); }, 400);
     recRef.current = null;
     setRecording(false);
   }, []);
@@ -231,7 +299,7 @@ export function AssistantProvider({ children, onFiled }: { children: ReactNode; 
     const SR = getSpeechRecognition();
     if (!SR) {
       stopVoice();
-      fail(new Error("Voice mode needs speech recognition, available in Chrome, Edge and Safari."));
+      failSpeech(NO_BROWSER_SPEECH);
       return;
     }
     const rec = new SR();
@@ -250,11 +318,12 @@ export function AssistantProvider({ children, onFiled }: { children: ReactNode; 
       setLive(finalText + interim);
     };
     rec.onerror = (e) => {
-      if (e.error === "not-allowed" || e.error === "service-not-allowed" || e.error === "audio-capture") {
-        fatal = true;
-        stopVoice();
-        fail(new Error("Microphone permission is needed for voice mode."));
-      }
+      const msg = speechErrorMessage(e.error);
+      if (!msg) return; // "no-speech" etc.: just listen again
+      fatal = true;
+      stopVoice();
+      // Voice mode can't use a speech-to-text key, so don't suggest adding one.
+      failSpeech(e.error === "not-allowed" || e.error === "audio-capture" ? msg : `Voice mode isn't available in this browser (${e.error}). Try Chrome, Edge or Safari.`);
     };
     rec.onend = async () => {
       voiceRef.current.rec = null;
@@ -284,10 +353,11 @@ export function AssistantProvider({ children, onFiled }: { children: ReactNode; 
   const toggleVoice = useCallback(() => {
     if (voiceRef.current.on) return stopVoice();
     if (recRef.current) return toast("Stop the recording first.", "error");
+    if (!getSpeechRecognition()) return failSpeech(NO_BROWSER_SPEECH);
     voiceRef.current.on = true;
     toast("🎧 Voice mode on. Speak naturally; say “stop” to end.");
     listenRef.current();
-  }, [stopVoice, toast]);
+  }, [stopVoice, toast, failSpeech]);
 
   useEffect(() => () => { voiceRef.current.on = false; voiceRef.current.rec?.abort(); }, []);
 

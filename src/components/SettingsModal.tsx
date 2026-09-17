@@ -92,12 +92,18 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
       : google.enabled || cloud.enabled ? "Not connected" : "Off · data stays on this device";
 
   return (
-    <Modal open={open} onClose={onClose} title="Settings">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Settings"
+      actions={
+        <span className="flex shrink-0 items-center text-xs">
+          <button className="min-h-11 rounded-md px-2 text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)] sm:min-h-8" onClick={() => setAllSettingsSections(true)}>Expand all</button>
+          <button className="min-h-11 rounded-md px-2 text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)] sm:min-h-8" onClick={() => setAllSettingsSections(false)}>Collapse all</button>
+        </span>
+      }
+    >
       <div className="space-y-3 p-4 text-sm">
-        <div className="flex justify-end gap-1 text-xs">
-          <button className="rounded-md px-2 py-1 text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)]" onClick={() => setAllSettingsSections(true)}>Expand all</button>
-          <button className="rounded-md px-2 py-1 text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)]" onClick={() => setAllSettingsSections(false)}>Collapse all</button>
-        </div>
 
         <SettingsSection id="appearance" icon="moon" title="Appearance" defaultOpen
           summary={theme.pref === "system" ? `System (${theme.resolved})` : theme.pref === "dark" ? "Dark" : "Light"}>

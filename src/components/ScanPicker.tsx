@@ -3,6 +3,7 @@
 // the camera or pick an existing image; on desktop, open the file picker directly.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { usePresence } from "@/lib/hooks";
 import { Icon } from "./ui";
 
 function useTouchDevice() {
@@ -22,6 +23,7 @@ export default function ScanPicker({ onFile, children }: { onFile: (file: File) 
   const filesRef = useRef<HTMLInputElement>(null);
   const [sheet, setSheet] = useState(false);
   const touch = useTouchDevice();
+  const presence = usePresence(sheet);
 
   useEffect(() => {
     if (!sheet) return;
@@ -58,15 +60,16 @@ export default function ScanPicker({ onFile, children }: { onFile: (file: File) 
       {children(open)}
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden onChange={picked} />
       <input ref={filesRef} type="file" accept="image/*" hidden onChange={picked} />
-      {sheet && typeof document !== "undefined" &&
+      {presence.mounted && typeof document !== "undefined" &&
         createPortal(
-          <div className="no-print fixed inset-0 z-[70] flex items-end justify-center bg-black/40" onClick={() => setSheet(false)}>
+          <div className={`no-print fixed inset-0 z-[70] flex items-end justify-center ${sheet ? "" : "pointer-events-none"}`}>
+            <div className="fn-backdrop absolute inset-0 bg-black/40" data-state={presence.state} onClick={() => setSheet(false)} aria-hidden />
             <div
               role="dialog"
               aria-modal
               aria-label="Scan"
-              className="w-full max-w-md rounded-t-2xl border border-b-0 border-[var(--line)] bg-[var(--bg)] px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-2 shadow-[var(--shadow)]"
-              onClick={(e) => e.stopPropagation()}
+              data-state={presence.state}
+              className="fn-sheet relative w-full max-w-md rounded-t-2xl border border-b-0 border-[var(--line)] bg-[var(--bg)] px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-2 shadow-[var(--shadow)]"
             >
               <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[var(--line)]" />
               <p className="px-3 pb-1 text-sm font-semibold">Scan</p>

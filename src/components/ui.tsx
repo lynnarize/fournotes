@@ -1,6 +1,8 @@
 "use client";
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type LiHTMLAttributes, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useFiledFlash } from "@/lib/highlight";
+import { usePresence } from "@/lib/hooks";
 
 // ---- Toasts ---------------------------------------------------------------
 type Toast = { id: number; text: string; tone?: "ok" | "error"; action?: { label: string; run: () => void } };
@@ -47,27 +49,35 @@ export const useToast = () => useContext(ToastCtx);
 // <form> or a <table>, and nesting one there produces invalid HTML (a nested
 // <form> is dropped by the browser, so its submit button would submit the outer
 // form instead).
-export function Modal({ open, onClose, title, children, wide = false }: { open: boolean; onClose: () => void; title?: string; children: ReactNode; wide?: boolean }) {
+export function Modal({ open, onClose, title, children, wide = false, actions }: {
+  open: boolean; onClose: () => void; title?: string; children: ReactNode; wide?: boolean;
+  /** Extra buttons in the title bar, which stays on top while the content scrolls. */
+  actions?: ReactNode;
+}) {
+  const { mounted, state } = usePresence(open);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
-  if (!open || typeof document === "undefined") return null;
+  if (!mounted || typeof document === "undefined") return null;
   return createPortal(
-    <div className="no-print fixed inset-0 z-50 flex items-start justify-center bg-black/30 px-4 pt-[10vh]" onMouseDown={onClose}>
+    // Phones: a sheet that slides up from the bottom. Larger screens: a centred dialog that scales in.
+    <div className={`no-print fixed inset-0 z-50 flex items-end justify-center sm:items-start sm:px-4 sm:pt-[10vh] ${open ? "" : "pointer-events-none"}`}>
+      <div className="fn-backdrop absolute inset-0 bg-black/30" data-state={state} onMouseDown={onClose} aria-hidden />
       <div
         role="dialog"
         aria-modal
         aria-label={title}
-        className={`scroll-thin max-h-[80vh] w-full overflow-y-auto rounded-xl border border-[var(--line)] bg-[var(--bg)] shadow-[var(--shadow)] ${wide ? "max-w-3xl" : "max-w-lg"}`}
-        onMouseDown={(e) => e.stopPropagation()}
+        data-state={state}
+        className={`fn-sheet sm-dialog scroll-thin relative max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-[var(--line)] bg-[var(--bg)] pb-[env(safe-area-inset-bottom)] shadow-[var(--shadow)] sm:max-h-[80vh] sm:rounded-xl sm:pb-0 ${wide ? "max-w-3xl" : "max-w-lg"}`}
       >
         {title && (
-          <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-2.5">
-            <h2 className="font-semibold">{title}</h2>
-            <button className="btn-ghost" onClick={onClose} aria-label="Close"><Icon name="x" /></button>
+          <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-[var(--line)] bg-[var(--bg)] py-1.5 pl-4 pr-1.5 sm:py-1">
+            <h2 className="min-w-0 flex-1 truncate font-semibold">{title}</h2>
+            {actions}
+            <button className="tap-target sm:h-9 sm:w-9" onClick={onClose} aria-label="Close"><Icon name="x" size={20} /></button>
           </div>
         )}
         {children}
@@ -75,6 +85,12 @@ export function Modal({ open, onClose, title, children, wide = false }: { open: 
     </div>,
     document.body,
   );
+}
+
+/** A list item that flashes while `flashId` is marked as just filed. */
+export function FlashItem({ flashId, className = "", ...rest }: { flashId: string } & LiHTMLAttributes<HTMLLIElement>) {
+  const on = useFiledFlash(flashId);
+  return <li {...rest} className={`${className} ${on ? "fn-flash" : ""}`} />;
 }
 
 /** "The assistant is working" indicator. */
@@ -108,6 +124,7 @@ const paths: Record<string, string> = {
   x: "M6 6l12 12M18 6L6 18",
   sparkle: "M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z",
   chevron: "M9 6l6 6-6 6",
+  arrowRight: "M5 12h14M13 6l6 6-6 6",
   stop: "M7 7h10v10H7z",
   search: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4",
   settings: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z",

@@ -3,7 +3,7 @@ import { Fragment, useMemo, useState } from "react";
 import { api } from "@/lib/client";
 import { baseAmount, budgetStatus, detectSubscriptions, myShare, owedToMe, spendByCategory } from "@/lib/insights";
 import { useFiledFlash } from "@/lib/highlight";
-import { useOpenItem } from "@/lib/nav";
+import { scrollToId, useOpenItem } from "@/lib/nav";
 import { alive, formatMoney, localDate, localMonth, parseAmount, useStore } from "@/lib/store";
 import { CURRENCIES } from "@/lib/types";
 import { parseWalletNotification } from "@/lib/wallet";
@@ -13,7 +13,7 @@ import CategorySelect from "./CategorySelect";
 import ReportModal from "./ReportModal";
 import SplitEditor from "./SplitEditor";
 import EmptyStart from "./EmptyStart";
-import { Icon, inputBox, Modal, SectionTitle, useToast } from "./ui";
+import { FlashItem, Icon, inputBox, Modal, SectionTitle, useToast } from "./ui";
 
 const monthLabel = (m: string) =>
   new Date(`${m}-01T00:00:00`).toLocaleDateString("en-US", { month: "long", year: "numeric" });
@@ -46,8 +46,9 @@ export default function FinanceView() {
     if (!t) return;
     setMonth(t.date.slice(0, 7));
     setOpenId(t.id);
-    requestAnimationFrame(() => document.getElementById(`tx-${t.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" }));
+    scrollToId(`tx-${t.id}`);
   });
+  useOpenItem("budget", (f) => scrollToId(document.getElementById(`budget-${f.id}`) ? `budget-${f.id}` : "finance-budgets"));
 
   const live = useMemo(() => alive(transactions), [transactions]);
   const txs = useMemo(
@@ -134,7 +135,7 @@ export default function FinanceView() {
       </div>
 
       <div className="mb-6 grid gap-6 md:grid-cols-2">
-        <section>
+        <section id="finance-budgets" className="scroll-mt-20">
           <div className="mb-3 flex items-center justify-between gap-2">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Budgets & categories</h3>
             <button className="flex items-center gap-1.5 rounded-md border border-[var(--line)] px-2.5 py-1.5 text-xs font-medium hover:bg-[var(--hover)]" onClick={() => setBudgetsOpen(true)}>
@@ -152,7 +153,7 @@ export default function FinanceView() {
               const ratio = limit ? spent / limit : total ? spent / total : 0;
               const color = !limit ? "var(--accent)" : ratio >= 1 ? "var(--danger)" : ratio >= 0.8 ? "#d9730d" : "var(--ok)";
               return (
-                <li key={category} className="text-sm">
+                <FlashItem key={category} flashId={category} id={`budget-${category}`} className="scroll-mt-20 rounded-md text-sm">
                   <div className="flex items-center justify-between gap-2">
                     <span>{category}</span>
                     {editingBudget === category ? (
@@ -176,7 +177,7 @@ export default function FinanceView() {
                     <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, ratio * 100)}%`, background: color, opacity: limit ? 1 : 0.6 }} />
                   </div>
                   {limit > 0 && ratio >= 1 && <div className="mt-0.5 text-xs text-[var(--danger)]">Over by {formatMoney(spent - limit, cur)}</div>}
-                </li>
+                </FlashItem>
               );
             })}
           </ul>

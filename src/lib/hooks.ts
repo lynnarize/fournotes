@@ -43,4 +43,20 @@ export function useInstallPrompt() {
   };
 }
 
+/**
+ * Keeps a pop-up mounted for `ms` after it's closed so it can animate out.
+ * `state` goes on the element as data-state ("open" | "closing") for the CSS.
+ */
+export function usePresence(open: boolean, ms = 200) {
+  const [mounted, setMounted] = useState(open);
+  useEffect(() => {
+    if (open) return setMounted(true);
+    if (!mounted) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const t = setTimeout(() => setMounted(false), reduce ? 0 : ms);
+    return () => clearTimeout(t);
+  }, [open, mounted, ms]);
+  return { mounted: open || mounted, state: (open ? "open" : "closing") as "open" | "closing" };
+}
+
 export const isMac = () => typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);

@@ -13,6 +13,9 @@ const persist = (id: string, open: boolean) => {
   try { localStorage.setItem(STORE, JSON.stringify({ ...readOpen(), [id]: open })); } catch { /* storage blocked */ }
 };
 
+/** Mark a section open before Settings mounts (it reads the saved state on mount). */
+export const revealSettingsSection = (id: string) => persist(id, true);
+
 export const setAllSettingsSections = (open: boolean) => window.dispatchEvent(new CustomEvent<boolean>(EVT, { detail: open }));
 
 export default function SettingsSection({ id, title, icon, summary, defaultOpen = false, children }: {
@@ -46,7 +49,7 @@ export default function SettingsSection({ id, title, icon, summary, defaultOpen 
   };
 
   return (
-    <section className="rounded-xl border border-[var(--line)]">
+    <section id={`settings-${id}`} className="scroll-mt-16 rounded-xl border border-[var(--line)]">
       <h3>
         <button
           type="button"

@@ -5,6 +5,7 @@
 //   ? how much on food  -> ask the assistant
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fmtDateTime } from "@/lib/client";
+import { usePresence } from "@/lib/hooks";
 import { openItem } from "@/lib/nav";
 import { keywordSearch, semanticNotes } from "@/lib/search";
 import { useTheme } from "@/lib/theme";
@@ -19,6 +20,7 @@ type Item = { key: string; group: string; label: string; hint?: string; icon: st
 export default function CommandPalette({ open, onClose, setTab, onSettings }: {
   open: boolean; onClose: () => void; setTab: (t: Tab) => void; onSettings: () => void;
 }) {
+  const presence = usePresence(open);
   const store = useStore();
   const { send, toggleVoice } = useAssistant();
   const theme = useTheme();
@@ -111,14 +113,14 @@ export default function CommandPalette({ open, onClose, setTab, onSettings }: {
     item.run();
   };
 
-  if (!open) return null;
+  if (!presence.mounted) return null;
   let lastGroup = "";
 
   return (
-    <div className="no-print fixed inset-0 z-50 flex items-start justify-center bg-black/30 px-4 pt-[12vh]" onMouseDown={onClose}>
-      <div role="dialog" aria-modal aria-label="Search and quick add"
-        className="w-full max-w-xl overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--bg)] shadow-[var(--shadow)]"
-        onMouseDown={(e) => e.stopPropagation()}>
+    <div className={`no-print fixed inset-0 z-50 flex items-start justify-center px-4 pt-[12vh] ${open ? "" : "pointer-events-none"}`}>
+      <div className="fn-backdrop absolute inset-0 bg-black/30" data-state={presence.state} onMouseDown={onClose} aria-hidden />
+      <div role="dialog" aria-modal aria-label="Search and quick add" data-state={presence.state}
+        className="fn-dialog relative w-full max-w-xl overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--bg)] shadow-[var(--shadow)]">
         <div className="flex items-center gap-2 border-b border-[var(--line)] px-3">
           <Icon name="search" className="text-[var(--faint)]" />
           <input

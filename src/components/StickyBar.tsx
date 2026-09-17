@@ -1,5 +1,6 @@
 "use client";
 import { useFiledFlash } from "@/lib/highlight";
+import { scrollToId, useOpenItem } from "@/lib/nav";
 import { alive, useStore } from "@/lib/store";
 import type { StickyColor } from "@/lib/types";
 import { Icon } from "./ui";
@@ -11,6 +12,7 @@ function Sticky({ id, color, children }: { id: string; color: string; children: 
   const justFiled = useFiledFlash(id);
   return (
     <div
+      id={`sticky-${id}`}
       className={`group relative flex h-28 w-44 shrink-0 flex-col rounded-md p-2.5 shadow-[var(--shadow)] ${justFiled ? "fn-flash" : ""}`}
       style={{ background: `var(--sticky-${color})` }}
     >
@@ -22,6 +24,7 @@ function Sticky({ id, color, children }: { id: string; color: string; children: 
 export default function StickyBar() {
   const { stickies, addSticky, updateSticky, remove } = useStore();
   const list = alive(stickies);
+  useOpenItem("sticky", (f) => scrollToId(`sticky-${f.id}`, "nearest"));
 
   return (
     <div className="scroll-thin flex gap-3 overflow-x-auto px-4 pb-3 pt-2 md:px-10">

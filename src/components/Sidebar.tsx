@@ -1,4 +1,5 @@
 "use client";
+import { usePulsingTabs } from "@/lib/highlight";
 import { isMac } from "@/lib/hooks";
 import { alive, localMonth, useStore } from "@/lib/store";
 import type { Tab } from "@/lib/types";
@@ -37,16 +38,19 @@ export default function Sidebar({ tab, setTab, onClose, onSearch, onSettings }: 
     finance: alive(transactions).filter((t) => t.date.startsWith(month)).length,
   };
   const go = (t: Tab) => { setTab(t); onClose?.(); };
+  const pulsing = usePulsingTabs();
+  // In the phone drawer, rows follow the slide-in one after another.
+  const enter = (i: number) => (onClose ? { animationDelay: `${90 + i * 35}ms` } : undefined);
 
   return (
-    <nav className="flex h-full w-60 flex-col bg-[var(--panel)] px-2 py-3 text-sm">
+    <nav className={`flex h-full flex-col bg-[var(--panel)] px-2 py-3 text-sm ${onClose ? "w-72 max-w-[85vw] pt-[calc(env(safe-area-inset-top)+12px)]" : "w-60"}`}>
       <div className="mb-4 flex items-center justify-between px-1 py-1">
         <button className="flex items-center gap-2.5 rounded-lg p-1 hover:bg-[var(--hover)]" onClick={() => go("today")} aria-label="Four Notes, go to Today">
           <Logo size={48} className="shrink-0" />
-          <span className="text-[22px] font-bold leading-none tracking-tight">Four Notes</span>
+          <span className="whitespace-nowrap text-[22px] font-bold leading-none tracking-tight">Four Notes</span>
         </button>
         {onClose && (
-          <button className="btn-ghost md:hidden" onClick={onClose} aria-label="Close menu"><Icon name="x" /></button>
+          <button className="tap-target fn-press fn-pop md:hidden" style={{ animationDelay: "120ms" }} onClick={onClose} aria-label="Close menu"><Icon name="x" size={20} /></button>
         )}
       </div>
 
@@ -61,24 +65,26 @@ export default function Sidebar({ tab, setTab, onClose, onSearch, onSettings }: 
         </label>
       )}
 
-      <button className="mb-3 flex items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--bg)] px-2 py-1.5 text-[var(--muted)] hover:text-[var(--text)]"
+      <button className="touch-row mb-3 flex items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--bg)] px-2 py-1.5 text-[var(--muted)] hover:text-[var(--text)]"
         onClick={() => { onSearch(); onClose?.(); }}>
         <Icon name="search" size={14} />
         <span className="flex-1 text-left">Search or quick add</span>
         <kbd>{isMac() ? "⌘" : "Ctrl"} K</kbd>
       </button>
 
-      {TABS.map((t) => (
+      {TABS.map((t, i) => (
         <button
           key={t.id}
           onClick={() => go(t.id)}
-          className={`mb-0.5 flex items-center gap-2 rounded-md px-2 py-1.5 text-left ${
+          style={enter(i)}
+          className={`${onClose ? "fn-rise" : ""} touch-row mb-0.5 flex items-center gap-2 rounded-md px-2 py-1.5 text-left ${
             tab === t.id ? "bg-[var(--hover)] font-medium text-[var(--text)]" : "text-[var(--muted)] hover:bg-[var(--hover)]"
           }`}
           aria-current={tab === t.id ? "page" : undefined}
         >
           <Icon name={t.icon} />
           <span className="flex-1">{t.label}</span>
+          {pulsing.includes(t.id) && tab !== t.id && <span className="fn-ping relative" aria-label="New from the assistant" />}
           <span className="text-xs text-[var(--faint)]">{counts[t.id] || ""}</span>
         </button>
       ))}
@@ -86,17 +92,17 @@ export default function Sidebar({ tab, setTab, onClose, onSearch, onSettings }: 
       <div className="mt-6 px-2 text-xs font-medium text-[var(--faint)]">Quick capture</div>
       <ScanPicker onFile={(f) => { onClose?.(); scan(f); }}>
         {(pick) => (
-          <button className="mt-1 flex items-center gap-2 rounded-md px-2 py-1.5 text-[var(--muted)] hover:bg-[var(--hover)]" onClick={pick} disabled={!!busy}>
+          <button className="touch-row mt-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[var(--muted)] hover:bg-[var(--hover)]" onClick={pick} disabled={!!busy}>
             <Icon name="scan" /> Scan receipt / note
           </button>
         )}
       </ScanPicker>
-      <button className="flex items-center gap-2 rounded-md px-2 py-1.5 text-[var(--muted)] hover:bg-[var(--hover)]"
+      <button className="touch-row flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[var(--muted)] hover:bg-[var(--hover)]"
         onClick={recording ? stopRecording : startRecording} disabled={(!!busy && !recording) || voice !== "off"}>
         <Icon name={recording ? "stop" : "mic"} className={recording ? "text-[var(--danger)]" : ""} />
         {recording ? "Stop recording" : "Record to note"}
       </button>
-      <button className="flex items-center gap-2 rounded-md px-2 py-1.5 text-[var(--muted)] hover:bg-[var(--hover)]"
+      <button className="touch-row flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[var(--muted)] hover:bg-[var(--hover)]"
         onClick={toggleVoice} disabled={recording}>
         <Icon name="wave" className={voice !== "off" ? "text-[var(--accent)]" : ""} />
         {voice !== "off" ? "End voice mode" : "Voice assistant"}
@@ -116,7 +122,7 @@ export default function Sidebar({ tab, setTab, onClose, onSearch, onSettings }: 
             </span>
           </button>
         )}
-        <button className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[var(--muted)] hover:bg-[var(--hover)]" onClick={() => { onSettings(); onClose?.(); }}>
+        <button className="touch-row flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[var(--muted)] hover:bg-[var(--hover)]" onClick={() => { onSettings(); onClose?.(); }}>
           <Icon name="settings" /> Settings
         </button>
       </div>

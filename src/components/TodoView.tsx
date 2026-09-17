@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { downloadIcs, fmtDateTime, googleCalendarUrl, toLocalInput } from "@/lib/client";
 import { suggestReminder } from "@/lib/insights";
 import { useFiledFlash } from "@/lib/highlight";
-import { openItem, useOpenItem } from "@/lib/nav";
+import { openItem, scrollToId, useOpenItem } from "@/lib/nav";
 import { makeRrule, parseRrule, rruleLabel, type Freq } from "@/lib/recurrence";
 import { alive, formatMoney, parseAmount, useStore } from "@/lib/store";
 import type { ExpenseCategory, Todo } from "@/lib/types";
@@ -37,7 +37,7 @@ export default function TodoView() {
 
   useOpenItem("todo", (f) => {
     setOpenId(f.id);
-    requestAnimationFrame(() => document.getElementById(`todo-${f.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" }));
+    scrollToId(`todo-${f.id}`);
   });
 
   return (

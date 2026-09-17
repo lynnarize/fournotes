@@ -3,6 +3,7 @@
 // OpenRouter's free models come first: one free key and the app is fully working.
 import { useEffect, useState } from "react";
 import { MODELS_CHECKED_AT } from "@/lib/ai/models";
+import { SETTINGS_FIELD_KEY, useOpenSettings } from "@/lib/nav";
 import {
   clearUserKeys, isValidKey, keyHeaders, maskKey, MODEL_OPTIONS, OPENROUTER_FREE_MODELS, OPENROUTER_KEYS_URL,
   saveUserKeys, useUserKeys, type SttProvider, type UserKeys,
@@ -36,6 +37,18 @@ export default function ApiKeysSection() {
     setKeep(persist);
     if (keys.voyageKey || keys.sttKey) setAdvanced(true);
   }, [keys, persist]);
+
+  // Opened from "Add a key" on a speech error: show the transcription key field,
+  // whether Settings opens now (flag read on mount) or was already open (event).
+  const revealField = (field?: string | null) => {
+    if (field !== "stt") return;
+    setAdvanced(true);
+    try { sessionStorage.removeItem(SETTINGS_FIELD_KEY); } catch { /* storage blocked */ }
+  };
+  useEffect(() => {
+    try { revealField(sessionStorage.getItem(SETTINGS_FIELD_KEY)); } catch { /* storage blocked */ }
+  }, []);
+  useOpenSettings(({ field }) => revealField(field));
 
   useEffect(() => {
     fetch("/api/ai/status").then((r) => r.json()).then(setServer).catch(() => {});
@@ -201,7 +214,7 @@ export default function ApiKeysSection() {
           <p className="text-xs text-[var(--muted)]">A Claude key is used instead of OpenRouter when both are saved.</p>
         </div>
 
-        <button type="button" className="text-xs text-[var(--accent)]" onClick={() => setAdvanced((a) => !a)} aria-expanded={advanced}>
+        <button type="button" className="min-h-10 text-xs text-[var(--accent)]" onClick={() => setAdvanced((a) => !a)} aria-expanded={advanced}>
           {advanced ? "▾" : "▸"} Optional keys: search by meaning, transcription
         </button>
 
@@ -219,7 +232,7 @@ export default function ApiKeysSection() {
               {resultLine("voyage")}
             </div>
 
-            <div className="space-y-1">
+            <div id="settings-field-stt" className="scroll-mt-20 space-y-1">
               <div className="text-xs text-[var(--muted)]">
                 Speech-to-text key (more accurate recordings){server?.stt && !draft.sttKey ? " · server key in use" : ""}
               </div>

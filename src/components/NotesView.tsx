@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { fmtDateTime } from "@/lib/client";
 import { useFiledFlash } from "@/lib/highlight";
-import { openItem, useOpenItem } from "@/lib/nav";
+import { openItem, scrollToId, useOpenItem } from "@/lib/nav";
 import { semanticNotes } from "@/lib/search";
 import { alive, formatMoney, parseAmount, useStore } from "@/lib/store";
 import { guessCategory } from "@/lib/wallet";
@@ -50,7 +50,7 @@ function caretPosition(ta: HTMLTextAreaElement, pos: number) {
 /** List row that flashes when the assistant has just filed this note. */
 function NoteRow({ id, children }: { id: string; children: React.ReactNode }) {
   const justFiled = useFiledFlash(id);
-  return <li className={justFiled ? "fn-flash" : ""}>{children}</li>;
+  return <li id={`note-row-${id}`} className={justFiled ? "fn-flash" : ""}>{children}</li>;
 }
 
 export default function NotesView() {
@@ -63,7 +63,13 @@ export default function NotesView() {
   const [slash, setSlash] = useState<{ start: number; query: string; top: number; left: number; active: number } | null>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
-  useOpenItem("note", (f) => { setQuery(""); setSelectedId(f.id); });
+  useOpenItem("note", (f) => {
+    setQuery("");
+    setSelectedId(f.id);
+    scrollToId(`note-row-${f.id}`, "nearest");
+    // On phones the editor sits below the list: bring it into view.
+    if (window.matchMedia("(max-width: 767px)").matches) scrollToId("note-editor", "start");
+  });
 
   // Search: instant substring filter, then ranking by meaning (or BM25) after a pause.
   useEffect(() => {
@@ -236,7 +242,7 @@ export default function NotesView() {
       </aside>
 
       {selected ? (
-        <article className="min-w-0">
+        <article id="note-editor" className="min-w-0 scroll-mt-20">
           <div className="mb-1 flex items-center gap-2 text-xs text-[var(--muted)]">
             <span>Edited {new Date(selected.updatedAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}</span>
             {selected.tags.map((t) => <span key={t} className="chip">#{t}</span>)}

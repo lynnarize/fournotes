@@ -34,5 +34,30 @@ export function useFiledFlash(id: string) {
   return on;
 }
 
+// ---- Tabs that just received something (a dot pulses on them for a few seconds) ----
+const TAB_PULSE = 6000;
+const tabUntil = new Map<string, number>();
+const tabListeners = new Set<() => void>();
+
+export function pulseTabs(tabs: string[]) {
+  if (!tabs.length) return;
+  const expiry = Date.now() + TAB_PULSE;
+  for (const t of tabs) tabUntil.set(t, expiry);
+  tabListeners.forEach((f) => f());
+  setTimeout(() => tabListeners.forEach((f) => f()), TAB_PULSE + 50);
+}
+
+/** Tabs currently pulsing ("today" | "notes" | "todo" | "finance"). */
+export function usePulsingTabs() {
+  const [tabs, setTabs] = useState<string[]>([]);
+  useEffect(() => {
+    const update = () => setTabs([...tabUntil].filter(([, t]) => t > Date.now()).map(([k]) => k));
+    update();
+    tabListeners.add(update);
+    return () => { tabListeners.delete(update); };
+  }, []);
+  return tabs;
+}
+
 /** Class to add to a row that was just filed (empty string when it wasn't). */
 export const flashClass = (on: boolean) => (on ? "fn-flash" : "");

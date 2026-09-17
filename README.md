@@ -2,7 +2,7 @@
 
 Notes, To-Do and Finance in one app, with an AI assistant that files things for you.
 
-Built with Next.js 15, React 19 and Tailwind v4. It runs with no API keys at all, and gets smarter as you add them.
+Built with Next.js, React and Tailwind v4. It runs with no API keys at all, and gets smarter as you add them.
 
 ## What it does
 
@@ -60,19 +60,9 @@ The app works without any key. When a request comes in, the first available opti
 | 3 | **`OPENROUTER_API_KEY`** on the server | Free models from a tested list (`npm run probe:models`). Shared across visitors, so it's rate-limited (see below) |
 | 4 | Nothing set | **Demo mode**: rule-based replies, no OCR. Everything else still works |
 
-**If you put a shared key on the server**, the guards in `src/lib/ai/shared.ts` keep it from costing you money or being abused: requests must come from your own site, free models only unless `OPENROUTER_ALLOW_PAID=true`, and per-visitor (`SHARED_AI_PER_IP_DAILY`), per-account (`SHARED_AI_PER_USER_DAILY`) and app-wide (`SHARED_AI_DAILY_LIMIT`) daily caps. Set `SHARED_AI_REQUIRE_SIGNIN=true` to require a Google sign-in first.
+**If you put a shared key on the server**, the guards in `src/lib/ai/shared.ts` keep it from costing you money or being abused.
 
 Every option is documented in `.env.example`. Keys live on the server or in the user's browser — never in the bundle, never in a backup, never in sync.
-
-## Deploy
-
-Netlify works out of the box (`netlify.toml`). Set your environment variables in the Netlify UI, not in a file:
-
-- `OPENROUTER_API_KEY` for free shared AI, or `ANTHROPIC_API_KEY` for the paid one
-- `NEXT_PUBLIC_GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` for Drive sync
-- `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` for cloud sync and shared spaces
-
-Add the deployed URL to your Google OAuth **Authorized redirect URIs** as `https://your-site/api/google/callback`.
 
 ## Project layout
 
@@ -111,5 +101,3 @@ GUIDE.md                      Setup guides, architecture and roadmap
 ## Privacy
 
 Data lives in your browser unless you turn on sync. Google Drive sync uses the hidden **appDataFolder**, so it is private to this app and invisible in your Drive. Receipt thumbnails stay on the device. Photos and recordings are sent to whichever AI provider is configured, and Settings → Data & privacy lets you export everything or delete it.
-
-See **GUIDE.md** for setup walkthroughs and what's next.

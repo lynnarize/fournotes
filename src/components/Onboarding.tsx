@@ -2,6 +2,7 @@
 // First-run setup: theme, AI key, Google backup, budgets. Skippable at every step,
 // and resumable if the Google sign-in sends the browser away mid-way.
 import { useEffect, useState } from "react";
+import { useBackDismiss } from "@/lib/backstack";
 import { saveUserKeys, useUserKeys, OPENROUTER_KEYS_URL } from "@/lib/byok";
 import { useStore } from "@/lib/store";
 import { CURRENCIES } from "@/lib/types";
@@ -57,6 +58,13 @@ export default function Onboarding() {
     setStep(next);
     try { localStorage.setItem(STEP_KEY, String(next)); } catch { /* storage blocked */ }
   };
+
+  // Back goes to the previous step; on the first step it closes the wizard.
+  useBackDismiss(open, () => {
+    if (step === 0) return close("You can set this up any time in Settings.");
+    goto(step - 1);
+    return true; // still open: keep a back entry for the next press
+  });
 
   const close = (message?: string) => {
     finishOnboarding();

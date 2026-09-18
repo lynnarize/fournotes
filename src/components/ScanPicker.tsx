@@ -3,6 +3,7 @@
 // the camera or pick an existing image; on desktop, open the file picker directly.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useBackDismiss } from "@/lib/backstack";
 import { usePresence } from "@/lib/hooks";
 import { Icon } from "./ui";
 
@@ -24,6 +25,7 @@ export default function ScanPicker({ onFile, children }: { onFile: (file: File) 
   const [sheet, setSheet] = useState(false);
   const touch = useTouchDevice();
   const presence = usePresence(sheet);
+  useBackDismiss(sheet, () => setSheet(false));
 
   useEffect(() => {
     if (!sheet) return;

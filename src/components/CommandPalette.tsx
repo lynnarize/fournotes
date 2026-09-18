@@ -4,6 +4,7 @@
 //   $ coffee 25k        -> expense       s call mom     -> sticky
 //   ? how much on food  -> ask the assistant
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useBackDismiss } from "@/lib/backstack";
 import { fmtDateTime } from "@/lib/client";
 import { usePresence } from "@/lib/hooks";
 import { openItem } from "@/lib/nav";
@@ -21,6 +22,7 @@ export default function CommandPalette({ open, onClose, setTab, onSettings }: {
   open: boolean; onClose: () => void; setTab: (t: Tab) => void; onSettings: () => void;
 }) {
   const presence = usePresence(open);
+  useBackDismiss(open, onClose);
   const store = useStore();
   const { send, toggleVoice } = useAssistant();
   const theme = useTheme();

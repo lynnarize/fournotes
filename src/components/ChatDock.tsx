@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useBackDismiss } from "@/lib/backstack";
 import { markFiled } from "@/lib/highlight";
 import { showChange } from "@/lib/nav";
 import type { ChangeLink } from "@/lib/store";
@@ -37,6 +38,7 @@ export default function ChatDock() {
   const [narrow, setNarrow] = useState(false);
   const [splitTx, setSplitTx] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  useBackDismiss(open, () => setOpen(false));
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {

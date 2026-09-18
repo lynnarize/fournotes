@@ -2,6 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type LiHTMLAttributes, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useFiledFlash } from "@/lib/highlight";
+import { useBackDismiss } from "@/lib/backstack";
 import { usePresence } from "@/lib/hooks";
 
 // ---- Toasts ---------------------------------------------------------------
@@ -55,6 +56,7 @@ export function Modal({ open, onClose, title, children, wide = false, actions }:
   actions?: ReactNode;
 }) {
   const { mounted, state } = usePresence(open);
+  useBackDismiss(open, onClose);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();

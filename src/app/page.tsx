@@ -20,6 +20,7 @@ import TipStrip from "@/components/TipStrip";
 import TodayView from "@/components/TodayView";
 import TodoView from "@/components/TodoView";
 import { Icon, ToastProvider } from "@/components/ui";
+import { useBackDismiss, useTabHistory } from "@/lib/backstack";
 import { usePulsingTabs } from "@/lib/highlight";
 import { usePresence } from "@/lib/hooks";
 import { scrollToId, useOpenItem, useOpenSettings } from "@/lib/nav";
@@ -52,6 +53,9 @@ function Shell() {
   const [tab, setTab] = useState<Tab>("today");
   const [menu, setMenu] = useState(false);
   const drawer = usePresence(menu, 220);
+  useBackDismiss(menu, () => setMenu(false));
+  // Back returns to the previous tab before it leaves the app.
+  useTabHistory(tab, (t) => setTab(t as Tab));
   const [palette, setPalette] = useState(false);
   const [settings, setSettings] = useState(false);
   const spaceName = spaces.find((s) => s.id === currentSpaceId)?.name;

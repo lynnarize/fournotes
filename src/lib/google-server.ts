@@ -8,11 +8,14 @@ import type { NextRequest } from "next/server";
 export const TOKEN_COOKIE = "fn_google";
 export const STATE_COOKIE = "fn_google_state";
 export const COOKIE_PATH = "/api/google";
-export const SCOPES = ["openid", "email", "https://www.googleapis.com/auth/drive.appdata"];
+// "profile" gives the account's name, used to fill in "Your name" when it's empty.
+export const SCOPES = ["openid", "email", "profile", "https://www.googleapis.com/auth/drive.appdata"];
 
 export interface GoogleSession {
   refreshToken: string;
   email: string | null;
+  /** First name (or full name) from the Google account, when the profile scope was granted. */
+  name?: string | null;
 }
 
 export const googleConfigured = () => Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
@@ -85,11 +88,15 @@ export async function googleTokenRequest(params: Record<string, string>) {
 }
 
 /** The id_token comes straight from Google's token endpoint over TLS, so reading its payload is safe here. */
-export function emailFromIdToken(idToken?: string): string | null {
+export function profileFromIdToken(idToken?: string): { email: string | null; name: string | null } {
   try {
-    const payload = JSON.parse(Buffer.from(idToken!.split(".")[1], "base64url").toString("utf8")) as { email?: string };
-    return payload.email ?? null;
+    const payload = JSON.parse(Buffer.from(idToken!.split(".")[1], "base64url").toString("utf8")) as {
+      email?: string; given_name?: string; name?: string;
+    };
+    // First name reads better in the daily brief greeting than the full name.
+    const name = (payload.given_name || payload.name || "").trim().slice(0, 60);
+    return { email: payload.email ?? null, name: name || null };
   } catch {
-    return null;
+    return { email: null, name: null };
   }
 }

@@ -6,6 +6,7 @@ import {
   startGoogleConnect, type SyncCursor,
 } from "@/lib/gdrive";
 import { useStore } from "@/lib/store";
+import TypeToConfirm from "./TypeToConfirm";
 import { Icon, useToast } from "./ui";
 
 export type GoogleStatus = "off" | "disconnected" | "syncing" | "synced" | "offline" | "error";
@@ -26,6 +27,8 @@ interface Ctx {
 }
 
 const KEY = "four-notes:google-sync";
+/** Which account's name has already been filled in (so a cleared name stays cleared). */
+const NAME_FILLED_KEY = "four-notes:google-name-filled";
 const readSaved = (): Saved | null => {
   try { return JSON.parse(localStorage.getItem(KEY) ?? "null"); } catch { return null; }
 };
@@ -72,6 +75,16 @@ export function GoogleSyncProvider({ children }: { children: ReactNode }) {
     if (!force && cached && cached.expiresAt - 60_000 > Date.now()) return cached.token;
     const fresh = await fetchAccessToken();
     tokenRef.current = { token: fresh.accessToken, expiresAt: Date.now() + fresh.expiresIn * 1000 };
+    // Fill in "Your name" from the Google account once per account, and never replace
+    // one the user typed (or clear it again after they removed it).
+    if (fresh.name && !storeRef.current.settings.name) {
+      const done = (() => { try { return localStorage.getItem(NAME_FILLED_KEY); } catch { return null; } })();
+      const account = fresh.email ?? "google";
+      if (done !== account) {
+        storeRef.current.updateSettings({ name: fresh.name });
+        try { localStorage.setItem(NAME_FILLED_KEY, account); } catch { /* storage blocked */ }
+      }
+    }
     return fresh.accessToken;
   }, []);
 
@@ -247,6 +260,7 @@ export function GoogleButton({ onClick, label = "Continue with Google", disabled
 
 export function GoogleSyncPanel() {
   const g = useGoogleSync();
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   if (!g.email) {
     return (
@@ -290,13 +304,25 @@ export function GoogleSyncPanel() {
         <button className="rounded-md border border-[var(--line)] px-3 py-1.5 hover:bg-[var(--hover)]" onClick={() => g.disconnect(false)}>
           Disconnect
         </button>
-        <button
-          className="rounded-md px-3 py-1.5 text-[var(--danger)] hover:bg-[var(--hover)]"
-          onClick={() => window.confirm("Delete the copy of your data stored in Google Drive and disconnect? Data on this device is kept.") && g.disconnect(true)}
-        >
+        <button className="rounded-md px-3 py-1.5 text-[var(--danger)] hover:bg-[var(--hover)]" onClick={() => setConfirmDelete(true)}>
           Delete Drive copy
         </button>
       </div>
+      <TypeToConfirm
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        title="Delete Drive copy?"
+        confirmLabel="Delete Drive copy"
+        onConfirm={() => g.disconnect(true)}
+      >
+        <p>
+          This permanently deletes the copy of your notes, tasks and spending stored in <strong>{g.email}</strong>&apos;s Google Drive, and
+          disconnects Google on this device.
+        </p>
+        <p className="text-[var(--muted)]">
+          Data on this device is kept. Other devices keep their data too, but will stop syncing until they connect again.
+        </p>
+      </TypeToConfirm>
     </div>
   );
 }

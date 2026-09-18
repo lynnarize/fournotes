@@ -16,7 +16,9 @@ export type NoteSource = "manual" | "chat" | "ocr" | "recording" | "share";
 
 export interface Note extends BaseItem {
   title: string;
-  content: string; // plain text / light markdown
+  content: string; // plain text / light markdown: what search, the AI and the brief read
+  /** Rich text from the editor (TipTap HTML). Absent on notes that were never opened in it. */
+  html?: string;
   source: NoteSource;
   tags: string[];
   imageDataUrl?: string; // thumbnail of the scanned page (local only for now)
@@ -35,6 +37,8 @@ export interface Todo extends BaseItem {
   title: string;
   notes?: string;
   done: boolean;
+  /** In progress: the "Doing" column of the board. Ignored once done. */
+  doing?: boolean;
   completedAt?: string | null; // ISO, used for smart reminder timing
   dueAt?: string | null; // ISO
   remindAt?: string | null; // ISO
@@ -146,6 +150,8 @@ export type AIAction =
       dueAt?: string | null;
       remindAt?: string | null;
       priority?: Priority;
+      /** "doing": the user is working on it now (the board's Doing column). */
+      status?: "todo" | "doing";
       rrule?: string | null;
       bill?: Bill | null;
       noteRef?: string; // `ref` of a create_note in the same batch
@@ -163,6 +169,7 @@ export type AIAction =
     }
   | { type: "create_sticky"; text: string; color?: StickyColor }
   | { type: "complete_todo"; titleContains: string }
+  | { type: "start_todo"; titleContains: string }
   | { type: "set_budget"; category: ExpenseCategory; amount: number }
   | { type: "split_transaction"; merchantContains: string; people: string[]; includeMe?: boolean };
 
@@ -187,7 +194,7 @@ export interface ClientContext {
   notes: { title: string; snippet: string }[];
   /** Full text of the notes most relevant to the question (retrieval / RAG). */
   relevantNotes?: { title: string; content: string; updatedAt: string }[];
-  todos: { title: string; done: boolean; dueAt?: string | null; rrule?: string | null }[];
+  todos: { title: string; done: boolean; doing?: boolean; dueAt?: string | null; rrule?: string | null }[];
   transactions: { merchant: string; amount: number; category: string; date: string }[];
   budgets?: Partial<Record<ExpenseCategory, number>>;
   categories?: string[];

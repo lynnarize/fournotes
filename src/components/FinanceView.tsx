@@ -1,11 +1,11 @@
 "use client";
 import { Fragment, useMemo, useState } from "react";
 import { api } from "@/lib/client";
-import { baseAmount, budgetStatus, detectSubscriptions, myShare, owedToMe, spendByCategory } from "@/lib/insights";
+import { baseAmount, myShare, spendByCategory } from "@/lib/insights";
 import { useFiledFlash } from "@/lib/highlight";
 import { scrollToId, useOpenItem } from "@/lib/nav";
 import { alive, formatMoney, localDate, localMonth, parseAmount, useStore } from "@/lib/store";
-import { CURRENCIES } from "@/lib/types";
+import { CURRENCIES, type Tab } from "@/lib/types";
 import { parseWalletNotification } from "@/lib/wallet";
 import { useAssistant } from "./assistant";
 import BudgetEditor from "./BudgetEditor";
@@ -13,12 +13,14 @@ import CategorySelect from "./CategorySelect";
 import ReportModal from "./ReportModal";
 import SplitEditor from "./SplitEditor";
 import EmptyStart from "./EmptyStart";
-import { FlashItem, Icon, inputBox, Modal, SectionTitle, useToast } from "./ui";
+import Dashboard, { FCARD } from "./finance/Dashboard";
+import { CARD, CardHead, Icon, inputBox, Modal, SectionTitle, useToast } from "./ui";
 
 const monthLabel = (m: string) =>
   new Date(`${m}-01T00:00:00`).toLocaleDateString("en-US", { month: "long", year: "numeric" });
 // Filled fields stay readable and tappable on small screens.
-const FIELD = "h-9 rounded-md bg-[var(--hover)] px-2.5 outline-none placeholder:text-[var(--faint)] focus:ring-1 focus:ring-[var(--accent)]";
+const FIELD = "h-10 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-3 outline-none placeholder:text-[var(--faint)] focus:ring-1 focus:ring-[var(--accent)]";
+const ICON_BTN = "fn-press grid h-11 w-11 place-items-center rounded-xl border border-[var(--line)] bg-[var(--bg)] text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)]";
 
 const shiftMonth = (m: string, by: number) => {
   const d = new Date(`${m}-01T00:00:00`);
@@ -26,8 +28,8 @@ const shiftMonth = (m: string, by: number) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 };
 
-export default function FinanceView() {
-  const { transactions, todos, notes, summaries, settings, addTransaction, updateTransaction, remove, saveSummary, setBudget, addTodo } = useStore();
+export default function FinanceView({ setTab }: { setTab: (t: Tab) => void }) {
+  const { transactions, notes, summaries, settings, addTransaction, updateTransaction, remove, saveSummary } = useStore();
   const { send } = useAssistant();
   const toast = useToast();
   const cur = settings.currency;
@@ -35,7 +37,6 @@ export default function FinanceView() {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ merchant: "", amount: "", currency: cur, category: "Food & Drink" });
   const [openId, setOpenId] = useState<string | null>(null);
-  const [editingBudget, setEditingBudget] = useState<string | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
   const [budgetsOpen, setBudgetsOpen] = useState(false);
   const [pasteOpen, setPasteOpen] = useState(false);
@@ -48,7 +49,8 @@ export default function FinanceView() {
     setOpenId(t.id);
     scrollToId(`tx-${t.id}`);
   });
-  useOpenItem("budget", (f) => scrollToId(document.getElementById(`budget-${f.id}`) ? `budget-${f.id}` : "finance-budgets"));
+  // Budgets live in a window (and in Settings); the dashboard doesn't show them.
+  useOpenItem("budget", () => setBudgetsOpen(true));
 
   const live = useMemo(() => alive(transactions), [transactions]);
   const txs = useMemo(
@@ -56,16 +58,7 @@ export default function FinanceView() {
     [live, month],
   );
   const total = txs.filter((t) => t.amount > 0).reduce((s, t) => s + myShare(t, cur), 0);
-  const income = txs.filter((t) => t.amount < 0).reduce((s, t) => s + Math.abs(baseAmount(t, cur)), 0);
   const byCat = spendByCategory(txs, cur);
-  const budgets = budgetStatus(txs, settings);
-  const categoryRows = [...new Set([...budgets.map((b) => b.category), ...Object.keys(byCat)])]
-    .filter((c) => c !== "Income")
-    .map((c) => ({ category: c, spent: byCat[c] ?? 0, limit: settings.budgets[c] ?? 0 }))
-    .sort((a, b) => b.spent - a.spent);
-  const owed = useMemo(() => owedToMe(live, cur), [live, cur]);
-  const owedTotal = owed.reduce((s, [, v]) => s + v, 0);
-  const subs = useMemo(() => detectSubscriptions(live), [live]);
   const summary = summaries.find((s) => s.month === month);
 
   const summarize = async () => {
@@ -79,17 +72,6 @@ export default function FinanceView() {
       setLoading(false);
     }
   };
-
-  const makeBill = (s: (typeof subs)[number]) => {
-    const due = new Date(`${s.nextDate}T09:00:00`).toISOString();
-    addTodo({
-      title: `Pay ${s.merchant}`, dueAt: due, remindAt: due, rrule: "FREQ=MONTHLY;INTERVAL=1",
-      bill: { amount: s.amount, currency: s.currency, category: s.category },
-    });
-    toast(`🔁 Monthly bill added: ${s.merchant}`);
-  };
-  const hasBill = (merchant: string) =>
-    alive(todos).some((t) => t.rrule && !t.done && t.title.toLowerCase().includes(merchant.toLowerCase()));
 
   const submitPaste = () => {
     const text = pasteText.trim();
@@ -110,128 +92,50 @@ export default function FinanceView() {
 
   return (
     <div>
+      {/* Toolbar: month picker, quick actions, and the report as the main button */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <button className="btn-ghost" onClick={() => setMonth((m) => shiftMonth(m, -1))} aria-label="Previous month">
-          <Icon name="chevron" className="rotate-180" />
-        </button>
-        <h2 className="min-w-40 text-center font-semibold">{monthLabel(month)}</h2>
-        <button className="btn-ghost" onClick={() => setMonth((m) => shiftMonth(m, 1))} aria-label="Next month">
-          <Icon name="chevron" />
-        </button>
-        <div className="ml-auto flex gap-1">
-          <button className="btn-ghost flex items-center gap-1 text-sm" onClick={() => setPasteOpen(true)}>
-            <Icon name="clipboard" size={14} /> App / receipt notification
+        <div className="flex min-h-11 items-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--bg)] px-1">
+          <button className="grid h-9 w-9 place-items-center rounded-lg text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)]" onClick={() => setMonth((m) => shiftMonth(m, -1))} aria-label="Previous month">
+            <Icon name="chevronLeft" size={17} />
           </button>
-          <button className="btn-ghost flex items-center gap-1 text-sm" onClick={() => setReportOpen(true)}>
-            <Icon name="download" size={14} /> Report
+          <Icon name="calendar" size={16} className="text-[var(--muted)]" />
+          <h2 className="min-w-32 px-1 text-center text-sm font-medium">{monthLabel(month)}</h2>
+          <button className="grid h-9 w-9 place-items-center rounded-lg text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)]" onClick={() => setMonth((m) => shiftMonth(m, 1))} aria-label="Next month">
+            <Icon name="chevron" size={17} />
+          </button>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <button className={ICON_BTN} onClick={() => setPasteOpen(true)} aria-label="Paste a payment notification" title="Paste a payment notification">
+            <Icon name="clipboard" size={18} />
+          </button>
+          <button className={ICON_BTN} onClick={() => setBudgetsOpen(true)} aria-label="Budgets" title="Budgets">
+            <Icon name="target" size={18} />
+          </button>
+          <button className="fn-press flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 text-sm font-medium text-white hover:brightness-110" onClick={() => setReportOpen(true)}>
+            <Icon name="download" size={16} /> Report
           </button>
         </div>
       </div>
 
-      <div className="mb-6 grid gap-3 sm:grid-cols-3">
-        <Stat label="Spent (your share)" value={formatMoney(total, cur)} />
-        <Stat label="Income" value={formatMoney(income, cur)} />
-        {owedTotal > 0 ? <Stat label="Others owe you" value={formatMoney(owedTotal, cur)} /> : <Stat label="Transactions" value={String(txs.length)} />}
+      <Dashboard
+        month={month}
+        setTab={setTab}
+        summary={summary}
+        summarizing={loading}
+        onSummarize={summarize}
+        onBudgets={() => setBudgetsOpen(true)}
+        onOpenTransactions={() => scrollToId("finance-transactions", "start")}
+        onOpenTransaction={(id) => { setOpenId(id); scrollToId(`tx-${id}`); }}
+      />
+
+      <section id="finance-transactions" className={`${FCARD} mt-4 scroll-mt-20 pb-2`}>
+      <div className="px-5 pt-5">
+        <CardHead title="Transactions">
+          <span className="text-sm text-[var(--faint)]">{txs.length}</span>
+        </CardHead>
       </div>
-
-      <div className="mb-6 grid gap-6 md:grid-cols-2">
-        <section id="finance-budgets" className="scroll-mt-20">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Budgets & categories</h3>
-            <button className="flex items-center gap-1.5 rounded-md border border-[var(--line)] px-2.5 py-1.5 text-xs font-medium hover:bg-[var(--hover)]" onClick={() => setBudgetsOpen(true)}>
-              <Icon name="target" size={14} /> Set budgets
-            </button>
-          </div>
-          {categoryRows.length === 0 && (
-            <p className="text-sm text-[var(--faint)]">
-              No spending this month.{" "}
-              {Object.keys(settings.budgets).length === 0 && <button className="text-[var(--accent)]" onClick={() => setBudgetsOpen(true)}>Set your first budget</button>}
-            </p>
-          )}
-          <ul className="space-y-2.5">
-            {categoryRows.map(({ category, spent, limit }) => {
-              const ratio = limit ? spent / limit : total ? spent / total : 0;
-              const color = !limit ? "var(--accent)" : ratio >= 1 ? "var(--danger)" : ratio >= 0.8 ? "#d9730d" : "var(--ok)";
-              return (
-                <FlashItem key={category} flashId={category} id={`budget-${category}`} className="scroll-mt-20 rounded-md text-sm">
-                  <div className="flex items-center justify-between gap-2">
-                    <span>{category}</span>
-                    {editingBudget === category ? (
-                      <input
-                        autoFocus
-                        defaultValue={limit || ""}
-                        placeholder="Monthly budget"
-                        aria-label={`${category} budget`}
-                        onBlur={(e) => { setBudget(category, parseAmount(e.target.value)); setEditingBudget(null); }}
-                        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setEditingBudget(null); }}
-                        className={`${inputBox} w-32 text-right`}
-                      />
-                    ) : (
-                      <button className="tabular-nums text-[var(--muted)] hover:text-[var(--text)]" onClick={() => setEditingBudget(category)} title="Set budget">
-                        {formatMoney(spent, cur, true)}{limit ? ` / ${formatMoney(limit, cur, true)}` : ""}
-                        {!limit && <Icon name="target" size={12} className="ml-1 inline opacity-50" />}
-                      </button>
-                    )}
-                  </div>
-                  <div className="mt-1 h-1.5 rounded-full bg-[var(--hover)]">
-                    <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, ratio * 100)}%`, background: color, opacity: limit ? 1 : 0.6 }} />
-                  </div>
-                  {limit > 0 && ratio >= 1 && <div className="mt-0.5 text-xs text-[var(--danger)]">Over by {formatMoney(spent - limit, cur)}</div>}
-                </FlashItem>
-              );
-            })}
-          </ul>
-        </section>
-
-        <div className="space-y-4">
-          <section className="rounded-lg border border-[var(--line)] p-3">
-            <div className="mb-2 flex items-center gap-2">
-              <Icon name="sparkle" className="text-[var(--accent)]" />
-              <h3 className="text-sm font-semibold">Monthly review</h3>
-              <button className="btn-ghost ml-auto text-xs" onClick={summarize} disabled={loading || txs.length === 0}>
-                {loading ? "Writing…" : summary ? "Refresh" : "Generate"}
-              </button>
-            </div>
-            <p className="whitespace-pre-wrap text-sm text-[var(--muted)]">
-              {summary?.text ?? "Generated automatically when a month ends, or tap Generate now."}
-            </p>
-          </section>
-
-          {subs.length > 0 && (
-            <section className="rounded-lg border border-[var(--line)] p-3">
-              <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Icon name="repeat" /> Subscriptions detected</h3>
-              <ul className="space-y-1.5 text-sm">
-                {subs.map((s) => (
-                  <li key={s.merchant} className="flex items-center gap-2">
-                    <span className="min-w-0 flex-1 truncate">{s.merchant}</span>
-                    <span className="tabular-nums text-[var(--muted)]">{formatMoney(s.amount, s.currency)}/mo</span>
-                    <span className="text-xs text-[var(--faint)]">next ~{new Date(`${s.nextDate}T00:00:00`).toLocaleDateString("en-US", { day: "numeric", month: "short" })}</span>
-                    {hasBill(s.merchant) ? (
-                      <span className="chip">tracked</span>
-                    ) : (
-                      <button className="btn-ghost text-xs text-[var(--accent)]" onClick={() => makeBill(s)}>Track as bill</button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          {owed.length > 0 && (
-            <section className="rounded-lg border border-[var(--line)] p-3">
-              <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold"><Icon name="users" /> Owed to you</h3>
-              <ul className="space-y-1 text-sm">
-                {owed.map(([name, v]) => (
-                  <li key={name} className="flex justify-between"><span>{name}</span><span className="tabular-nums">{formatMoney(v, cur)}</span></li>
-                ))}
-              </ul>
-            </section>
-          )}
-        </div>
-      </div>
-
       <form
-        className="mb-2 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-[var(--line)] pb-3 text-sm lg:flex lg:flex-wrap"
+        className="mx-5 mb-2 mt-3 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-[var(--line)] pb-3 text-sm lg:flex lg:flex-wrap"
         onSubmit={(e) => {
           e.preventDefault();
           const amount = parseAmount(form.amount);
@@ -252,7 +156,7 @@ export default function FinanceView() {
           {[...new Set([cur, ...CURRENCIES])].map((c) => <option key={c}>{c}</option>)}
         </select>
         <CategorySelect value={form.category} onChange={(category) => setForm({ ...form, category })} className={`${FIELD} w-full min-w-0 text-[var(--muted)] lg:w-auto`} />
-        <button className="h-9 rounded-md border border-[var(--line)] px-4 font-medium hover:bg-[var(--hover)]">Add</button>
+        <button className="h-10 rounded-lg bg-[var(--accent)] px-4 font-medium text-white hover:brightness-110">Add</button>
       </form>
 
       {txs.length === 0 ? (
@@ -263,8 +167,8 @@ export default function FinanceView() {
           extra={<button className="fn-press rounded-lg border border-[var(--line)] px-3.5 py-1.5 text-sm hover:bg-[var(--hover)]" onClick={() => setPasteOpen(true)}>Paste a notification</button>}
         />
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto px-2">
+          <table className="w-full border-separate border-spacing-0 text-sm">
             <tbody>
               {txs.map((t) => {
                 const foreign = t.currency !== cur;
@@ -273,7 +177,7 @@ export default function FinanceView() {
                 return (
                   <Fragment key={t.id}>
                     <TransactionRow id={t.id} open={isOpen}>
-                      <td className="whitespace-nowrap py-2 pr-2 align-top text-xs text-[var(--muted)] sm:pr-3 sm:align-middle sm:text-sm">{new Date(`${t.date}T00:00:00`).toLocaleDateString("en-US", { day: "numeric", month: "short" })}</td>
+                      <td className="whitespace-nowrap rounded-l-xl py-2.5 pl-2 pr-2 align-top text-xs text-[var(--muted)] sm:pr-3 sm:align-middle sm:text-sm">{new Date(`${t.date}T00:00:00`).toLocaleDateString("en-US", { day: "numeric", month: "short" })}</td>
                       <td className="py-2 pr-3">
                         <button className="flex items-center gap-2 text-left" onClick={() => setOpenId(isOpen ? null : t.id)} aria-expanded={isOpen}>
                           {t.imageDataUrl && (
@@ -300,15 +204,15 @@ export default function FinanceView() {
                           <div className="text-xs text-[var(--faint)]">{t.fxRate ? `≈ ${formatMoney(Math.abs(baseAmount(t, cur)), cur)}` : "fetching rate…"}</div>
                         )}
                       </td>
-                      <td className="hidden w-8 text-right sm:table-cell">
+                      <td className="hidden w-10 rounded-r-xl pr-1 text-right sm:table-cell">
                         <button className="btn-ghost opacity-0 focus:opacity-100 group-hover:opacity-100" onClick={() => remove("transactions", t.id)} aria-label="Delete">
                           <Icon name="trash" size={13} />
                         </button>
                       </td>
                     </TransactionRow>
                     {isOpen && (
-                      <tr className="border-b border-[var(--line)] bg-[var(--hover)]">
-                        <td colSpan={5} className="px-3 pb-4 pt-1">
+                      <tr>
+                        <td colSpan={5} className="rounded-b-xl bg-[var(--hover)] px-3 pb-4 pt-1">
                           <div className="grid gap-4 md:grid-cols-2">
                             <div className="grid grid-cols-2 gap-2 text-xs text-[var(--muted)]">
                               <label className="col-span-2 flex flex-col gap-1 sm:hidden">Category
@@ -363,6 +267,8 @@ export default function FinanceView() {
         </div>
       )}
 
+      </section>
+
       <Modal open={pasteOpen} onClose={() => setPasteOpen(false)} title="App / receipt notification">
         <div className="space-y-3 p-4">
           <p className="text-sm text-[var(--muted)]">
@@ -400,17 +306,8 @@ export default function FinanceView() {
 function TransactionRow({ id, open, children }: { id: string; open: boolean; children: React.ReactNode }) {
   const justFiled = useFiledFlash(id);
   return (
-    <tr id={`tx-${id}`} className={`group border-b border-[var(--line)] hover:bg-[var(--hover)] ${open ? "bg-[var(--hover)]" : ""} ${justFiled ? "fn-flash" : ""}`}>
+    <tr id={`tx-${id}`} data-open={open} className={`tx-row group ${justFiled ? "fn-flash" : ""}`}>
       {children}
     </tr>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-[var(--line)] px-3 py-2">
-      <div className="text-xs text-[var(--muted)]">{label}</div>
-      <div className="text-xl font-semibold tabular-nums">{value}</div>
-    </div>
   );
 }

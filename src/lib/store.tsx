@@ -27,6 +27,7 @@ import type {
   Todo,
   Transaction,
 } from "./types";
+import { quickNote } from "./quickNote";
 
 // ---------------------------------------------------------------------------
 // Persistence adapter. The app always saves locally first (instant UI, works
@@ -402,9 +403,10 @@ export function StoreProvider({ children, adapter = localAdapter }: { children: 
               const todo = addTodo({
                 title: a.title, notes: a.notes, dueAt: a.dueAt ?? null, remindAt: a.remindAt ?? a.dueAt ?? null,
                 priority: a.priority ?? "medium", source, rrule: a.rrule ?? null, bill: a.bill ?? null,
+                doing: a.status === "doing" || undefined,
                 noteId: (a.noteRef && refs.get(a.noteRef)) || fallbackNote(),
               });
-              file(`${a.rrule ? "🔁" : "✅"} To-do: ${a.title}`, { kind: "todos", id: todo.id });
+              file(`${a.rrule ? "🔁" : a.status === "doing" ? "▶️" : "✅"} ${a.status === "doing" ? "Doing" : "To-do"}: ${a.title}`, { kind: "todos", id: todo.id });
               break;
             }
             case "add_transaction": {
@@ -420,8 +422,18 @@ export function StoreProvider({ children, adapter = localAdapter }: { children: 
               break;
             }
             case "create_sticky": {
-              const sticky = addSticky({ text: a.text, color: a.color ?? "yellow" });
-              file(`📌 Sticky: ${a.text.slice(0, 30)}`, { kind: "stickies", id: sticky.id });
+              // Stickies became quick notes (see lib/quickNote.ts); the tool keeps its name.
+              const n = addNote({ ...quickNote(a.text), source });
+              file(`📝 Quick note: ${a.text.slice(0, 30)}`, { kind: "notes", id: n.id });
+              break;
+            }
+            case "start_todo": {
+              const q = a.titleContains.toLowerCase();
+              const hit = dataRef.current.todos.find((t) => !t.deletedAt && !t.done && t.title.toLowerCase().includes(q));
+              if (hit) {
+                patchList("todos", hit.id, { doing: true });
+                file(`▶️ Doing: ${hit.title}`, { kind: "todos", id: hit.id });
+              }
               break;
             }
             case "complete_todo": {
@@ -465,7 +477,7 @@ export function StoreProvider({ children, adapter = localAdapter }: { children: 
           currency: d.settings.currency,
           notes: live(d.notes).slice(0, 30).map((n) => ({ title: n.title, snippet: n.content.slice(0, 240) })),
           relevantNotes: relevantNotes?.map((n) => ({ title: n.title, content: n.content.slice(0, 3000), updatedAt: n.updatedAt })),
-          todos: live(d.todos).slice(0, 50).map((t) => ({ title: t.title, done: t.done, dueAt: t.dueAt, rrule: t.rrule })),
+          todos: live(d.todos).slice(0, 50).map((t) => ({ title: t.title, done: t.done, doing: t.doing || undefined, dueAt: t.dueAt, rrule: t.rrule })),
           transactions: live(d.transactions).slice(0, 80).map((t) => ({ merchant: t.merchant, amount: t.amount, category: t.category, date: t.date })),
           budgets: d.settings.budgets,
           categories: categoriesOf(d.settings),

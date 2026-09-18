@@ -19,6 +19,7 @@ const Action = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("create_todo"), title: z.string().min(1).max(300), notes: z.string().optional(),
     dueAt: isoOrNull.catch(null), remindAt: isoOrNull.catch(null), priority, rrule,
+    status: z.enum(["todo", "doing"]).optional().catch(undefined),
     bill: z.object({ amount, currency: z.string().length(3).optional(), category }).nullish().catch(null),
     noteRef: z.string().optional(),
   }),
@@ -30,6 +31,7 @@ const Action = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("create_sticky"), text: z.string().min(1).max(300), color: z.enum(["yellow", "pink", "blue", "green"]).optional().catch("yellow") }),
   z.object({ type: z.literal("complete_todo"), titleContains: z.string().min(2) }),
+  z.object({ type: z.literal("start_todo"), titleContains: z.string().min(2) }),
   z.object({ type: z.literal("set_budget"), category, amount: amount.refine((n) => n > 0) }),
   z.object({ type: z.literal("split_transaction"), merchantContains: z.string().min(1), people: z.array(z.string().min(1)).min(1), includeMe: z.boolean().optional() }),
 ]);

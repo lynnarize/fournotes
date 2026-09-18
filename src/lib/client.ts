@@ -42,6 +42,16 @@ export const api = {
     );
   },
 
+  /** Notes editor AI menu: summarize / improve / fix / shorter / continue. */
+  write: (task: "summarize" | "improve" | "fix" | "shorter" | "continue", text: string, title: string) => {
+    offlineGuard();
+    return fetch("/api/ai/write", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...keyHeaders() },
+      body: JSON.stringify({ task, text, title }),
+    }).then((r) => asJson<{ text: string }>(r));
+  },
+
   monthlySummary: (month: string, currency: string, transactions: unknown[]) => {
     offlineGuard();
     return fetch("/api/finance/summary", {

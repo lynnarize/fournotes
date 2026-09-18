@@ -2,7 +2,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useBackDismiss } from "@/lib/backstack";
 import { markFiled } from "@/lib/highlight";
-import { showChange } from "@/lib/nav";
+import { showChange, useOpenAssistant } from "@/lib/nav";
 import type { ChangeLink } from "@/lib/store";
 import { useAssistant } from "./assistant";
 import ScanPicker from "./ScanPicker";
@@ -31,19 +31,70 @@ const ICON_BTN = "grid h-10 w-10 shrink-0 place-items-center rounded-lg transiti
 const GHOST = `${ICON_BTN} fn-press text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)]`;
 const MAX_INPUT_HEIGHT = 160;
 
-export default function ChatDock() {
+/**
+ * `minimized` (every tab except Today): the assistant is a round button in the corner
+ * and opens as a sheet; on Today it's the full bar.
+ */
+export default function ChatDock({ minimized = false }: { minimized?: boolean }) {
   const { messages, busy, recording, liveTranscript, voice, queued, send, scan, startRecording, stopRecording, toggleVoice, clear } = useAssistant();
   const [text, setText] = useState("");
   const [open, setOpen] = useState(false);
+  /** Minimized mode only: the sheet is showing instead of the round button. */
+  const [expanded, setExpanded] = useState(false);
+  const [unread, setUnread] = useState(false);
   const [narrow, setNarrow] = useState(false);
   const [splitTx, setSplitTx] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  useBackDismiss(open, () => setOpen(false));
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  const collapse = () => {
+    setExpanded(false);
+    setOpen(false);
+  };
+  const reveal = (focus = false) => {
+    setExpanded(true);
+    setOpen(true);
+    setUnread(false);
+    if (focus) setTimeout(() => inputRef.current?.focus(), 80);
+  };
+  // Back closes the conversation (Today) or folds the sheet back into the button.
+  useBackDismiss(minimized ? expanded : open, () => (minimized ? collapse() : setOpen(false)));
+
+  // Moving between Today and the other tabs: start folded away.
   useEffect(() => {
-    if (messages.length) setOpen(true);
+    setExpanded(false);
+    if (minimized) setOpen(false);
+  }, [minimized]);
+
+  // New messages: show the conversation. While folded, a reply only marks the button.
+  const seen = useRef(messages.length);
+  useEffect(() => {
+    if (messages.length > seen.current) {
+      const last = messages[messages.length - 1];
+      if (!minimized || expanded || last?.role === "user") reveal();
+      else setUnread(true);
+    }
+    seen.current = messages.length;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages.length]);
+
+  // Recording or voice mode shows their live status, so they need the sheet open.
+  useEffect(() => {
+    if (minimized && (recording || voice !== "off")) reveal();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recording, voice]);
+
+  // "Ask the assistant…" from elsewhere, optionally with text ready to finish.
+  useOpenAssistant((prefill) => {
+    reveal();
+    if (prefill !== undefined) setText(prefill);
+    setTimeout(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    }, 80);
+  });
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, busy, open]);
@@ -78,7 +129,8 @@ export default function ChatDock() {
       const el = e.target as HTMLElement;
       if (e.key === "/" && !e.metaKey && !e.ctrlKey && !/INPUT|TEXTAREA|SELECT/.test(el.tagName) && !el.isContentEditable) {
         e.preventDefault();
-        inputRef.current?.focus();
+        setExpanded(true);
+        setTimeout(() => inputRef.current?.focus(), 60);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -89,7 +141,8 @@ export default function ChatDock() {
   const jump = (link: ChangeLink, all: ChangeLink[] = []) => {
     if (!link) return;
     markFiled(all.filter((l): l is NonNullable<ChangeLink> => Boolean(l)).map((l) => l.id));
-    setOpen(false);
+    if (minimized) collapse();
+    else setOpen(false);
     inputRef.current?.blur();
     showChange(link);
   };
@@ -101,8 +154,39 @@ export default function ChatDock() {
     send(t);
   };
 
+  const splitModal = (
+    <div className="pointer-events-auto">
+      <Modal open={!!splitTx} onClose={() => setSplitTx(null)} title="Split bill">
+        <div className="p-4">{splitTx && <SplitEditor txId={splitTx} />}</div>
+      </Modal>
+    </div>
+  );
+
+  if (minimized && !expanded) {
+    return (
+      <>
+        <button
+          onClick={() => reveal(true)}
+          className="no-print fn-pop fn-press fixed bottom-[calc(env(safe-area-inset-bottom)+16px)] right-4 z-40 grid h-14 w-14 place-items-center rounded-full bg-[var(--accent)] text-white shadow-[0_6px_20px_rgba(0,0,0,0.22)] md:right-6"
+          aria-label={unread ? "Open assistant (new reply)" : "Open assistant"}
+          title="Assistant"
+        >
+          <Icon name="sparkle" size={24} />
+          {busy && <span className="absolute inset-0 animate-spin rounded-full border-2 border-white/25 border-t-white" aria-hidden />}
+          {unread && <span className="absolute right-0.5 top-0.5 h-3.5 w-3.5 rounded-full border-2 border-[var(--bg)] bg-[var(--danger)]" aria-hidden />}
+        </button>
+        {splitModal}
+      </>
+    );
+  }
+
   return (
-    <div className="no-print pointer-events-none sticky bottom-0 z-20 px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-2 sm:px-4">
+    <div
+      data-state="open"
+      className={`no-print pointer-events-none px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-2 sm:px-4 ${
+        minimized ? "fn-sheet fixed inset-x-0 bottom-0 z-40 md:left-60" : "sticky bottom-0 z-20"
+      }`}
+    >
       <div className="pointer-events-auto mx-auto max-w-4xl overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--bg)] shadow-[var(--shadow)]">
         {/* Always mounted so it can expand and collapse smoothly; inert while closed. */}
         <div className="fn-collapse" data-open={open} inert={!open} aria-hidden={!open}>
@@ -122,7 +206,7 @@ export default function ChatDock() {
                     <Icon name="wave" size={16} /> {voice !== "off" ? "End voice" : "Voice"}
                   </button>
                   {messages.length > 0 && <button className="h-8 rounded-lg px-2.5 text-sm hover:bg-[var(--hover)]" onClick={clear}>Clear</button>}
-                  <button className="fn-press grid h-10 w-10 place-items-center rounded-lg hover:bg-[var(--hover)] sm:h-8 sm:w-8" onClick={() => setOpen(false)} aria-label="Collapse chat">
+                  <button className="fn-press grid h-10 w-10 place-items-center rounded-lg hover:bg-[var(--hover)] sm:h-8 sm:w-8" onClick={() => (minimized ? collapse() : setOpen(false))} aria-label="Collapse chat">
                     <Icon name="x" size={16} />
                   </button>
                 </span>
@@ -266,11 +350,7 @@ export default function ChatDock() {
         </div>
       </div>
 
-      <div className="pointer-events-auto">
-        <Modal open={!!splitTx} onClose={() => setSplitTx(null)} title="Split bill">
-          <div className="p-4">{splitTx && <SplitEditor txId={splitTx} />}</div>
-        </Modal>
-      </div>
+      {splitModal}
     </div>
   );
 }

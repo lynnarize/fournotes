@@ -15,8 +15,6 @@ import SettingsModal from "@/components/SettingsModal";
 import { revealSettingsSection } from "@/components/SettingsSection";
 import Sidebar from "@/components/Sidebar";
 import SampleBanner from "@/components/SampleData";
-import StickyBar from "@/components/StickyBar";
-import TipStrip from "@/components/TipStrip";
 import TodayView from "@/components/TodayView";
 import TodoView from "@/components/TodoView";
 import { Icon, ToastProvider } from "@/components/ui";
@@ -27,12 +25,7 @@ import { scrollToId, useOpenItem, useOpenSettings } from "@/lib/nav";
 import { StoreProvider, useStore } from "@/lib/store";
 import type { Tab } from "@/lib/types";
 
-const TITLES: Record<Tab, { title: string; emoji: string }> = {
-  today: { title: "Today", emoji: "☀️" },
-  notes: { title: "Notes", emoji: "📝" },
-  todo: { title: "To-Do", emoji: "✅" },
-  finance: { title: "Finance", emoji: "💸" },
-};
+const TITLES: Record<Tab, string> = { today: "Today", notes: "Notes", todo: "To-Do", finance: "Finance" };
 
 export default function Page() {
   return (
@@ -60,6 +53,9 @@ function Shell() {
   const [settings, setSettings] = useState(false);
   const spaceName = spaces.find((s) => s.id === currentSpaceId)?.name;
   const pulsing = usePulsingTabs().filter((t) => t !== tab);
+  // Notes gets the whole width for its list + editor.
+  // Notes fills the height (its list and editor scroll on their own); other tabs scroll the page.
+  const wide = tab === "notes";
   // Phones: the header stays on top; it gets a border once the page scrolls under it.
   const [scrolled, setScrolled] = useState(false);
 
@@ -69,9 +65,9 @@ function Shell() {
     if (t && t in TITLES) setTab(t as Tab);
   }, []);
 
-  // Stickies live on every tab, so jumping to one doesn't switch tabs.
+  // Stickies only show on Today.
   useOpenItem("any", (f) => {
-    if (f.kind !== "sticky") setTab(f.kind === "note" ? "notes" : f.kind === "todo" ? "todo" : "finance");
+    setTab(f.kind === "sticky" ? "today" : f.kind === "note" ? "notes" : f.kind === "todo" ? "todo" : "finance");
   });
 
   useEffect(() => {
@@ -142,12 +138,12 @@ function Shell() {
               <button className="tap-target fn-press" onClick={openSettings} aria-label="Settings"><Icon name="settings" size={22} /></button>
             </header>
 
-            <div className="mx-auto w-full max-w-4xl"><TipStrip /></div>
-            <div className="mx-auto w-full max-w-4xl pt-3"><StickyBar /></div>
 
-            <div key={tab} className="fn-rise mx-auto w-full max-w-4xl flex-1 px-4 pb-8 md:px-10">
-              <h1 className="mb-6 mt-4 flex items-center gap-3 text-4xl font-bold">
-                <span>{TITLES[tab].emoji}</span>{TITLES[tab].title}
+            {/* Every tab: same width, same side padding, same title position. */}
+            <div key={tab} className={`fn-rise mx-auto w-full max-w-[1500px] flex-1 px-4 md:px-8 ${wide ? "flex min-h-0 flex-col pb-3" : "pb-8"}`}>
+              {/* Today's big greeting stands in for the title. */}
+              <h1 className={`mb-5 mt-5 flex shrink-0 items-center gap-3 text-4xl font-bold tracking-tight md:mt-7 ${tab === "today" ? "sr-only" : ""}`}>
+                {TITLES[tab]}
                 {spaceName && <span className="chip self-center text-sm font-normal"><Icon name="users" size={12} />{spaceName}</span>}
               </h1>
               {!ready ? (
@@ -159,11 +155,12 @@ function Shell() {
               ) : tab === "todo" ? (
                 <TodoView />
               ) : (
-                <FinanceView />
+                <FinanceView setTab={setTab} />
               )}
             </div>
 
-            <ChatDock />
+            {/* Full assistant bar on Today; a round button everywhere else. */}
+            <ChatDock minimized={tab !== "today"} />
           </main>
         </div>
       </div>

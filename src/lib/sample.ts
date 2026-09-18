@@ -1,6 +1,7 @@
 // Optional sample data ("Explore with sample data").
 // Every item is tagged `sample: true`, so it can be removed in one click and is
 // never uploaded to cloud sync. A fresh install has none of this.
+import { quickNote } from "./quickNote";
 import type { Note, Sticky, Todo, Transaction } from "./types";
 
 export const SAMPLE_BUDGETS: Record<string, number> = { "Food & Drink": 1_500_000, Transport: 600_000 };
@@ -58,9 +59,9 @@ export function buildSamples(id: () => string, currency: string) {
     tx(-38, "Netflix", 186_000, "Entertainment"),
   ];
 
-  const stickies: Sticky[] = [
-    { ...base(-3), text: "Andi still owes 30k for Warteg", color: "yellow", pinned: true },
-  ];
+  // A quick note (these replaced stickies); see lib/quickNote.ts.
+  const quick: Note = { ...base(-3), ...quickNote("Andi still owes 30k for Warteg"), source: "manual" } as Note;
+  const stickies: Sticky[] = [];
 
-  return { notes: [note], todos, transactions, stickies, budgets: SAMPLE_BUDGETS };
+  return { notes: [note, quick], todos, transactions, stickies, budgets: SAMPLE_BUDGETS };
 }

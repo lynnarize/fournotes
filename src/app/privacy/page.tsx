@@ -30,50 +30,115 @@ export default function PrivacyPage() {
         also kept only on your device.
       </p>
 
-      <h2>2. Google account data</h2>
+      <h2>2. Google user data</h2>
       <p>
-        Signing in with Google is optional and is used only for backup and sync. When you choose <em>Continue with Google</em>, the app asks for
-        these permissions and nothing else:
+        Signing in with Google is optional. It is used only to back up your data and sync it between your devices. This section describes how Four
+        Notes accesses, uses, shares, protects, retains and deletes Google user data.
       </p>
+
+      <h3>2.1 Data accessed</h3>
+      <p>When you choose <em>Continue with Google</em>, the app requests these permissions and nothing else:</p>
       <ul>
         <li>
-          <strong>Your email address</strong> (<code>openid</code>, <code>email</code>) — to show which account is connected, and to give signed-in
-          users a larger daily allowance of the app&apos;s shared AI requests.
+          <strong>Your Google account email address</strong> (scopes <code>openid</code> and <code>email</code>).
         </li>
         <li>
-          <strong>Its own app data in your Google Drive</strong> (<code>drive.appdata</code>) — to save and read a single sync file,{" "}
-          <code>four-notes-sync.json</code>, in a hidden folder that only Four Notes can open.
+          <strong>Your name</strong> from your Google profile (scope <code>profile</code>). The app uses only your first name; it does not use your
+          profile photo or any other profile information.
+        </li>
+        <li>
+          <strong>The app&apos;s own data in your Google Drive</strong> (scope <code>drive.appdata</code>): a single file,{" "}
+          <code>four-notes-sync.json</code>, in a hidden app-data folder that only Four Notes can open.
         </li>
       </ul>
       <p>
-        This permission gives the app access <strong>only to its own hidden app folder</strong>. The app cannot see, open, list, change or delete any
-        of your other files in Google Drive, and those files are never read.
+        The app <strong>cannot see, open, list, change or delete any other file</strong> in your Google Drive. It does not access your contacts,
+        calendar, Gmail, photos or any other Google data.
       </p>
 
-      <h3>What the sync file contains</h3>
-      <p>
-        Your notes, to-dos, transactions and sticky notes, plus a few settings (currency, budgets, your display name if you set one, and whether voice
-        replies are on). It does <strong>not</strong> contain scan images, API keys, or sample data.
-      </p>
-
-      <h3>How it is stored and protected</h3>
+      <h3>2.2 How we use Google user data</h3>
       <ul>
-        <li>The sync file lives in your own Google Drive, under your Google account. We do not keep a copy on our servers.</li>
         <li>
-          To keep syncing, Google gives the app a refresh token. It is stored only in an encrypted (AES-256-GCM), HttpOnly cookie on your device, so
-          page scripts can&apos;t read it. It is not stored in any database.
+          <strong>Email address</strong> — to show which Google account is connected, and to count your daily allowance of the app&apos;s shared AI
+          requests (signed-in users get a larger allowance).
         </li>
-        <li>All connections use HTTPS.</li>
+        <li>
+          <strong>First name</strong> — to fill in &ldquo;Your name&rdquo; in Settings, which the daily brief uses to greet you. It is filled in once,
+          only if you haven&apos;t set a name yourself, and you can change or clear it at any time.
+        </li>
+        <li>
+          <strong>Drive app data</strong> — to save your notes, to-dos, transactions, sticky notes and a few settings (currency, budgets, display name,
+          voice replies) to the sync file, and to read that file back so the same data appears on your other devices.
+        </li>
+      </ul>
+      <p>
+        Google user data is used only to provide these features to you. It is <strong>not</strong> sold, <strong>not</strong> used for advertising,
+        <strong> not</strong> used to build profiles, and <strong>not</strong> used to develop, improve or train AI or machine-learning models. No one
+        at Four Notes reads it: we have no database and no copy of it.
+      </p>
+
+      <h3>2.3 Data sharing, transfer and disclosure</h3>
+      <p>
+        We do not share, sell, transfer or disclose Google user data to third parties. Your email address is never sent to AI providers or anyone else.
+        The sync file only moves between your own Google Drive and your own devices. The only exceptions are:
+      </p>
+      <ul>
+        <li>
+          <strong>Google</strong>, which provides sign-in and stores the file in your Drive, and <strong>Vercel</strong>, our hosting provider, whose
+          servers pass requests between your browser and Google to run the app. Neither receives Google user data from us for any other purpose.
+        </li>
+        <li>If required by law.</li>
+      </ul>
+      <p>
+        Notes restored from the sync file are ordinary notes on your device. Like any of your notes, they are sent to an AI provider only when you
+        use an AI feature, and only the parts needed for that request (see section 3).
+      </p>
+
+      <h3>2.4 Data storage and protection</h3>
+      <ul>
+        <li>The sync file is stored in your own Google Drive, under your Google account. We do not store it on our servers.</li>
+        <li>
+          To keep syncing, Google issues a refresh token. It is stored only on your device, in a cookie encrypted with AES-256-GCM and marked HttpOnly,
+          so scripts on the page cannot read it. It is not stored in any database.
+        </li>
+        <li>Short-lived access tokens are kept only in your browser&apos;s memory (never saved) and expire after one hour.</li>
+        <li>Your email address is stored on your device only: inside the encrypted cookie, and in local storage to show the connected account.</li>
+        <li>
+          Your first name is kept inside the encrypted cookie and, once filled in, as your display name in Settings (on your device and in your sync
+          file, like your other settings).
+        </li>
+        <li>All traffic uses HTTPS. The app requests only the minimum permissions it needs.</li>
       </ul>
 
-      <h3>Use and sharing</h3>
-      <p>
-        Google user data is used only to provide sync and backup to you. We do not sell it, use it for advertising, or use it to train AI models.
-        Your Google email address is never sent to AI providers or shared with anyone. The sync file is read only to restore your notes on your
-        devices; once restored they are ordinary notes on your device, which an AI feature can include only when you use one (see section 3).
-      </p>
+      <h3>2.5 Data retention and deletion</h3>
+      <ul>
+        <li>
+          <strong>Sync file</strong> — kept in your Google Drive until you delete it. Use <em>Delete Drive copy</em> in Settings → Cloud sync, or in
+          Google Drive go to Settings → Manage apps → Four Notes → Options → <em>Delete hidden app data</em>.
+        </li>
+        <li>
+          <strong>Sign-in token, email address and name</strong> — these are kept in the encrypted cookie on your device for up to 180
+          days; your email is also saved in your browser&apos;s local storage to show which account is connected. These are deleted immediately when you
+          choose <em>Disconnect</em>, which also revokes the app&apos;s access with Google.
+        </li>
+        <li>
+          <strong>Daily allowance counter</strong> — your email address (or IP address when signed out) is held in server memory only to count
+          requests, and is cleared every day.
+        </li>
+        <li>
+          <strong>Display name</strong> — kept as a setting until you change or clear it in Settings → General, or delete your data.
+        </li>
+        <li><strong>Sign-in protection cookie</strong> — deleted after 10 minutes.</li>
+        <li>
+          You can remove the app&apos;s access at any time from{" "}
+          <a href="https://myaccount.google.com/permissions" target="_blank" rel="noreferrer">
+            your Google Account&apos;s third-party connections
+          </a>
+          . For any request about your data, contact <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
+        </li>
+      </ul>
 
-      <h3>Google API Services User Data Policy</h3>
+      <h3>2.6 Limited Use</h3>
       <p>
         Four Notes&apos; use and transfer of information received from Google APIs to any other app will adhere to the{" "}
         <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noreferrer">
@@ -81,23 +146,6 @@ export default function PrivacyPage() {
         </a>
         , including the Limited Use requirements.
       </p>
-
-      <h3>Removing access and deleting your Drive copy</h3>
-      <ul>
-        <li>
-          <strong>Delete Drive copy</strong> (Settings → Cloud sync) permanently deletes the sync file from your Google Drive.
-        </li>
-        <li>
-          <strong>Disconnect</strong> revokes the app&apos;s access with Google and removes the token from your device.
-        </li>
-        <li>
-          You can also remove access at any time from{" "}
-          <a href="https://myaccount.google.com/permissions" target="_blank" rel="noreferrer">
-            your Google Account&apos;s third-party connections
-          </a>
-          .
-        </li>
-      </ul>
 
       <h2>3. AI features</h2>
       <p>

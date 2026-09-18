@@ -75,7 +75,8 @@ create table if not exists notes (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users on delete cascade default auth.uid(),
   title text not null default '',
-  content text not null default '',
+  content text not null default '',               -- plain text (search, AI, brief)
+  html text,                                      -- rich text from the editor
   source text not null default 'manual',          -- manual | chat | ocr | recording | share
   tags text[] not null default '{}',
   image_path text,                                -- Supabase Storage path of the scan
@@ -133,6 +134,7 @@ alter table todos add column if not exists completed_at timestamptz;
 alter table todos add column if not exists rrule text;                   -- e.g. FREQ=MONTHLY;INTERVAL=1
 alter table todos add column if not exists bill jsonb;                   -- { amount, currency, category }
 alter table todos add column if not exists note_id uuid;
+alter table todos add column if not exists doing boolean default false;  -- board: in progress
 alter table transactions add column if not exists fx_rate numeric(18,8); -- 1 unit of currency in base currency
 alter table transactions add column if not exists splits jsonb;          -- [{ name, amount, settled }]
 alter table transactions add column if not exists note_id uuid;
@@ -228,3 +230,6 @@ begin
   exception when duplicate_object then null;
   end;
 end $$;
+
+-- Upgrading an existing database: rich-text notes (the Notes editor).
+alter table notes add column if not exists html text;

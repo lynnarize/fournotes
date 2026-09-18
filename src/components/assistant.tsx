@@ -8,8 +8,9 @@ import { api, resizeImage } from "@/lib/client";
 import { markFiled, pulseTabs } from "@/lib/highlight";
 import { openSettings } from "@/lib/nav";
 import { semanticNotes } from "@/lib/search";
+import { activeNoteId } from "@/lib/activeNote";
 import { useStore, type ChangeLink } from "@/lib/store";
-import type { AIAction, ChatMessage, NoteSource, Tab } from "@/lib/types";
+import type { AIAction, ChatMessage, Note, NoteSource, Tab } from "@/lib/types";
 import { useToast } from "./ui";
 
 export type UIMessage = ChatMessage & {
@@ -46,7 +47,7 @@ const tabFor = (actions: AIAction[]): Tab | null => {
   const a = actions[0];
   if (!a) return null;
   if (a.type === "add_transaction" || a.type === "set_budget" || a.type === "split_transaction") return "finance";
-  if (a.type === "create_todo" || a.type === "complete_todo") return "todo";
+  if (a.type === "create_todo" || a.type === "complete_todo" || a.type === "start_todo") return "todo";
   if (a.type === "create_note") return "notes";
   return null;
 };
@@ -94,7 +95,28 @@ function speechErrorMessage(code?: string): string | null {
   }
 }
 
-const TAB_OF: Record<string, Tab | undefined> = { notes: "notes", todos: "todo", transactions: "finance", budget: "finance" };
+/**
+ * Notes the message names outright — a quoted title (“Groceries”) or "this note" for the
+ * one open in the editor — always go to the assistant in full, whatever retrieval ranks.
+ */
+function namedNotes(notes: Note[], text: string): Note[] {
+  const live = notes.filter((n) => !n.deletedAt);
+  const open = activeNoteId();
+  const titles = [...text.matchAll(/[“"«]([^”"»]{1,120})[”"»]/g)].map((m) => m[1].trim().toLowerCase());
+  const out: Note[] = [];
+  for (const t of titles) {
+    const hits = live.filter((n) => (n.title.trim() || "untitled").toLowerCase() === t);
+    const pick = hits.find((n) => n.id === open) ?? hits[0];
+    if (pick && !out.includes(pick)) out.push(pick);
+  }
+  if (open && /\bthis note\b/i.test(text)) {
+    const n = live.find((x) => x.id === open);
+    if (n && !out.includes(n)) out.unshift(n);
+  }
+  return out;
+}
+
+const TAB_OF: Record<string, Tab | undefined> = { notes: "notes", todos: "todo", transactions: "finance", budget: "finance", stickies: "today" };
 
 const OUTBOX = "four-notes:outbox";
 const readOutbox = (): string[] => { try { return JSON.parse(localStorage.getItem(OUTBOX) ?? "[]"); } catch { return []; } };
@@ -163,7 +185,11 @@ export function AssistantProvider({ children, onFiled }: { children: ReactNode; 
     try {
       // Retrieval: send the full text of the notes most related to the question.
       const relevant = await semanticNotes(storeRef.current.notes, text, 4).catch(() => []);
-      const context = storeRef.current.buildContext(relevant.filter((r) => r.score > 0.2).map((r) => r.note));
+      const named = namedNotes(storeRef.current.notes, text);
+      const context = storeRef.current.buildContext([
+        ...named,
+        ...relevant.filter((r) => r.score > 0.2 && !named.includes(r.note)).map((r) => r.note),
+      ].slice(0, 5));
       const res = await api.chat(history, context);
       handleResult(res.reply, res.actions, { source: "chat" });
       return res.reply;

@@ -127,6 +127,60 @@ const paths: Record<string, string> = {
   sparkle: "M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z",
   chevron: "M9 6l6 6-6 6",
   arrowRight: "M5 12h14M13 6l6 6-6 6",
+  // Notes editor
+  undo: "M9 14L4 9l5-5M4 9h11a5 5 0 010 10h-3",
+  redo: "M15 14l5-5-5-5M20 9H9a5 5 0 000 10h3",
+  bold: "M7 5h6a3.5 3.5 0 010 7H7zM7 12h7a3.5 3.5 0 010 7H7z",
+  italic: "M19 4h-9M14 20H5M15 4L9 20",
+  underline: "M6 4v6a6 6 0 0012 0V4M4 20h16",
+  strike: "M16 6.5A4 4 0 0012 4c-2.8 0-4 1.6-4 3.2 0 1.3.8 2.2 2.2 2.8M4 12h16M8.5 17.5A4.6 4.6 0 0012 20c2.6 0 4-1.5 4-3.2 0-.8-.2-1.4-.6-1.8",
+  highlight: "M9 11l-6 6v3h9l3-3M22 12l-4.6 4.6a2 2 0 01-2.8 0l-5.2-5.2a2 2 0 010-2.8L14 4",
+  listBullet: "M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01",
+  listOrdered: "M10 6h10M10 12h10M10 18h10M4 5h1v4M4 9h2M4 14.5c0-.8.7-1.5 1.5-1.5S7 13.6 7 14.4c0 1-3 2.1-3 3.6h3",
+  checklist: "M3 6l1.5 1.5L7 5M3 12l1.5 1.5L7 11M3 18l1.5 1.5L7 17M11 6h10M11 12h10M11 18h10",
+  alignLeft: "M4 6h16M4 12h10M4 18h13",
+  alignCenter: "M4 6h16M7 12h10M5.5 18h13",
+  alignRight: "M4 6h16M10 12h10M7 18h13",
+  indent: "M4 6h16M11 12h9M11 18h9M4 10l3 2.5L4 15",
+  outdent: "M4 6h16M11 12h9M11 18h9M7 10l-3 2.5L7 15",
+  superscript: "M4 19l8-8M12 19l-8-8M16 10h4l-4 0c0-1.5 4-2 4-4a2 2 0 00-4 0",
+  subscript: "M4 5l8 8M12 5l-8 8M16 20h4l-4 0c0-1.5 4-2 4-4a2 2 0 00-4 0",
+  quote: "M7 17c-2 0-3-1.5-3-3.5C4 9 7 7 9 6.5M17 17c-2 0-3-1.5-3-3.5 0-4.5 3-6.5 5-7",
+  code: "M16 18l6-6-6-6M8 6l-6 6 6 6",
+  divider: "M3 12h18M8 6h8M8 18h8",
+  palette: "M12 3a9 9 0 100 18c.8 0 1.5-.7 1.5-1.5 0-.4-.1-.7-.4-1-.2-.3-.4-.6-.4-1 0-.8.7-1.5 1.5-1.5H16a5 5 0 005-5c0-4.4-4-8-9-8zM7.5 11.5h.01M10.5 7.5h.01M15 8h.01",
+  expand: "M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7",
+  shrink: "M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7",
+  collapseLeft: "M11 17l-5-5 5-5M18 17l-5-5 5-5",
+  collapseRight: "M13 17l5-5-5-5M6 17l5-5-5-5",
+  chevronDown: "M6 9l6 6 6-6",
+  chevronLeft: "M15 18l-6-6 6-6",
+  share: "M4 12v7a2 2 0 002 2h12a2 2 0 002-2v-7M16 6l-4-4-4 4M12 2v13",
+  copy: "M9 9h11v11H9zM5 15H4a1 1 0 01-1-1V4a1 1 0 011-1h10a1 1 0 011 1v1",
+  more: "M5 11.2a.8.8 0 110 1.6.8.8 0 010-1.6zM12 11.2a.8.8 0 110 1.6.8.8 0 010-1.6zM19 11.2a.8.8 0 110 1.6.8.8 0 010-1.6z",
+  textSize: "M3 18l5-12 5 12M4.8 14h6.4M15 18v-5.5a2.5 2.5 0 015 0V18M20 15.5h-2.8a1.8 1.8 0 100 3.6c1.4 0 2.8-.9 2.8-2.6",
+  eraser: "M7 21h10M4.5 14.5L13 6l5 5-6.5 6.5H8z",
+  print: "M6 9V3h12v6M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v7H6z",
+  tag: "M20.6 13.4l-7.2 7.2a2 2 0 01-2.8 0L3 13V3h10l7.6 7.6a2 2 0 010 2.8zM7.5 7.5h.01",
+  sort: "M3 6h18M6 12h12M10 18h4",
+  check: "M20 6L9 17l-5-5",
+  info: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 11v5M12 8h.01",
+  warning: "M12 3.5l9.5 16.5h-19zM12 10v4M12 17h.01",
+  cart: "M3 4h2l2.4 11h10.2L20 8H6.2M9 20h.01M17 20h.01",
+  car: "M5 17h14v-5l-2-5H7l-2 5zM5 12h14M7 17v2M17 17v2M8 14.5h.01M16 14.5h.01",
+  bag: "M5 8h14l-1 13H6zM9 8V6a3 3 0 0 1 6 0v2",
+  heart: "M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.5-7 10-7 10z",
+  film: "M4 5h16v14H4zM8 5v14M16 5v14M4 9h4M4 15h4M16 9h4M16 15h4",
+  book: "M4 19V5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM19 19v2H6",
+  arrowUpRight: "M7 17L17 7M8 7h9v9",
+  chart: "M4 20V10M10 20V4M16 20v-7M22 20H2",
+  wallet: "M4 7a2 2 0 0 1 2-2h12v4M4 7v10a2 2 0 0 0 2 2h14V9H6a2 2 0 0 1-2-2zM16 14h.01",
+  clock: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2",
+  status: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
+  flag: "M5 21V4M5 4h11l-2 4 2 4H5",
+  bill: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6",
+  lines: "M4 6h16M4 12h16M4 18h10",
+  noteAdd: "M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M12 18v-6M9 15h6",
   stop: "M7 7h10v10H7z",
   search: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4",
   settings: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z",
@@ -169,6 +223,31 @@ export function EmptyState({ title, hint }: { title: string; hint: string }) {
 
 export function SectionTitle({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <h3 className={`mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)] ${className}`}>{children}</h3>;
+}
+
+/** The rounded box every tab uses (Notes editor, task panel, Today, Finance). */
+export const CARD = "rounded-2xl border border-[var(--line)] bg-[var(--bg)] md:shadow-[var(--shadow)]";
+
+/** A card's title row: optional round icon, title, extra controls, and an "open" arrow. */
+export function CardHead({ icon, title, onOpen, openLabel, children }: {
+  icon?: string; title: ReactNode; onOpen?: () => void; openLabel?: string; children?: ReactNode;
+}) {
+  return (
+    <div className="flex min-h-10 items-center gap-2.5">
+      {icon && (
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[var(--hover)]">
+          <Icon name={icon} size={18} />
+        </span>
+      )}
+      <h3 className="min-w-0 flex-1 truncate text-[15px] font-semibold">{title}</h3>
+      {children}
+      {onOpen && (
+        <button className="tap-target !h-9 !w-9 text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)]" onClick={onOpen} aria-label={openLabel} title={openLabel}>
+          <Icon name="arrowUpRight" size={18} />
+        </button>
+      )}
+    </div>
+  );
 }
 
 export const inputBox = "rounded border border-[var(--line)] bg-transparent px-2 py-1 text-[var(--text)]";

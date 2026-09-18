@@ -42,7 +42,7 @@ Everything demo-related is opt-in and reversible:
 - `src/lib/sample.ts` builds the sample set (a note, three tasks, six transactions, a sticky, two budgets). Every row carries `sample: true`.
 - `SampleDataButton` / `RemoveSamplesButton` in `src/components/SampleData.tsx` load and clear it. Clearing removes only tagged rows and only the budgets the sample added.
 - `own()` in `src/lib/gdrive.ts` and the push filter in `src/components/cloud.tsx` strip sample rows, so **samples never reach Drive or Supabase**.
-- Empty tabs show tappable example prompts (`components/EmptyStart.tsx`) and a dismissible hint strip (`components/TipStrip.tsx`) that hides itself once there are six real items.
+- Empty tabs show tappable example prompts (`components/EmptyStart.tsx`).
 
 When adding a feature that writes rows, keep this rule: anything the app invents for teaching gets `sample: true`, so one click can take it back.
 

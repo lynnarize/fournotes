@@ -1,7 +1,7 @@
 "use client";
 // ⌘K / Ctrl+K: search everything (by words or meaning) and quick-add in one step.
 //   t pay rent          -> task          n trip ideas   -> note
-//   $ coffee 25k        -> expense       s call mom     -> sticky
+//   $ coffee 25k        -> expense       s call mom     -> quick note
 //   ? how much on food  -> ask the assistant
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useBackDismiss } from "@/lib/backstack";
@@ -15,6 +15,7 @@ import type { Note, Tab } from "@/lib/types";
 import { guessCategory } from "@/lib/wallet";
 import { useAssistant } from "./assistant";
 import { Icon, useToast } from "./ui";
+import { quickNote } from "@/lib/quickNote";
 
 type Item = { key: string; group: string; label: string; hint?: string; icon: string; run: () => void };
 
@@ -65,7 +66,7 @@ export default function CommandPalette({ open, onClose, setTab, onSettings }: {
           ? { key: "qa", group: "Quick add", icon: "finance", label: `Log ${formatMoney(amount, store.settings.currency)} at ${merchant}`, hint: guessCategory(text), run: () => { store.addTransaction({ merchant, amount, category: guessCategory(text) }); toast(`💸 ${merchant}`); } }
           : { key: "qa", group: "Quick add", icon: "finance", label: "Add an amount, e.g. “$ coffee 25k”", run: () => {} });
       } else if (["s", "sticky"].includes(kind)) {
-        out.push({ key: "qa", group: "Quick add", icon: "pin", label: `Sticky “${text}”`, run: () => { store.addSticky({ text }); toast("📌 Added"); } });
+        out.push({ key: "qa", group: "Quick add", icon: "note", label: `Quick note “${text}”`, run: () => { store.addNote(quickNote(text)); toast("📝 Quick note saved"); } });
       } else {
         out.push({ key: "qa", group: "Ask", icon: "sparkle", label: `Ask: ${text}`, run: () => send(text) });
       }
@@ -94,8 +95,8 @@ export default function CommandPalette({ open, onClose, setTab, onSettings }: {
       { key: "go-notes", group: "Go to", icon: "note", label: "Notes", run: () => setTab("notes") },
       { key: "go-todo", group: "Go to", icon: "todo", label: "To-Do", run: () => setTab("todo") },
       { key: "go-finance", group: "Go to", icon: "finance", label: "Finance", run: () => setTab("finance") },
-      { key: "new-note", group: "Create", icon: "plus", label: "New note", hint: "n …", run: () => { const n = store.addNote({}); setTab("notes"); openItem("note", n.id); } },
-      { key: "new-sticky", group: "Create", icon: "pin", label: "New sticky", hint: "s …", run: () => store.addSticky({}) },
+      { key: "new-note", group: "Create", icon: "plus", label: "New note", hint: "n …", run: () => { const n = store.addNote({ title: "" }); setTab("notes"); openItem("note", n.id); } },
+      { key: "new-quick", group: "Create", icon: "note", label: "Quick note", hint: "s …", run: () => { setTab("today"); setTimeout(() => document.getElementById("quick-note-input")?.focus(), 350); } },
       theme.resolved === "dark"
         ? { key: "theme", group: "Actions", icon: "today", label: "Switch to light mode", hint: "theme", run: () => theme.setPref("light") }
         : { key: "theme", group: "Actions", icon: "moon", label: "Switch to dark mode", hint: "theme", run: () => theme.setPref("dark") },
@@ -135,7 +136,7 @@ export default function CommandPalette({ open, onClose, setTab, onSettings }: {
               else if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); run(items[active]); }
               else if (e.key === "Escape") onClose();
             }}
-            placeholder="Search, or: t task · n note · $ coffee 25k · s sticky · ? question"
+            placeholder="Search, or: t task · n note · $ coffee 25k · s quick note · ? question"
             aria-label="Search or quick add"
             className="input-plain w-full py-3 text-[15px]"
           />

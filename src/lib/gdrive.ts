@@ -43,12 +43,14 @@ class DriveNotFoundError extends Error {}
 // ---- Auth (tokens come from this app's server; see src/app/api/google) ---------
 export const startGoogleConnect = () => window.location.assign("/api/google/start");
 
-export async function fetchAccessToken(): Promise<{ accessToken: string; expiresIn: number; email: string | null }> {
+export async function fetchAccessToken(): Promise<{ accessToken: string; expiresIn: number; email: string | null; name: string | null }> {
   const res = await fetch("/api/google/token", { method: "POST" });
-  const data = (await res.json().catch(() => ({}))) as { accessToken?: string; expiresIn?: number; email?: string | null; error?: string };
+  const data = (await res.json().catch(() => ({}))) as {
+    accessToken?: string; expiresIn?: number; email?: string | null; name?: string | null; error?: string;
+  };
   if (res.status === 401) throw new NotConnectedError(data.error ?? "Not connected to Google.");
   if (!res.ok || !data.accessToken) throw new Error(data.error ?? `Google sign-in failed (${res.status})`);
-  return { accessToken: data.accessToken, expiresIn: data.expiresIn ?? 3600, email: data.email ?? null };
+  return { accessToken: data.accessToken, expiresIn: data.expiresIn ?? 3600, email: data.email ?? null, name: data.name ?? null };
 }
 
 export async function disconnectGoogle() {

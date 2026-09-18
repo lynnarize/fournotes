@@ -89,3 +89,21 @@ export function scrollToId(domId: string, block: ScrollLogicalPosition = "center
   };
   requestAnimationFrame(attempt);
 }
+
+// ---- Assistant ------------------------------------------------------------------------
+const ASSISTANT_EVT = "four-notes:open-assistant";
+
+/** Open the assistant from anywhere, optionally with text typed into its box (not sent). */
+export function openAssistant(prefill?: string) {
+  window.dispatchEvent(new CustomEvent<string | undefined>(ASSISTANT_EVT, { detail: prefill }));
+}
+
+export function useOpenAssistant(cb: (prefill?: string) => void) {
+  const ref = useRef(cb);
+  ref.current = cb;
+  useEffect(() => {
+    const on = (e: Event) => ref.current((e as CustomEvent<string | undefined>).detail);
+    window.addEventListener(ASSISTANT_EVT, on);
+    return () => window.removeEventListener(ASSISTANT_EVT, on);
+  }, []);
+}

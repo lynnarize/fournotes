@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
-  COOKIE_PATH, cookieOptions, emailFromIdToken, googleTokenRequest, publicOrigin, redirectUri, seal, STATE_COOKIE,
+  COOKIE_PATH, cookieOptions, googleTokenRequest, profileFromIdToken, publicOrigin, redirectUri, seal, STATE_COOKIE,
   TOKEN_COOKIE, unseal, type GoogleSession,
 } from "@/lib/google-server";
 
@@ -31,7 +31,12 @@ export async function GET(req: NextRequest) {
     const refreshToken = token.refresh_token ?? previous?.refreshToken;
     if (!refreshToken) return back("google=error&reason=offline");
 
-    const session: GoogleSession = { refreshToken, email: emailFromIdToken(token.id_token) ?? previous?.email ?? null };
+    const profile = profileFromIdToken(token.id_token);
+    const session: GoogleSession = {
+      refreshToken,
+      email: profile.email ?? previous?.email ?? null,
+      name: profile.name ?? previous?.name ?? null,
+    };
     const res = back("google=connected");
     res.cookies.set(TOKEN_COOKIE, seal(session), cookieOptions(60 * 60 * 24 * 180));
     return res;

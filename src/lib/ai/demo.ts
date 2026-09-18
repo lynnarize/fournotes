@@ -4,6 +4,7 @@ import { guessCategory, parseWalletNotification } from "../wallet";
 import type { AIAction, BriefInput, CaptureResult, ChatMessage, ChatResponse, ClientContext, ExpenseCategory, Transaction } from "../types";
 import { EXPENSE_CATEGORIES } from "../types";
 import { localBrief, localMonthly } from "./local";
+import { ProviderError } from "./errors";
 import type { LLMProvider } from "./provider";
 
 // Rule-based stand-in used when no API key is set, so the UI is testable offline.
@@ -149,5 +150,9 @@ export class DemoProvider implements LLMProvider {
 
   async dailyBrief(input: BriefInput) {
     return localBrief(input) + DEMO;
+  }
+
+  async write(): Promise<string> {
+    throw new ProviderError("Writing help needs AI. Add a free OpenRouter key in Settings → AI & API keys.", 501);
   }
 }

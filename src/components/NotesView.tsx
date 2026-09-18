@@ -1,74 +1,155 @@
 "use client";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { fmtDateTime } from "@/lib/client";
+// Notes: a list of note cards beside a large editor. On phones the list comes
+// first and a note opens full screen (back returns to the list).
+import dynamic from "next/dynamic";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { activeNoteHasText } from "@/lib/activeNote";
+import { useBackDismiss } from "@/lib/backstack";
 import { useFiledFlash } from "@/lib/highlight";
-import { openItem, scrollToId, useOpenItem } from "@/lib/nav";
+import { usePresence } from "@/lib/hooks";
+import { scrollToId, useOpenItem } from "@/lib/nav";
+import { snippet } from "@/lib/noteText";
 import { semanticNotes } from "@/lib/search";
-import { alive, formatMoney, parseAmount, useStore } from "@/lib/store";
-import { guessCategory } from "@/lib/wallet";
-import { useAssistant } from "./assistant";
+import { alive, useStore } from "@/lib/store";
+import type { Note } from "@/lib/types";
 import EmptyStart from "./EmptyStart";
-import { Icon, SectionTitle, useToast } from "./ui";
+import { Dropdown, MenuItem } from "./notes/Dropdown";
+import { Icon } from "./ui";
 
-const SOURCE_LABEL = { manual: "", chat: "via chat", ocr: "scanned", recording: "recording", share: "shared" } as const;
+// The editor (and its library) loads only when Notes is opened.
+const NoteEditor = dynamic(() => import("./notes/NoteEditor"), {
+  ssr: false,
+  loading: () => <div className="flex-1 animate-pulse rounded-2xl border border-[var(--line)] bg-[var(--panel)]" aria-label="Loading editor" />,
+});
 
-// "/" commands inside the editor: quick-add from wherever you are typing.
-const COMMANDS = [
-  { id: "todo", label: "To-do", hint: "Turn this line into a linked task", icon: "todo" },
-  { id: "remind", label: "Remind me tomorrow", hint: "Linked task, reminder 9:00", icon: "bell" },
-  { id: "expense", label: "Expense", hint: "Log this line, e.g. “coffee 25k”", icon: "finance" },
-  { id: "sticky", label: "Sticky", hint: "Pin this line to the top bar", icon: "pin" },
-  { id: "ask", label: "Ask AI", hint: "Send this line to the assistant", icon: "sparkle" },
-  { id: "checklist", label: "Checklist", hint: "☐ item (click the box to tick)", icon: "todo" },
-  { id: "bullet", label: "Bullet", hint: "• item", icon: "menu" },
-  { id: "heading", label: "Heading", hint: "# Heading", icon: "note" },
-  { id: "date", label: "Today's date", hint: "Insert date", icon: "calendar" },
-  { id: "time", label: "Time", hint: "Insert current time", icon: "calendar" },
-  { id: "divider", label: "Divider", hint: "---", icon: "menu" },
-] as const;
-type CommandId = (typeof COMMANDS)[number]["id"];
+const SOURCE_LABEL: Record<Note["source"], string> = { manual: "", chat: "From chat", ocr: "Scanned", recording: "Recording", share: "Shared" };
+const SORTS = { updated: "Last edited", created: "Date created", title: "Title (A–Z)" } as const;
+type Sort = keyof typeof SORTS;
+const PREFS = "four-notes:notes-view";
 
-const MIRROR_PROPS = ["font-family", "font-size", "font-weight", "line-height", "letter-spacing", "padding-top", "padding-left", "padding-right", "border-top-width", "border-left-width", "box-sizing", "width"];
-
-/** Pixel position of the caret inside a textarea (mirror-div technique). */
-function caretPosition(ta: HTMLTextAreaElement, pos: number) {
-  const cs = getComputedStyle(ta);
-  const div = document.createElement("div");
-  for (const p of MIRROR_PROPS) div.style.setProperty(p, cs.getPropertyValue(p));
-  Object.assign(div.style, { position: "absolute", visibility: "hidden", whiteSpace: "pre-wrap", overflowWrap: "break-word", top: "0", left: "-9999px" });
-  div.textContent = ta.value.slice(0, pos);
-  const marker = document.createElement("span");
-  marker.textContent = "​";
-  div.appendChild(marker);
-  document.body.appendChild(div);
-  const top = marker.offsetTop - ta.scrollTop + (parseFloat(cs.lineHeight) || 24);
-  const left = marker.offsetLeft;
-  div.remove();
-  return { top, left };
+function timeAgo(iso: string) {
+  const d = new Date(iso);
+  const mins = Math.round((Date.now() - d.getTime()) / 60_000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins} minute${mins === 1 ? "" : "s"} ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  if (hours < 48) return "Yesterday";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-/** List row that flashes when the assistant has just filed this note. */
-function NoteRow({ id, children }: { id: string; children: React.ReactNode }) {
-  const justFiled = useFiledFlash(id);
-  return <li id={`note-row-${id}`} className={justFiled ? "fn-flash" : ""}>{children}</li>;
+function NoteCard({ note, selected, linked, onOpen }: { note: Note; selected: boolean; linked: number; onOpen: () => void }) {
+  const flash = useFiledFlash(note.id);
+  const preview = snippet(note.content);
+  return (
+    <li id={`note-row-${note.id}`} className={flash ? "fn-flash" : ""}>
+      <button
+        onClick={onOpen}
+        aria-current={selected ? "true" : undefined}
+        className={`flex min-h-[8.5rem] w-full flex-col rounded-xl border px-4 py-3.5 text-left transition-colors ${
+          selected ? "border-[var(--accent)] bg-[var(--bg)] shadow-[var(--shadow)]" : "border-transparent hover:bg-[var(--hover)]"
+        }`}
+      >
+        <span className="line-clamp-1 text-[15px] font-semibold">{note.title || "Untitled"}</span>
+        <span className="mt-1 line-clamp-2 text-sm leading-relaxed text-[var(--muted)]">{preview || <span className="text-[var(--faint)]">No text yet</span>}</span>
+        <span className="mt-auto flex items-center gap-2 pt-3 text-xs text-[var(--faint)]">
+          {timeAgo(note.updatedAt)}
+          {SOURCE_LABEL[note.source] && <span className="chip">{SOURCE_LABEL[note.source]}</span>}
+          {linked > 0 && <span className="flex items-center gap-0.5"><Icon name="link" size={11} />{linked}</span>}
+          {note.tags.slice(0, 2).map((t) => <span key={t}>#{t}</span>)}
+        </span>
+      </button>
+    </li>
+  );
 }
+
+/** A note that was opened but never written in: no title, no text, no scan, nothing linked. */
+const isBlank = (n: Note, todos: { noteId?: string | null; deletedAt?: string | null }[], txs: { noteId?: string | null; deletedAt?: string | null }[]) =>
+  !n.deletedAt && (!n.title.trim() || n.title === "Untitled") && !n.content.trim() && !n.imageDataUrl &&
+  !todos.some((t) => t.noteId === n.id && !t.deletedAt) && !txs.some((t) => t.noteId === n.id && !t.deletedAt);
 
 export default function NotesView() {
-  const { notes, todos, transactions, addNote, updateNote, remove, addTodo, addTransaction, addSticky, toggleTodo } = useStore();
-  const { send } = useAssistant();
-  const toast = useToast();
+  const { notes, todos, transactions, addNote, remove } = useStore();
   const [query, setQuery] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
   const [ranked, setRanked] = useState<{ q: string; ids: string[] } | null>(null);
-  const [slash, setSlash] = useState<{ start: number; query: string; top: number; left: number; active: number } | null>(null);
-  const taRef = useRef<HTMLTextAreaElement>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [sort, setSort] = useState<Sort>("updated");
+  const [listHidden, setListHidden] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
+  // Which transition the editor card plays: into / out of focus mode, or sliding in on phones.
+  const [anim, setAnim] = useState<"focus-in" | "focus-out" | "settle" | undefined>();
+  const exitTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const enterFocus = () => { clearTimeout(exitTimer.current); setFocusMode(true); setAnim("focus-in"); };
+  const exitFocus = () => {
+    if (!focusMode) return;
+    setAnim("focus-out");
+    clearTimeout(exitTimer.current);
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    exitTimer.current = setTimeout(() => { setFocusMode(false); setAnim("settle"); }, reduce ? 0 : 170);
+  };
+  useEffect(() => () => clearTimeout(exitTimer.current), []);
+  const [mobile, setMobile] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  // Desktop: the list folds away instead of vanishing.
+  const listPresence = usePresence(!listHidden, 240);
+  // Phones: the list slides back in when you return from a note (not on first load).
+  const [returned, setReturned] = useState(false);
+
+  // Remembered view preferences.
+  useEffect(() => {
+    try {
+      const p = JSON.parse(localStorage.getItem(PREFS) ?? "{}") as { sort?: Sort; listHidden?: boolean };
+      if (p.sort && p.sort in SORTS) setSort(p.sort);
+      if (p.listHidden) setListHidden(true);
+    } catch { /* ignore */ }
+  }, []);
+  useEffect(() => {
+    try { localStorage.setItem(PREFS, JSON.stringify({ sort, listHidden })); } catch { /* storage blocked */ }
+  }, [sort, listHidden]);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const update = () => setMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  /** Leaving a note you never wrote in discards it, so "New note" doesn't pile up blanks. */
+  const leave = (nextId: string | null) => {
+    const current = selectedId && notes.find((n) => n.id === selectedId);
+    if (!current || current.id === nextId) return;
+    // Ask the open editor first: its latest typing may not be saved yet.
+    if (activeNoteHasText(current.id) === true) return;
+    if (isBlank(current, todos, transactions)) remove("notes", current.id);
+  };
+  const open = (id: string) => {
+    leave(id);
+    setSelectedId(id);
+    setMobileOpen(true);
+  };
+
+  // Back closes the open note on phones, and leaves focus mode everywhere.
+  useBackDismiss(mobile && mobileOpen && !focusMode, () => { leave(null); setMobileOpen(false); setReturned(true); setAnim(undefined); });
+  useBackDismiss(focusMode && anim !== "focus-out", exitFocus);
+
+  // Blanks left behind earlier (e.g. by switching tabs): clean them up when Notes opens.
+  // Only ones older than a few seconds, and never the open note, so a note that was just
+  // created (or React's development re-mount) is never touched.
+  useEffect(() => {
+    const cutoff = Date.now() - 10_000;
+    for (const n of notes) {
+      if (n.id !== selectedId && isBlank(n, todos, transactions) && new Date(n.updatedAt).getTime() < cutoff) remove("notes", n.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useOpenItem("note", (f) => {
     setQuery("");
-    setSelectedId(f.id);
+    setSearching(false);
+    open(f.id);
     scrollToId(`note-row-${f.id}`, "nearest");
-    // On phones the editor sits below the list: bring it into view.
-    if (window.matchMedia("(max-width: 767px)").matches) scrollToId("note-editor", "start");
   });
 
   // Search: instant substring filter, then ranking by meaning (or BM25) after a pause.
@@ -82,243 +163,124 @@ export default function NotesView() {
   }, [query, notes]);
 
   const list = useMemo(() => {
-    const q = query.trim().toLowerCase();
     const live = alive(notes);
-    if (!q) return live.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    const q = query.trim().toLowerCase();
+    if (!q) {
+      const by = {
+        updated: (a: Note, b: Note) => b.updatedAt.localeCompare(a.updatedAt),
+        created: (a: Note, b: Note) => b.createdAt.localeCompare(a.createdAt),
+        title: (a: Note, b: Note) => (a.title || "Untitled").localeCompare(b.title || "Untitled"),
+      }[sort];
+      return [...live].sort(by);
+    }
     const substring = live.filter((n) => n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q));
     if (ranked?.q.toLowerCase() !== q) return substring;
     const byId = new Map(live.map((n) => [n.id, n]));
     const out = ranked.ids.map((id) => byId.get(id)!).filter(Boolean);
     for (const n of substring) if (!out.includes(n)) out.push(n);
     return out;
-  }, [notes, query, ranked]);
+  }, [notes, query, ranked, sort]);
 
-  const selected = list.find((n) => n.id === selectedId) ?? (selectedId ? alive(notes).find((n) => n.id === selectedId) : undefined) ?? list[0];
-  const linkedTodos = selected ? alive(todos).filter((t) => t.noteId === selected.id) : [];
-  const linkedTxs = selected ? alive(transactions).filter((t) => t.noteId === selected.id) : [];
-  const commands = slash ? COMMANDS.filter((c) => c.id.startsWith(slash.query.toLowerCase()) || c.label.toLowerCase().includes(slash.query.toLowerCase())) : [];
+  const liveCount = alive(notes).length;
+  const selected =
+    (selectedId && alive(notes).find((n) => n.id === selectedId)) || (!mobile ? list[0] : undefined) || undefined;
+  const linkedCount = (id: string) =>
+    alive(todos).filter((t) => t.noteId === id).length + alive(transactions).filter((t) => t.noteId === id).length;
 
-  const detectSlash = (ta: HTMLTextAreaElement) => {
-    const caret = ta.selectionStart;
-    const m = ta.value.slice(0, caret).match(/(^|\s)\/([\w-]{0,12})$/);
-    if (!m || ta.selectionEnd !== caret) return setSlash(null);
-    const { top, left } = caretPosition(ta, caret);
-    setSlash((s) => ({ start: caret - m[2].length - 1, query: m[2], top: ta.offsetTop + top, left: Math.min(left, ta.clientWidth - 260), active: s?.query === m[2] ? s.active : 0 }));
+  const newNote = () => {
+    setQuery("");
+    setSearching(false);
+    leave(null);
+    const n = addNote({ title: "" }); // empty, so the "Untitled" placeholder doesn't need deleting
+    setSelectedId(n.id);
+    setMobileOpen(true);
+    requestAnimationFrame(() => setTimeout(() => document.querySelector<HTMLTextAreaElement>("textarea[aria-label='Note title']")?.focus(), 150));
   };
 
-  const runCommand = (id: CommandId) => {
-    const ta = taRef.current;
-    if (!ta || !slash || !selected) return;
-    const value = ta.value;
-    const without = value.slice(0, slash.start) + value.slice(ta.selectionStart);
-    const start = slash.start;
-    const lineStart = without.lastIndexOf("\n", start - 1) + 1;
-    const lineEndRaw = without.indexOf("\n", start);
-    const lineEnd = lineEndRaw === -1 ? without.length : lineEndRaw;
-    const line = without.slice(lineStart, lineEnd).replace(/^(☐|☑|•|-|#+)\s*/, "").trim();
-    let next = without;
-    let caret = start;
-    const replaceLine = (s: string) => { next = without.slice(0, lineStart) + s + without.slice(lineEnd); caret = lineStart + s.length; };
-    const insert = (s: string) => { next = without.slice(0, start) + s + without.slice(start); caret = start + s.length; };
-    const needLine = () => { toast("Type something on this line first, then use the command.", "error"); return false; };
-
-    switch (id) {
-      case "todo":
-        if (!line) { needLine(); break; }
-        addTodo({ title: line, noteId: selected.id });
-        replaceLine(`☐ ${line}`);
-        toast(`✅ Task added and linked: ${line}`);
-        break;
-      case "remind": {
-        if (!line) { needLine(); break; }
-        const at = new Date();
-        at.setDate(at.getDate() + 1);
-        at.setHours(9, 0, 0, 0);
-        addTodo({ title: line, noteId: selected.id, dueAt: at.toISOString(), remindAt: at.toISOString() });
-        replaceLine(`☐ ${line} ⏰`);
-        toast(`⏰ Reminder ${fmtDateTime(at.toISOString())}: ${line}`);
-        break;
-      }
-      case "expense": {
-        const amount = line ? parseAmount(line) : null;
-        if (!amount) { toast("Add an amount on the line, e.g. “lunch 45k”.", "error"); break; }
-        const merchant = line.replace(/(rp|idr)?\.?\s*\d[\d.,]*\s*(rb|ribu|k|jt|juta)?\b/gi, "").replace(/\s{2,}/g, " ").trim() || "Expense";
-        const tx = addTransaction({ merchant, amount, category: guessCategory(line), noteId: selected.id });
-        replaceLine(`💸 ${line}`);
-        toast(`💸 Logged ${formatMoney(amount, tx.currency)} (${tx.category})`);
-        break;
-      }
-      case "sticky":
-        if (!line) { needLine(); break; }
-        addSticky({ text: line });
-        toast("📌 Pinned to the sticky bar");
-        break;
-      case "ask":
-        if (!line) { needLine(); break; }
-        send(`${line}\n\n(Context: from my note “${selected.title}”)`);
-        break;
-      case "checklist": replaceLine(`☐ ${line}`); break;
-      case "bullet": replaceLine(`• ${line}`); break;
-      case "heading": replaceLine(`# ${line}`); break;
-      case "date": insert(new Date().toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "long", year: "numeric" })); break;
-      case "time": insert(new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })); break;
-      case "divider": insert("---\n"); break;
-    }
-    updateNote(selected.id, { content: next });
-    setSlash(null);
-    requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(caret, caret); });
-  };
-
-  const onEditorKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (!slash || commands.length === 0) return;
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      e.preventDefault();
-      const d = e.key === "ArrowDown" ? 1 : -1;
-      setSlash({ ...slash, active: (slash.active + d + commands.length) % commands.length });
-    } else if (e.key === "Enter" || e.key === "Tab") {
-      e.preventDefault();
-      runCommand(commands[Math.min(slash.active, commands.length - 1)].id);
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      setSlash(null);
-    }
-  };
-
-  /** Clicking a ☐ / ☑ at the start of a line ticks it, and the linked task too. */
-  const onEditorClick = (ta: HTMLTextAreaElement) => {
-    if (!selected) return;
-    const pos = ta.selectionStart;
-    const ls = ta.value.lastIndexOf("\n", pos - 1) + 1;
-    const ch = ta.value[ls];
-    if (pos - ls > 1 || (ch !== "☐" && ch !== "☑")) return detectSlash(ta);
-    const checking = ch === "☐";
-    const lineEnd = ta.value.indexOf("\n", ls);
-    const title = ta.value.slice(ls + 1, lineEnd === -1 ? undefined : lineEnd).replace(/⏰/g, "").trim();
-    updateNote(selected.id, { content: ta.value.slice(0, ls) + (checking ? "☑" : "☐") + ta.value.slice(ls + 1) });
-    const linked = linkedTodos.find((t) => t.title.trim() === title);
-    if (linked) {
-      const extra = toggleTodo(linked.id, checking);
-      if (extra.length) toast(extra.join("\n"));
-    }
-  };
-
-  return (
-    <div className="grid gap-6 md:grid-cols-[240px_1fr]">
-      <aside className="min-w-0">
-        <div className="mb-2 flex items-center gap-2">
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by words or meaning"
-            aria-label="Search notes"
-            className="input-plain w-full rounded-md bg-[var(--hover)] px-2 py-1.5 text-sm"
-          />
-          <button className="btn-ghost" onClick={() => { setQuery(""); setSelectedId(addNote({}).id); }} aria-label="New note">
-            <Icon name="plus" />
-          </button>
-        </div>
-        {query.trim().length >= 3 && ranked?.q.toLowerCase() === query.trim().toLowerCase() && (
-          <div className="mb-1 px-2 text-xs text-[var(--faint)]">Best matches first</div>
-        )}
-        <ul className="scroll-thin max-h-[40vh] space-y-0.5 overflow-y-auto md:max-h-[60vh]">
-          {list.map((n) => (
-            <NoteRow key={n.id} id={n.id}>
-              <button
-                onClick={() => setSelectedId(n.id)}
-                className={`w-full rounded-md px-2 py-1.5 text-left text-sm ${
-                  selected?.id === n.id ? "bg-[var(--hover)]" : "hover:bg-[var(--hover)]"
-                }`}
-              >
-                <div className="truncate font-medium">{n.title || "Untitled"}</div>
-                <div className="truncate text-xs text-[var(--muted)]">
-                  {SOURCE_LABEL[n.source] && <span className="mr-1">{SOURCE_LABEL[n.source]} ·</span>}
-                  {n.content.replace(/\n/g, " ").slice(0, 60) || "Empty"}
-                </div>
-              </button>
-            </NoteRow>
-          ))}
-          {query && list.length === 0 && <li className="px-2 py-3 text-sm text-[var(--faint)]">No matching notes.</li>}
-        </ul>
-      </aside>
-
-      {selected ? (
-        <article id="note-editor" className="min-w-0 scroll-mt-20">
-          <div className="mb-1 flex items-center gap-2 text-xs text-[var(--muted)]">
-            <span>Edited {new Date(selected.updatedAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}</span>
-            {selected.tags.map((t) => <span key={t} className="chip">#{t}</span>)}
-            <button className="btn-ghost ml-auto" onClick={() => { remove("notes", selected.id); setSelectedId(null); }} aria-label="Delete note">
-              <Icon name="trash" size={14} />
-            </button>
-          </div>
-          <input
-            value={selected.title}
-            onChange={(e) => updateNote(selected.id, { title: e.target.value })}
-            placeholder="Untitled"
-            aria-label="Note title"
-            className="input-plain w-full text-3xl font-bold"
-          />
-          {selected.imageDataUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={selected.imageDataUrl} alt="Scanned source" className="my-3 max-h-48 rounded-md border border-[var(--line)]" />
-          )}
-          <div className="relative">
-            <textarea
-              ref={taRef}
-              value={selected.content}
-              onChange={(e) => { updateNote(selected.id, { content: e.target.value }); detectSlash(e.target); }}
-              onKeyDown={onEditorKey}
-              onClick={(e) => onEditorClick(e.currentTarget)}
-              onBlur={() => setTimeout(() => setSlash(null), 150)}
-              placeholder="Start writing… type / for commands"
-              aria-label="Note content"
-              className="input-plain mt-3 min-h-[45vh] w-full resize-none text-[15px] leading-7"
-            />
-            {slash && commands.length > 0 && (
-              <ul
-                role="listbox"
-                className="absolute z-30 w-64 overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--bg)] py-1 text-sm shadow-[var(--shadow)]"
-                style={{ top: slash.top + 4, left: Math.max(0, slash.left) }}
-              >
-                {commands.map((c, i) => (
-                  <li key={c.id} role="option" aria-selected={i === slash.active}>
-                    <button
-                      onMouseDown={(e) => { e.preventDefault(); runCommand(c.id); }}
-                      onMouseEnter={() => setSlash({ ...slash, active: i })}
-                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-left ${i === slash.active ? "bg-[var(--hover)]" : ""}`}
-                    >
-                      <Icon name={c.icon} size={14} className="text-[var(--muted)]" />
-                      <span className="whitespace-nowrap font-medium">{c.label}</span>
-                      <span className="ml-auto truncate text-xs text-[var(--faint)]">{c.hint}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          {(linkedTodos.length > 0 || linkedTxs.length > 0) && (
-            <section className="mt-4 border-t border-[var(--line)] pt-3">
-              <SectionTitle className="flex items-center gap-1"><Icon name="link" size={12} /> Linked</SectionTitle>
-              <div className="flex flex-wrap gap-2">
-                {linkedTodos.map((t) => (
-                  <button key={t.id} className={`chip hover:bg-[var(--line)] ${t.done ? "line-through" : ""}`} onClick={() => openItem("todo", t.id)}>
-                    <Icon name="todo" size={11} />{t.title}
-                  </button>
-                ))}
-                {linkedTxs.map((t) => (
-                  <button key={t.id} className="chip hover:bg-[var(--line)]" onClick={() => openItem("transaction", t.id)}>
-                    <Icon name="finance" size={11} />{t.merchant} · {formatMoney(t.amount, t.currency)}
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
-        </article>
-      ) : (
+  if (liveCount === 0) {
+    return (
+      <div className="mx-auto max-w-3xl pt-2">
         <EmptyStart
           title="No notes yet"
-          hint="Write one with the + button, photograph handwriting, record a voice note — or ask the assistant."
+          hint="Start a note, photograph handwriting, record a voice note — or ask the assistant to write one."
           prompts={["Note: weekend trip ideas", "Summarize this: standup notes, ship Friday, Andi on QA"]}
+        />
+        <div className="mt-4 flex justify-center">
+          <button onClick={newNote} className="flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-5 font-medium text-white">
+            <Icon name="noteAdd" size={18} /> New note
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const showList = mobile ? !mobileOpen : !listHidden;
+  const showEditor = !!selected && (mobile ? mobileOpen : true);
+
+  return (
+    // Fills the space below the header exactly: the list and the note each scroll on
+    // their own, so headers, toolbar and footer stay in place.
+    <div className="flex min-h-0 flex-1 gap-4 md:gap-5">
+      {(mobile ? showList : listPresence.mounted) && (
+        <aside
+          className={`fn-aside flex min-h-0 w-full shrink-0 flex-col md:w-[340px] ${mobile && returned ? "fn-list-back" : ""}`}
+          data-state={mobile ? undefined : listPresence.state}
+          inert={!mobile && listHidden ? true : undefined}
+        >
+          {/* Fixed width inside, so the cards don't reflow while the list folds. */}
+          <div className="flex min-h-0 w-full flex-1 flex-col md:w-[340px]">
+          {/* The page title ("Notes") sits above, like every tab; this row counts and acts. */}
+          <div className="flex items-center justify-between gap-2 px-1 pb-2">
+            <span className="text-sm text-[var(--muted)]">{liveCount} note{liveCount === 1 ? "" : "s"}</span>
+            <div className="flex items-center gap-0.5">
+              <button className="tb-btn" onClick={newNote} aria-label="New note" title="New note"><Icon name="noteAdd" size={20} /></button>
+              <Dropdown label="Sort notes" button={<Icon name="sort" size={20} />} width={200}>
+                {(close) => (Object.keys(SORTS) as Sort[]).map((s) => (
+                  <MenuItem key={s} label={SORTS[s]} active={sort === s} onSelect={() => { close(); setSort(s); }} />
+                ))}
+              </Dropdown>
+              <button className={`tb-btn ${searching ? "bg-[var(--hover)] text-[var(--text)]" : ""}`} onClick={() => { setSearching((v) => !v); if (searching) setQuery(""); }} aria-label="Search notes" aria-pressed={searching}>
+                <Icon name="search" size={19} />
+              </button>
+            </div>
+          </div>
+          {searching && (
+            <div className="fn-rise px-1 pb-2">
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by words or meaning"
+                aria-label="Search notes"
+                className="h-10 w-full rounded-lg border border-[var(--line)] bg-[var(--bg)] px-3 text-sm outline-none focus:border-[var(--accent)]"
+              />
+              {query.trim().length >= 3 && ranked?.q.toLowerCase() === query.trim().toLowerCase() && (
+                <p className="px-1 pt-1 text-xs text-[var(--faint)]">Best matches first</p>
+              )}
+            </div>
+          )}
+          <ul className="scroll-thin -mx-1 min-h-0 flex-1 space-y-1 overflow-y-auto px-1 pb-4">
+            {list.map((n) => (
+              <NoteCard key={n.id} note={n} selected={!mobile && selected?.id === n.id} linked={linkedCount(n.id)} onOpen={() => open(n.id)} />
+            ))}
+            {query && list.length === 0 && <li className="px-3 py-6 text-center text-sm text-[var(--faint)]">No matching notes.</li>}
+          </ul>
+          </div>
+        </aside>
+      )}
+
+      {showEditor && selected && (
+        <NoteEditor
+          key={selected.id}
+          note={selected}
+          onBack={mobile ? () => { leave(null); setMobileOpen(false); setReturned(true); setAnim(undefined); } : undefined}
+          listHidden={listHidden}
+          onToggleList={mobile ? undefined : () => setListHidden((v) => !v)}
+          focusMode={focusMode}
+          onToggleFocus={() => (focusMode ? exitFocus() : enterFocus())}
+          anim={anim ?? (mobile ? "push" : undefined)}
+          // Phones keep the last value, so clearing it can't replay the slide-in.
+          onAnimDone={() => setAnim((a) => (a === "focus-out" || mobile ? a : undefined))}
         />
       )}
     </div>

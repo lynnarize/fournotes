@@ -15,6 +15,7 @@ import { GoogleSyncPanel, useGoogleSync } from "./googleSync";
 import { RemoveSamplesButton, SampleDataButton } from "./SampleData";
 import { startOnboarding } from "./Onboarding";
 import SettingsSection, { setAllSettingsSections } from "./SettingsSection";
+import TypeToConfirm from "./TypeToConfirm";
 import { Icon, inputBox, Modal, useToast } from "./ui";
 
 const KOFI_URL = "https://ko-fi.com/lynnarize";
@@ -78,8 +79,8 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
     }
   };
 
+  const [confirmWipe, setConfirmWipe] = useState(false);
   const deleteLocal = () => {
-    if (!window.confirm("Delete all notes, tasks, spending, settings and saved API keys in this browser? This can't be undone. Export a backup first if you might need it.")) return;
     for (const k of Object.keys(localStorage)) if (k.startsWith("four-notes")) localStorage.removeItem(k);
     for (const k of Object.keys(sessionStorage)) if (k.startsWith("four-notes")) sessionStorage.removeItem(k);
     window.location.reload();
@@ -114,7 +115,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
           summary={`${settings.currency}${settings.name ? ` · ${settings.name}` : ""} · Notifications ${perm === "granted" ? "on" : "off"}`}>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">Your name (used in the daily brief)
-              <input defaultValue={settings.name ?? ""} onBlur={(e) => updateSettings({ name: e.target.value.trim() || undefined })} className={`${inputBox} h-9`} />
+              <input key={settings.name ?? ""} defaultValue={settings.name ?? ""} onBlur={(e) => updateSettings({ name: e.target.value.trim() || undefined })} className={`${inputBox} h-9`} />
             </label>
             <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">Base currency
               <select value={settings.currency} onChange={(e) => changeCurrency(e.target.value)} className={`${inputBox} h-9`}>
@@ -291,9 +292,26 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
               <p className="text-xs text-[var(--muted)]">
                 Erase all notes, tasks, spending, settings and saved API keys from this browser. A Google Drive copy, if you have one, isn&apos;t touched. This can&apos;t be undone.
               </p>
-              <button className="rounded-md border px-3 py-1.5 text-[var(--danger)] hover:bg-[var(--hover)]" style={dangerBorder} onClick={deleteLocal}>
+              <button className="rounded-md border px-3 py-1.5 text-[var(--danger)] hover:bg-[var(--hover)]" style={dangerBorder} onClick={() => setConfirmWipe(true)}>
                 Delete all local data
               </button>
+              <TypeToConfirm
+                open={confirmWipe}
+                onClose={() => setConfirmWipe(false)}
+                title="Delete all local data?"
+                confirmLabel="Delete everything"
+                onConfirm={deleteLocal}
+              >
+                <p>
+                  This permanently erases from this browser: {plural(counts.notes, "note")}, {plural(counts.tasks, "task")},{" "}
+                  {plural(counts.transactions, "transaction")}, your settings and budgets, and any saved API keys.
+                </p>
+                <p className="text-[var(--muted)]">
+                  {google.email ? "The copy in your Google Drive is not touched. " : ""}It can&apos;t be undone.{" "}
+                  <button type="button" className="text-[var(--accent)] underline" onClick={exportBackup}>Export a backup first</button>
+                  {" "}if you might need it.
+                </p>
+              </TypeToConfirm>
             </div>
           </div>
         </SettingsSection>

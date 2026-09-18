@@ -1,243 +1,505 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { downloadIcs, fmtDateTime, googleCalendarUrl, toLocalInput } from "@/lib/client";
 import { suggestReminder } from "@/lib/insights";
 import { useFiledFlash } from "@/lib/highlight";
+import { useBackDismiss } from "@/lib/backstack";
 import { openItem, scrollToId, useOpenItem } from "@/lib/nav";
 import { makeRrule, parseRrule, rruleLabel, type Freq } from "@/lib/recurrence";
 import { alive, formatMoney, parseAmount, useStore } from "@/lib/store";
 import type { ExpenseCategory, Todo } from "@/lib/types";
 import EmptyStart from "./EmptyStart";
-import { Icon, inputBox, useToast } from "./ui";
+import { Dropdown, MenuItem, MenuSep } from "./notes/Dropdown";
+import { Icon, useToast } from "./ui";
 
 const PRIORITY_DOT = { high: "var(--danger)", medium: "#d9730d", low: "var(--faint)" };
+const PRIORITY_LABEL = { high: "High priority", medium: "Medium priority", low: "Low priority" };
 
-function group(todos: Todo[]) {
-  const now = new Date();
-  const endToday = new Date(now); endToday.setHours(23, 59, 59, 999);
-  const g: Record<string, Todo[]> = { Overdue: [], Today: [], Upcoming: [], "No date": [], Done: [] };
-  for (const t of todos) {
-    if (t.done) g.Done.push(t);
-    else if (!t.dueAt) g["No date"].push(t);
-    else if (new Date(t.dueAt) < now) g.Overdue.push(t);
-    else if (new Date(t.dueAt) <= endToday) g.Today.push(t);
-    else g.Upcoming.push(t);
-  }
-  for (const k of Object.keys(g)) g[k].sort((a, b) => (a.dueAt ?? "~").localeCompare(b.dueAt ?? "~"));
-  g.Done = g.Done.sort((a, b) => (b.completedAt ?? b.updatedAt).localeCompare(a.completedAt ?? a.updatedAt)).slice(0, 30);
-  return g;
+// A board like Notion's: To Do → Doing → Done. Colours come from --board-* in globals.css.
+type Status = "todo" | "doing" | "done";
+const COLUMNS: { id: Status; label: string; hue: string }[] = [
+  { id: "todo", label: "To Do", hue: "red" },
+  { id: "doing", label: "Doing", hue: "amber" },
+  { id: "done", label: "Done", hue: "green" },
+];
+const statusOf = (t: Todo): Status => (t.done ? "done" : t.doing ? "doing" : "todo");
+const DONE_SHOWN = 30;
+
+function columns(todos: Todo[]) {
+  const c: Record<Status, Todo[]> = { todo: [], doing: [], done: [] };
+  for (const t of todos) c[statusOf(t)].push(t);
+  // Soonest first (overdue on top); undated tasks after dated ones, newest first.
+  const byDue = (a: Todo, b: Todo) => (a.dueAt ?? "~").localeCompare(b.dueAt ?? "~") || b.createdAt.localeCompare(a.createdAt);
+  c.todo.sort(byDue);
+  c.doing.sort(byDue);
+  c.done.sort((a, b) => (b.completedAt ?? b.updatedAt).localeCompare(a.completedAt ?? a.updatedAt));
+  return c;
 }
 
+/** Moves a task between columns; finishing one still logs its bill and schedules the next repeat. */
+function useMove() {
+  const { todos, toggleTodo, updateTodo } = useStore();
+  const toast = useToast();
+  return (id: string, to: Status) => {
+    const t = todos.find((x) => x.id === id);
+    if (!t || statusOf(t) === to) return;
+    if (to === "done") {
+      const extra = toggleTodo(id, true);
+      if (extra.length) toast(extra.join("\n"));
+      return;
+    }
+    if (t.done) toggleTodo(id, false);
+    updateTodo(id, { doing: to === "doing" });
+  };
+}
+
+/** A task made with "New" that was closed before anything was typed into it. */
+const isBlank = (t: Todo) => !t.deletedAt && !t.title.trim() && !t.notes?.trim() && !t.dueAt && !t.remindAt && !t.bill && !t.rrule && !t.noteId;
+
+type PanelAnim = "peek" | "focus-in" | "settle" | "push";
+
 export default function TodoView() {
-  const { todos, addTodo } = useStore();
-  const [title, setTitle] = useState("");
+  const { todos, addTodo, updateTodo, remove } = useStore();
   const [openId, setOpenId] = useState<string | null>(null);
-  const groups = useMemo(() => group(alive(todos)), [todos]);
+  // The task "New" just made: removed again if it's closed while still empty.
+  const [fresh, setFresh] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [anim, setAnim] = useState<PanelAnim>("peek");
+  const [mobile, setMobile] = useState(false);
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [over, setOver] = useState<Status | null>(null);
+  const [allDone, setAllDone] = useState(false);
+  const live = alive(todos);
+  const cols = useMemo(() => columns(alive(todos)), [todos]);
+  const move = useMove();
   const [perm, setPerm] = useState(() => (typeof Notification !== "undefined" ? Notification.permission : "denied"));
+  const openTodo = live.find((t) => t.id === openId);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const update = () => setMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  // Empty tasks left behind (e.g. by switching tabs) are cleaned up when To-Do opens.
+  useEffect(() => {
+    const cutoff = Date.now() - 10_000;
+    for (const t of todos) if (isBlank(t) && new Date(t.updatedAt).getTime() < cutoff) remove("todos", t.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const dropFresh = (except?: string) => {
+    const t = fresh && fresh !== except ? todos.find((x) => x.id === fresh) : undefined;
+    if (t && isBlank(t)) remove("todos", t.id);
+    if (fresh !== except) setFresh(null);
+  };
+  const show = (id: string) => {
+    dropFresh(id);
+    if (!openId) setAnim(mobile ? "push" : "peek");
+    setOpenId(id);
+  };
+  const close = () => {
+    dropFresh();
+    setOpenId(null);
+    setExpanded(false);
+  };
+  const create = (status: Status = "todo") => {
+    dropFresh();
+    const t = addTodo({ title: "" });
+    if (status === "doing") updateTodo(t.id, { doing: true });
+    if (status === "done") updateTodo(t.id, { done: true, completedAt: new Date().toISOString() });
+    setFresh(t.id);
+    setAnim(mobile ? "push" : "peek");
+    setOpenId(t.id);
+  };
+  const toggleExpand = () => {
+    setAnim(expanded ? "settle" : "focus-in");
+    setExpanded((v) => !v);
+  };
+
+  // Back (phones, Android) and Escape close the panel.
+  useBackDismiss(!!openTodo, close);
+  useEffect(() => {
+    if (!openTodo) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !document.querySelector("[role=menu], [role=dialog]")) close();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   useOpenItem("todo", (f) => {
-    setOpenId(f.id);
+    if (todos.find((t) => t.id === f.id)?.done) setAllDone(true);
     scrollToId(`todo-${f.id}`);
+    show(f.id);
   });
 
   return (
-    <div>
-      {perm === "default" && (
-        <div className="mb-4 flex items-center gap-3 rounded-lg bg-[var(--sticky-blue)] px-3 py-2 text-sm">
-          <Icon name="bell" /> Allow notifications so reminders can pop up.
-          <button className="ml-auto rounded-md bg-[var(--text)] px-2 py-1 text-xs text-[var(--bg)]"
-            onClick={() => Notification.requestPermission().then(setPerm)}>Enable</button>
+    <div className="flex items-start gap-4">
+      <div className="min-w-0 flex-1">
+        {perm === "default" && (
+          <div className="mb-4 flex items-center gap-3 rounded-lg bg-[var(--sticky-blue)] px-3 py-2 text-sm">
+            <Icon name="bell" /> Allow notifications so reminders can pop up.
+            <button className="ml-auto rounded-md bg-[var(--text)] px-2 py-1 text-xs text-[var(--bg)]"
+              onClick={() => Notification.requestPermission().then(setPerm)}>Enable</button>
+          </div>
+        )}
+
+        <div className="mb-4 flex items-center gap-2">
+          <span className="flex min-h-9 items-center gap-2 rounded-full bg-[var(--hover)] px-3.5 text-sm font-medium">
+            <Icon name="todo" size={16} /> Board
+          </span>
+          <span className="text-sm text-[var(--faint)]">{live.filter((t) => !t.done).length} open</span>
+          <button onClick={() => create()} className="fn-press ml-auto flex min-h-10 items-center gap-1.5 rounded-lg bg-[var(--accent)] px-4 text-sm font-medium text-white hover:brightness-110">
+            <Icon name="plus" size={16} /> New
+          </button>
         </div>
-      )}
 
-      <form
-        className="mb-6 flex items-center gap-2 border-b border-[var(--line)] pb-2"
-        onSubmit={(e) => { e.preventDefault(); if (title.trim()) { addTodo({ title: title.trim() }); setTitle(""); } }}
-      >
-        <Icon name="plus" className="text-[var(--faint)]" />
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Add a task — or ask the assistant for a reminder"
-          aria-label="New task" className="input-plain flex-1 py-1 text-sm" />
-      </form>
+        {live.length === 0 && (
+          <EmptyStart
+            title="Nothing to do yet"
+            hint="Press New, or ask the assistant — it understands dates, reminders and repeats."
+            prompts={["Remind me to pay rent every month on the 5th at 9am", "Call the dentist tomorrow at 10am"]}
+          />
+        )}
 
-      {alive(todos).length === 0 && (
-        <EmptyStart
-          title="Nothing to do yet"
-          hint="Type a task above, or ask the assistant — it understands dates, reminders and repeats."
-          prompts={["Remind me to pay rent every month on the 5th at 9am", "Call the dentist tomorrow at 10am"]}
+        {/* Phones: columns stack. Wider: side by side, scrolling sideways when the task panel is open. */}
+        <div className="scroll-thin grid gap-3 md:flex md:items-start md:overflow-x-auto md:pb-2">
+          {COLUMNS.map((col) => {
+            const items = cols[col.id];
+            const shown = col.id === "done" && !allDone ? items.slice(0, DONE_SHOWN) : items;
+            return (
+              <section
+                key={col.id}
+                aria-label={col.label}
+                className={`board-col rounded-2xl p-2 transition-shadow md:min-w-[250px] md:flex-1 ${over === col.id && dragging ? "board-drop" : ""}`}
+                data-hue={col.hue}
+                onDragOver={(e) => { if (!dragging) return; e.preventDefault(); setOver(col.id); }}
+                onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOver(null); }}
+                onDrop={(e) => { e.preventDefault(); if (dragging) move(dragging, col.id); setDragging(null); setOver(null); }}
+              >
+                <header className="flex items-center gap-2 px-1.5 pb-2 pt-1">
+                  <h2 className="board-label rounded-md px-2 py-0.5 text-[15px] font-medium">{col.label}</h2>
+                  <span className="board-ink text-sm tabular-nums">{items.length}</span>
+                  <button
+                    className="board-ink tap-target ml-auto !h-9 !w-9 hover:bg-[var(--hover)]"
+                    onClick={() => create(col.id)}
+                    aria-label={`Add a task to ${col.label}`}
+                    title={`Add to ${col.label}`}
+                  >
+                    <Icon name="plus" size={18} />
+                  </button>
+                </header>
+                <ul className="space-y-2">
+                  {shown.map((t) => (
+                    <TodoCard
+                      key={t.id}
+                      todo={t}
+                      selected={openId === t.id}
+                      onOpen={() => show(t.id)}
+                      onDragStart={() => setDragging(t.id)}
+                      onDragEnd={() => { setDragging(null); setOver(null); }}
+                      dragging={dragging === t.id}
+                    />
+                  ))}
+                </ul>
+                {col.id === "done" && items.length > shown.length && (
+                  <button className="board-ink mt-2 w-full rounded-lg py-2 text-sm hover:bg-[var(--hover)]" onClick={() => setAllDone(true)}>
+                    Show {items.length - shown.length} older
+                  </button>
+                )}
+                <button
+                  className="board-new board-ink mt-2 flex min-h-12 w-full items-center gap-2 rounded-xl border px-3.5 text-[15px] hover:bg-[var(--hover)]"
+                  onClick={() => create(col.id)}
+                >
+                  <Icon name="plus" size={16} /> New task
+                </button>
+              </section>
+            );
+          })}
+        </div>
+      </div>
+
+      {openTodo && (
+        <TaskPanel
+          key={openTodo.id}
+          todo={openTodo}
+          isNew={fresh === openTodo.id}
+          expanded={expanded || mobile}
+          mobile={mobile}
+          anim={anim}
+          onToggleExpand={toggleExpand}
+          onClose={close}
+          onMove={(to) => move(openTodo.id, to)}
         />
-      )}
-
-      {Object.entries(groups).map(([name, items]) =>
-        items.length === 0 ? null : (
-          <section key={name} className="mb-6">
-            <h3 className={`mb-1 text-xs font-semibold uppercase tracking-wide ${name === "Overdue" ? "text-[var(--danger)]" : "text-[var(--muted)]"}`}>
-              {name} <span className="font-normal text-[var(--faint)]">{items.length}</span>
-            </h3>
-            <ul>
-              {items.map((t) => (
-                <TodoRow key={t.id} todo={t} open={openId === t.id} setOpen={(o) => setOpenId(o ? t.id : null)} />
-              ))}
-            </ul>
-          </section>
-        ),
       )}
     </div>
   );
 }
 
-function TodoRow({ todo, open, setOpen }: { todo: Todo; open: boolean; setOpen: (o: boolean) => void }) {
-  const { updateTodo, toggleTodo, remove, notes, todos, settings, categories } = useStore();
-  const toast = useToast();
-  const [suggestion, setSuggestion] = useState<{ at: string; reason: string } | null>(null);
+function TodoCard({ todo, selected, onOpen, onDragStart, onDragEnd, dragging }: {
+  todo: Todo; selected: boolean; onOpen: () => void; onDragStart: () => void; onDragEnd: () => void; dragging: boolean;
+}) {
+  const { notes, settings } = useStore();
+  const move = useMove();
   const justFiled = useFiledFlash(todo.id);
   const note = todo.noteId ? notes.find((n) => n.id === todo.noteId && !n.deletedAt) : undefined;
-  const rule = parseRrule(todo.rrule);
-
-  const autoSuggestion = useMemo(
-    () => (open && !todo.done && !todo.remindAt ? suggestReminder(todo, todos) : null),
-    [open, todo, todos],
-  );
-  const shown = suggestion ?? autoSuggestion;
-
-  const toggle = (done: boolean) => {
-    const extra = toggleTodo(todo.id, done);
-    if (extra.length) toast(extra.join("\n"));
-  };
+  const overdue = !todo.done && !!todo.dueAt && new Date(todo.dueAt) < new Date();
+  const hasMeta = note || todo.bill || todo.rrule || todo.dueAt || (todo.remindAt && !todo.done);
 
   return (
-    <li id={`todo-${todo.id}`} className={`group rounded-md hover:bg-[var(--hover)] ${open ? "bg-[var(--hover)]" : ""} ${justFiled ? "fn-flash" : ""}`}>
-      <div className="flex items-start gap-2 px-1 py-1.5">
-        <input type="checkbox" checked={todo.done} onChange={(e) => toggle(e.target.checked)}
-          className="mt-[3px] h-4 w-4 shrink-0 accent-[var(--accent)]" aria-label="Done" />
-        <span className="mt-[8px] h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: PRIORITY_DOT[todo.priority] }} />
-        {/* Narrow screens: the title gets its own line and chips wrap below it instead of squeezing it. */}
-        <div className="flex min-w-0 flex-1 flex-col gap-1 lg:flex-row lg:items-center lg:gap-2">
-          <input value={todo.title} onChange={(e) => updateTodo(todo.id, { title: e.target.value })} aria-label="Task title"
-            className={`input-plain w-full min-w-0 text-[15px] leading-[22px] lg:flex-1 lg:text-sm ${todo.done ? "text-[var(--faint)] line-through" : ""}`} />
-          {(note || todo.bill || todo.rrule || todo.dueAt || (todo.remindAt && !todo.done)) && (
-            <div className="flex flex-wrap items-center gap-1 lg:shrink-0 lg:flex-nowrap">
-              {note && (
-                <button className="chip max-w-[12rem] hover:bg-[var(--line)]" onClick={() => openItem("note", note.id)} title="Open linked note">
-                  <Icon name="link" size={11} /><span className="truncate">{note.title || "Note"}</span>
-                </button>
-              )}
-              {todo.bill && <span className="chip">{formatMoney(todo.bill.amount, todo.bill.currency || settings.currency, true)}</span>}
-              {todo.rrule && <span className="chip" title={rruleLabel(todo.rrule)}><Icon name="repeat" size={11} />{rruleLabel(todo.rrule).replace("Every ", "")}</span>}
-              {todo.dueAt && <span className="chip"><Icon name="calendar" size={11} />{fmtDateTime(todo.dueAt)}</span>}
-              {todo.remindAt && !todo.done && <span className="chip" title={`Reminder ${fmtDateTime(todo.remindAt)}`}><Icon name="bell" size={11} /></span>}
-            </div>
-          )}
-        </div>
-        <button className="btn-ghost shrink-0" onClick={() => setOpen(!open)} aria-label="Details" aria-expanded={open}>
-          <Icon name="chevron" size={14} className={open ? "rotate-90 transition" : "transition"} />
+    <li
+      id={`todo-${todo.id}`}
+      draggable
+      onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", todo.title); onDragStart(); }}
+      onDragEnd={onDragEnd}
+      className={`board-card group relative rounded-xl transition-[opacity,transform] ${selected ? "board-selected" : ""} ${dragging ? "opacity-40" : ""} ${justFiled ? "fn-flash" : ""}`}
+    >
+      <div className="flex items-start gap-2.5 px-3 py-3">
+        <button
+          onClick={() => move(todo.id, todo.done ? "todo" : "done")}
+          aria-label={todo.done ? "Mark as not done" : "Mark as done"}
+          aria-pressed={todo.done}
+          className={`relative mt-px grid h-5 w-5 shrink-0 place-items-center rounded-full border-[1.5px] transition-colors before:absolute before:-inset-3 ${
+            todo.done ? "border-[var(--accent)] bg-[var(--accent)] text-white" : "border-[var(--faint)] hover:border-[var(--accent)]"
+          }`}
+        >
+          {todo.done && <Icon name="check" size={12} />}
         </button>
+        <button onClick={onOpen} className="min-w-0 flex-1 text-left" aria-label={`${todo.title || "Untitled task"}, open details`}>
+          <span className={`block break-words text-[15px] font-medium leading-5 ${todo.done ? "text-[var(--faint)] line-through" : ""}`}>
+            {todo.title || <span className="text-[var(--faint)]">New task</span>}
+          </span>
+          {hasMeta && (
+            <span className="mt-2 flex flex-wrap items-center gap-1">
+              {todo.dueAt && (
+                <span className={`chip ${overdue ? "!text-[var(--danger)]" : ""}`}>
+                  <Icon name="calendar" size={11} />{overdue ? "Overdue · " : ""}{fmtDateTime(todo.dueAt)}
+                </span>
+              )}
+              {todo.remindAt && !todo.done && <span className="chip" title={`Reminder ${fmtDateTime(todo.remindAt)}`}><Icon name="bell" size={11} />{todo.dueAt ? "" : fmtDateTime(todo.remindAt)}</span>}
+              {todo.rrule && <span className="chip" title={rruleLabel(todo.rrule)}><Icon name="repeat" size={11} />{rruleLabel(todo.rrule).replace("Every ", "")}</span>}
+              {todo.bill && <span className="chip">{formatMoney(todo.bill.amount, todo.bill.currency || settings.currency, true)}</span>}
+              {note && <span className="chip max-w-[11rem]"><Icon name="link" size={11} /><span className="truncate">{note.title || "Note"}</span></span>}
+            </span>
+          )}
+        </button>
+        {todo.priority !== "medium" && !todo.done && (
+          <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: PRIORITY_DOT[todo.priority] }} title={PRIORITY_LABEL[todo.priority]} aria-label={PRIORITY_LABEL[todo.priority]} />
+        )}
+      </div>
+    </li>
+  );
+}
+
+/** One property row of the task panel: icon and name on the left, the value on the right. */
+function Prop({ icon, label, children }: { icon: string; label: string; children: React.ReactNode }) {
+  return (
+    <>
+      <div className="flex min-h-10 items-center gap-2.5 text-[var(--muted)]">
+        <Icon name={icon} size={17} className="shrink-0" /> <span className="truncate">{label}</span>
+      </div>
+      <div className="flex min-h-10 min-w-0 flex-wrap items-center gap-2">{children}</div>
+    </>
+  );
+}
+
+/**
+ * A task opened beside the board, in the same card as the Notes editor. Phones get it
+ * full screen; the expand button does the same on larger screens.
+ */
+function TaskPanel({ todo, isNew, expanded, mobile, anim, onToggleExpand, onClose, onMove }: {
+  todo: Todo; isNew: boolean; expanded: boolean; mobile: boolean; anim: PanelAnim;
+  onToggleExpand: () => void; onClose: () => void; onMove: (to: Status) => void;
+}) {
+  const { updateTodo, remove, notes, todos, categories } = useStore();
+  const toast = useToast();
+  const [suggestion, setSuggestion] = useState<{ at: string; reason: string } | null>(null);
+  const note = todo.noteId ? notes.find((n) => n.id === todo.noteId && !n.deletedAt) : undefined;
+  const rule = parseRrule(todo.rrule);
+  const status = statusOf(todo);
+  const detailsRef = useRef<HTMLTextAreaElement>(null);
+
+  const autoSuggestion = useMemo(
+    () => (!todo.done && !todo.remindAt ? suggestReminder(todo, todos) : null),
+    [todo, todos],
+  );
+  const shown = suggestion ?? autoSuggestion;
+  const created = new Date(todo.createdAt).toLocaleString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+
+  return (
+    <div
+      data-anim={anim}
+      role="complementary"
+      aria-label="Task"
+      className={`note-card flex min-h-0 flex-col bg-[var(--bg)] ${
+        expanded
+          ? "fixed inset-0 z-[45] pt-[env(safe-area-inset-top)]"
+          : "sticky top-4 max-h-[calc(100dvh-2rem)] w-[420px] shrink-0 rounded-2xl border border-[var(--line)] shadow-[var(--shadow)] lg:w-[480px] xl:w-[540px]"
+      }`}
+    >
+      {/* Header: same controls as the note editor */}
+      <div className="flex shrink-0 items-center gap-1 px-2 pt-2 md:px-4 md:pt-3">
+        {mobile ? (
+          <button className="tb-btn gap-1 pr-2" onClick={onClose} aria-label="Back to the board">
+            <Icon name="chevronLeft" size={20} /> <span className="text-sm">To-Do</span>
+          </button>
+        ) : (
+          <>
+            <button className="tb-btn" onClick={onClose} aria-label="Close task" title="Close (Esc)"><Icon name="collapseRight" size={20} /></button>
+            <button className="tb-btn" onClick={onToggleExpand} aria-label={expanded ? "Back to side panel" : "Open full screen"} title={expanded ? "Back to side panel" : "Open full screen"}>
+              <Icon name={expanded ? "shrink" : "expand"} size={18} />
+            </button>
+          </>
+        )}
+        <span className="ml-1 hidden min-w-0 flex-1 truncate text-sm text-[var(--muted)] sm:block">
+          To-Do <Icon name="chevron" size={13} className="inline" /> <span className="text-[var(--text)]">{todo.title || "New task"}</span>
+        </span>
+        <div className="ml-auto flex items-center gap-1">
+          <Dropdown label="More actions" button={<Icon name="more" size={20} />} width={240}>
+            {(close) => (
+              <>
+                <MenuItem icon="calendar" label="Add to Google Calendar" onSelect={() => { close(); window.open(googleCalendarUrl(todo), "_blank", "noopener"); }} />
+                <MenuItem icon="download" label="Apple / Outlook (.ics)" onSelect={() => { close(); downloadIcs(todo); }} />
+                <MenuSep />
+                <MenuItem icon="trash" label="Delete task" danger onSelect={() => { close(); remove("todos", todo.id); toast("Task deleted"); onClose(); }} />
+              </>
+            )}
+          </Dropdown>
+        </div>
       </div>
 
-      {open && (
-        <div className="grid gap-3 px-3 pb-3 text-sm sm:grid-cols-2 sm:px-8">
-          <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">Due
-            <input type="datetime-local" value={toLocalInput(todo.dueAt)}
-              onChange={(e) => updateTodo(todo.id, { dueAt: e.target.value ? new Date(e.target.value).toISOString() : null })}
-              className={inputBox} />
-          </label>
-          <div className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-            <label className="flex flex-col gap-1">Remind me
-              <input type="datetime-local" value={toLocalInput(todo.remindAt)}
-                onChange={(e) => { setSuggestion(null); updateTodo(todo.id, { remindAt: e.target.value ? new Date(e.target.value).toISOString() : null, reminded: false }); }}
-                className={inputBox} />
-            </label>
-            {shown ? (
-              <div className="flex items-center gap-2 rounded bg-[var(--sticky-blue)] px-2 py-1 text-[var(--text)]">
-                <Icon name="sparkle" size={12} />
-                <span className="min-w-0 flex-1"><b>{fmtDateTime(shown.at)}</b> · {shown.reason}</span>
-                <button className="font-medium text-[var(--accent)]" onClick={() => { updateTodo(todo.id, { remindAt: shown.at, reminded: false }); setSuggestion(null); }}>Use</button>
+      <div className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-10 pt-6 md:px-10 md:pt-8">
+        <div className={`fn-note-in mx-auto ${expanded ? "max-w-3xl" : ""}`}>
+          <textarea
+            value={todo.title}
+            rows={1}
+            autoFocus={isNew}
+            onChange={(e) => updateTodo(todo.id, { title: e.target.value.replace(/\n/g, " ") })}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); detailsRef.current?.focus(); } }}
+            aria-label="Task title"
+            placeholder="New task"
+            className={`input-plain mb-5 w-full resize-none text-[2rem] font-bold leading-tight tracking-tight [field-sizing:content] placeholder:text-[var(--faint)] md:text-[2.4rem] ${todo.done ? "text-[var(--faint)] line-through" : ""}`}
+          />
+
+          <div className="grid grid-cols-[minmax(7rem,9.5rem)_minmax(0,1fr)] gap-x-3 text-sm">
+            <Prop icon="status" label="Status">
+              <div role="radiogroup" aria-label="Status" className="flex flex-wrap gap-1">
+                {COLUMNS.map((c) => (
+                  <button
+                    key={c.id}
+                    role="radio"
+                    aria-checked={status === c.id}
+                    onClick={() => onMove(c.id)}
+                    data-hue={c.hue}
+                    className={`min-h-8 rounded-md px-2.5 text-sm ${status === c.id ? "board-label font-medium" : "text-[var(--faint)] hover:bg-[var(--hover)] hover:text-[var(--text)]"}`}
+                  >
+                    {c.label}
+                  </button>
+                ))}
               </div>
-            ) : (
-              !todo.done && (
-                <button className="self-start text-[var(--accent)]" onClick={() => {
-                  const s = suggestReminder(todo, todos);
-                  if (s) setSuggestion(s);
-                  else toast("Complete a few tasks first so the app can learn when you usually get things done.");
-                }}>✨ Suggest a time</button>
-              )
-            )}
-          </div>
-
-          <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">Priority
-            <select value={todo.priority} onChange={(e) => updateTodo(todo.id, { priority: e.target.value as Todo["priority"] })} className={inputBox}>
-              <option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>
-            </select>
-          </label>
-
-          <div className="flex flex-col gap-1 text-xs text-[var(--muted)]">Repeat
-            <div className="flex gap-2">
+            </Prop>
+            <Prop icon="calendar" label="Date">
+              <input type="datetime-local" value={toLocalInput(todo.dueAt)} aria-label="Due date" data-empty={!todo.dueAt}
+                onChange={(e) => updateTodo(todo.id, { dueAt: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                className="prop-input" />
+            </Prop>
+            <Prop icon="bell" label="Alarm">
+              <input type="datetime-local" value={toLocalInput(todo.remindAt)} aria-label="Remind me" data-empty={!todo.remindAt}
+                onChange={(e) => { setSuggestion(null); updateTodo(todo.id, { remindAt: e.target.value ? new Date(e.target.value).toISOString() : null, reminded: false }); }}
+                className="prop-input" />
+              {shown ? (
+                <span className="flex w-full items-center gap-2 rounded-md bg-[var(--sticky-blue)] px-2 py-1 text-xs">
+                  <Icon name="sparkle" size={12} />
+                  <span className="min-w-0 flex-1"><b>{fmtDateTime(shown.at)}</b> · {shown.reason}</span>
+                  <button className="font-medium text-[var(--accent)]" onClick={() => { updateTodo(todo.id, { remindAt: shown.at, reminded: false }); setSuggestion(null); }}>Use</button>
+                </span>
+              ) : (
+                !todo.done && !todo.remindAt && (
+                  <button className="px-2 text-xs text-[var(--accent)]" onClick={() => {
+                    const s = suggestReminder(todo, todos);
+                    if (s) setSuggestion(s);
+                    else toast("Complete a few tasks first so the app can learn when you usually get things done.");
+                  }}>✨ Suggest a time</button>
+                )
+              )}
+            </Prop>
+            <Prop icon="repeat" label="Repeat">
               <select
                 aria-label="Repeat frequency"
                 value={rule?.freq ?? ""}
+                data-empty={!rule}
                 onChange={(e) => updateTodo(todo.id, { rrule: e.target.value ? makeRrule(e.target.value as Freq, rule?.interval ?? 1) : null })}
-                className={`${inputBox} flex-1`}
+                className="prop-input w-auto"
               >
                 <option value="">Doesn&apos;t repeat</option>
                 <option value="DAILY">Daily</option><option value="WEEKLY">Weekly</option>
                 <option value="MONTHLY">Monthly</option><option value="YEARLY">Yearly</option>
               </select>
               {rule && (
-                <label className="flex items-center gap-1">every
+                <label className="flex items-center gap-1 text-[var(--muted)]">every
                   <input type="number" min={1} max={99} value={rule.interval} aria-label="Repeat interval"
                     onChange={(e) => updateTodo(todo.id, { rrule: makeRrule(rule.freq, Math.max(1, Number(e.target.value) || 1)) })}
-                    className={`${inputBox} w-14`} />
+                    className="prop-input w-16" />
                 </label>
               )}
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1 text-xs text-[var(--muted)]">Bill (logs spending when done)
-            <div className="flex gap-2">
+            </Prop>
+            <Prop icon="flag" label="Priority">
+              <select value={todo.priority} aria-label="Priority" onChange={(e) => updateTodo(todo.id, { priority: e.target.value as Todo["priority"] })} className="prop-input w-auto">
+                <option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>
+              </select>
+            </Prop>
+            <Prop icon="bill" label="Bill">
               <input
                 key={todo.bill?.amount ?? "none"}
                 defaultValue={todo.bill?.amount ?? ""}
-                placeholder="Amount, e.g. 350k"
+                placeholder="Empty"
                 inputMode="decimal"
-                aria-label="Bill amount"
+                aria-label="Bill amount (logs spending when done)"
+                title="Logs the spending when the task is done"
                 onBlur={(e) => {
                   const amount = e.target.value.trim() ? parseAmount(e.target.value) : null;
                   updateTodo(todo.id, { bill: amount ? { amount, category: todo.bill?.category ?? "Bills & Utilities", currency: todo.bill?.currency } : null });
                 }}
-                className={`${inputBox} min-w-0 flex-1`}
+                className="prop-input min-w-0 flex-1"
               />
-              <select
-                aria-label="Bill category"
-                value={todo.bill?.category ?? "Bills & Utilities"}
-                disabled={!todo.bill}
-                onChange={(e) => todo.bill && updateTodo(todo.id, { bill: { ...todo.bill, category: e.target.value as ExpenseCategory } })}
-                className={`${inputBox} w-32`}
-              >
-                {categories.filter((c) => c !== "Income").map((c) => <option key={c}>{c}</option>)}
+              {todo.bill && (
+                <select
+                  aria-label="Bill category"
+                  value={todo.bill.category}
+                  onChange={(e) => todo.bill && updateTodo(todo.id, { bill: { ...todo.bill, category: e.target.value as ExpenseCategory } })}
+                  className="prop-input w-auto"
+                >
+                  {categories.filter((c) => c !== "Income").map((c) => <option key={c}>{c}</option>)}
+                </select>
+              )}
+            </Prop>
+            <Prop icon="link" label="Note">
+              <select value={todo.noteId ?? ""} aria-label="Linked note" data-empty={!todo.noteId} onChange={(e) => updateTodo(todo.id, { noteId: e.target.value || null })} className="prop-input min-w-0 flex-1">
+                <option value="">Empty</option>
+                {alive(notes).map((n) => <option key={n.id} value={n.id}>{n.title || "Untitled"}</option>)}
               </select>
-            </div>
+              {note && <button className="px-2 text-xs text-[var(--accent)]" onClick={() => openItem("note", note.id)}>Open</button>}
+            </Prop>
+            <Prop icon="clock" label="Created">
+              <span className="px-2">{created}</span>
+            </Prop>
           </div>
 
-          <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">Linked note
-            <select value={todo.noteId ?? ""} onChange={(e) => updateTodo(todo.id, { noteId: e.target.value || null })} className={inputBox}>
-              <option value="">None</option>
-              {alive(notes).map((n) => <option key={n.id} value={n.id}>{n.title || "Untitled"}</option>)}
-            </select>
-          </label>
-
-          <textarea value={todo.notes ?? ""} onChange={(e) => updateTodo(todo.id, { notes: e.target.value })} placeholder="Notes"
-            aria-label="Task notes" className={`${inputBox} sm:col-span-2`} rows={2} />
-          <div className="flex flex-wrap gap-2 sm:col-span-2">
-            <a className="btn-ghost border border-[var(--line)]" href={googleCalendarUrl(todo)} target="_blank" rel="noreferrer">
-              + Google Calendar
-            </a>
-            <button className="btn-ghost border border-[var(--line)]" onClick={() => downloadIcs(todo)}>
-              + Apple / Outlook (.ics)
-            </button>
-            {todo.rrule && <span className="self-center text-xs text-[var(--muted)]">{rruleLabel(todo.rrule)} · completing it schedules the next one</span>}
-            <button className="btn-ghost ml-auto text-[var(--danger)]" onClick={() => remove("todos", todo.id)}>Delete</button>
-          </div>
+          <div className="my-6 h-px bg-[var(--line)]" />
+          <textarea
+            ref={detailsRef}
+            value={todo.notes ?? ""}
+            onChange={(e) => updateTodo(todo.id, { notes: e.target.value })}
+            placeholder="Add details, links or steps…"
+            aria-label="Task notes"
+            className="input-plain min-h-32 w-full resize-none text-base leading-relaxed [field-sizing:content] placeholder:text-[var(--faint)]"
+          />
+          {todo.rrule && <p className="mt-4 text-xs text-[var(--muted)]">{rruleLabel(todo.rrule)} · completing it schedules the next one</p>}
         </div>
-      )}
-    </li>
+      </div>
+    </div>
   );
 }

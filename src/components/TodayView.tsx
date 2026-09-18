@@ -1,20 +1,21 @@
 "use client";
-// Daily brief: today's tasks, yesterday's spending, pinned stickies, heads-up
+// Daily brief: today's tasks, yesterday's spending, quick notes, heads-up
 // alerts (budgets, subscriptions, money owed) and a 3-line AI summary.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { looksLikeThinking } from "@/lib/ai/text";
-import { api, fmtDateTime } from "@/lib/client";
+import { api } from "@/lib/client";
 import { useOnline } from "@/lib/hooks";
 import { budgetStatus, detectSubscriptions, myShare, owedToMe } from "@/lib/insights";
+import { useFiledFlash } from "@/lib/highlight";
 import { openItem } from "@/lib/nav";
-import { rruleLabel } from "@/lib/recurrence";
 import { alive, formatMoney, localDate, localMonth, useStore } from "@/lib/store";
+import { isQuick, quickNote } from "@/lib/quickNote";
 import type { BriefInput, Tab } from "@/lib/types";
 import EmptyStart from "./EmptyStart";
-import { Icon, SectionTitle, useToast } from "./ui";
+import { Icon, useToast } from "./ui";
 
 export default function TodayView({ setTab }: { setTab: (t: Tab) => void }) {
-  const { todos, transactions, stickies, notes, settings, briefs, saveBrief, toggleTodo, updateSticky } = useStore();
+  const { todos, transactions, stickies, notes, settings, briefs, saveBrief, toggleTodo, addNote, remove } = useStore();
   const toast = useToast();
   const online = useOnline();
   const [loading, setLoading] = useState(false);
@@ -35,7 +36,8 @@ export default function TodayView({ setTab }: { setTab: (t: Tab) => void }) {
   );
   const ySpend = useMemo(() => alive(transactions).filter((t) => t.date === yesterday && t.amount > 0), [transactions, yesterday]);
   const yTotal = ySpend.reduce((s, t) => s + myShare(t, cur), 0);
-  const pinned = alive(stickies).filter((s) => s.pinned);
+  // Quick notes (they replaced stickies): newest first; today's go into the brief.
+  const quick = useMemo(() => alive(notes).filter(isQuick).sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [notes]);
 
   const alerts = useMemo(() => {
     const out: string[] = [];
@@ -67,7 +69,7 @@ export default function TodayView({ setTab }: { setTab: (t: Tab) => void }) {
         name: settings.name,
         tasksToday: tasks.slice(0, 15).map((t) => ({ title: t.title, dueAt: t.dueAt, overdue: new Date(t.dueAt!) < now })),
         yesterdaySpend: ySpend.slice(0, 30).map((t) => ({ merchant: t.merchant, amount: myShare(t, cur), category: t.category })),
-        stickies: pinned.map((s) => s.text).slice(0, 5),
+        stickies: quick.filter((n) => localDate(new Date(n.createdAt)) === today).map((n) => n.content).slice(0, 5),
         alerts,
       };
       const { text } = await api.brief(input);
@@ -90,13 +92,51 @@ export default function TodayView({ setTab }: { setTab: (t: Tab) => void }) {
   }, [brief, online]);
 
   const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const greeting = hour < 12 ? "Good Morning" : hour < 18 ? "Good Afternoon" : "Good Evening";
+  const firstName = settings.name?.trim().split(/\s+/)[0];
+
+  // Stickies are gone: any left from before become quick notes, once.
+  useEffect(() => {
+    const left = alive(stickies);
+    if (!left.length) return;
+    for (const st of left) {
+      // Keep the sample flag, so "Remove sample data" still removes it.
+      if (st.text.trim()) addNote({ ...quickNote(st.text), sample: st.sample });
+      remove("stickies", st.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stickies.length]);
+
+  const briefLines = (brief?.text ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
+  const [draft, setDraft] = useState("");
+  const saveQuick = () => {
+    if (!draft.trim()) return;
+    addNote(quickNote(draft));
+    setDraft("");
+    toast("📝 Quick note saved");
+  };
+
+  const section = "border-t border-[var(--line)] pt-4";
+  const label = "text-xs font-semibold uppercase tracking-[0.08em] text-[var(--muted)]";
+  const link = "text-sm text-[var(--muted)] hover:text-[var(--text)]";
 
   return (
-    <div className="space-y-6">
-      <p className="-mt-4 text-sm text-[var(--muted)]">
-        {greeting}{settings.name ? `, ${settings.name}` : ""} · {new Date().toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "long" })}
-      </p>
+    <div className="space-y-10 pt-5 md:pt-7">
+      {/* Greeting, with the daily brief underneath */}
+      <div>
+        <p className="text-[2.2rem] font-light leading-tight tracking-tight md:text-5xl">Hello{firstName ? ` ${firstName}` : ""}!</p>
+        <h2 className="mt-1 text-[2.6rem] font-semibold leading-tight tracking-tight md:text-6xl">{greeting}</h2>
+        <div className="mt-5 max-w-2xl text-base leading-snug text-[var(--muted)] md:text-lg">
+          {briefLines.length ? (
+            briefLines.map((l, i) => <p key={i} className={i ? "mt-2" : ""}>{l}</p>)
+          ) : (
+            <p>{online ? (loading ? "Reading your day…" : "Your daily brief will appear here.") : "The brief will be written when you're back online."}</p>
+          )}
+        </div>
+        <button className="-ml-3 mt-3 flex min-h-9 items-center gap-1.5 rounded-full px-3 text-sm text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)] disabled:opacity-40" onClick={generate} disabled={loading || !online}>
+          <Icon name="sparkle" size={14} /> {loading ? "Writing…" : brief ? "Refresh brief" : "Write today's brief"}
+        </button>
+      </div>
 
       {alive(todos).length === 0 && alive(transactions).length === 0 && alive(notes).length === 0 && (
         <EmptyStart
@@ -106,57 +146,53 @@ export default function TodayView({ setTab }: { setTab: (t: Tab) => void }) {
         />
       )}
 
-      <section className="rounded-lg border border-[var(--line)] p-4">
-        <div className="mb-2 flex items-center gap-2">
-          <Icon name="sparkle" className="text-[var(--accent)]" />
-          <h3 className="text-sm font-semibold">Daily brief</h3>
-          <button className="btn-ghost ml-auto text-xs" onClick={generate} disabled={loading || !online}>
-            {loading ? "Writing…" : brief ? "Refresh" : "Generate"}
-          </button>
-        </div>
-        <p className="whitespace-pre-wrap text-[15px] leading-7">
-          {brief?.text ?? (online ? (loading ? "Reading your day…" : "Tap Generate for a 3-line summary of your day.") : "The AI brief will be written when you're back online.")}
-        </p>
-      </section>
-
-      <div className="grid gap-6 md:grid-cols-2">
-        <section>
-          <SectionTitle className="flex items-center">
-            {tasks.length ? "Due today & overdue" : "Focus"}
-            <button className="btn-ghost ml-auto normal-case tracking-normal" onClick={() => setTab("todo")}>All tasks →</button>
-          </SectionTitle>
-          {tasks.length === 0 && focus.length === 0 && <p className="text-sm text-[var(--faint)]">Nothing due today. 🎉</p>}
-          <ul>
+      {/* Four quiet sections */}
+      <div className="grid gap-x-12 gap-y-10 md:grid-cols-2">
+        <section className={section}>
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className={label}>{tasks.length ? "Due today & overdue" : "Focus"}</h3>
+            <button className={link} onClick={() => setTab("todo")}>All tasks →</button>
+          </div>
+          {tasks.length === 0 && focus.length === 0 && <p className="text-[var(--faint)]">Nothing due today.</p>}
+          <ul className="-mx-2">
             {[...tasks, ...focus].map((t) => {
               const overdue = t.dueAt && new Date(t.dueAt) < new Date();
               return (
-                <li key={t.id} className="flex items-center gap-2 rounded-md px-1 py-1.5 hover:bg-[var(--hover)]">
-                  <input type="checkbox" className="h-4 w-4 accent-[var(--accent)]" aria-label={`Complete ${t.title}`}
-                    onChange={() => { const extra = toggleTodo(t.id, true); toast([`☑️ ${t.title}`, ...extra].join("\n")); }} />
-                  <button className="min-w-0 flex-1 truncate text-left text-sm" onClick={() => openItem("todo", t.id)}>{t.title}</button>
-                  {t.rrule && <span className="chip" title={rruleLabel(t.rrule)}><Icon name="repeat" size={11} /></span>}
-                  {t.dueAt && <span className={`chip ${overdue ? "text-[var(--danger)]" : ""}`}>{fmtDateTime(t.dueAt)}</span>}
+                <li key={t.id} className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-[var(--hover)]">
+                  <button
+                    className="relative h-[18px] w-[18px] shrink-0 rounded-full border-[1.5px] border-[var(--faint)] before:absolute before:-inset-3 hover:border-[var(--accent)]"
+                    aria-label={`Complete ${t.title}`}
+                    onClick={() => { const extra = toggleTodo(t.id, true); toast([`☑️ ${t.title}`, ...extra].join("\n")); }}
+                  />
+                  <button className="min-w-0 flex-1 truncate text-left" onClick={() => openItem("todo", t.id)}>{t.title}</button>
+                  {t.dueAt && (
+                    <span className={`shrink-0 text-sm tabular-nums ${overdue ? "text-[var(--danger)]" : "text-[var(--faint)]"}`}>
+                      {new Date(t.dueAt).toDateString() === new Date().toDateString()
+                        ? new Date(t.dueAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+                        : new Date(t.dueAt).toLocaleDateString("en-US", { day: "numeric", month: "short" })}
+                    </span>
+                  )}
                 </li>
               );
             })}
           </ul>
         </section>
 
-        <section>
-          <SectionTitle className="flex items-center">
-            Yesterday&apos;s spending
-            <button className="btn-ghost ml-auto normal-case tracking-normal" onClick={() => setTab("finance")}>Finance →</button>
-          </SectionTitle>
-          <div className="mb-2 text-2xl font-semibold tabular-nums">{formatMoney(yTotal, cur)}</div>
+        <section className={section}>
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className={label}>Yesterday&apos;s spending</h3>
+            <button className={link} onClick={() => setTab("finance")}>Finance →</button>
+          </div>
+          <div className="text-3xl font-semibold tracking-tight tabular-nums">{formatMoney(yTotal, cur)}</div>
           {ySpend.length === 0 ? (
-            <p className="text-sm text-[var(--faint)]">No spending logged yesterday.</p>
+            <p className="mt-1 text-[var(--faint)]">Nothing logged yesterday.</p>
           ) : (
-            <ul className="space-y-1 text-sm">
-              {ySpend.slice(0, 6).map((t) => (
+            <ul className="-mx-2 mt-2">
+              {ySpend.slice(0, 5).map((t) => (
                 <li key={t.id}>
-                  <button className="flex w-full justify-between gap-2 rounded px-1 hover:bg-[var(--hover)]" onClick={() => openItem("transaction", t.id)}>
+                  <button className="flex w-full justify-between gap-3 rounded-lg px-2 py-1.5 hover:bg-[var(--hover)]" onClick={() => openItem("transaction", t.id)}>
                     <span className="truncate">{t.merchant} <span className="text-[var(--faint)]">· {t.category}</span></span>
-                    <span className="tabular-nums text-[var(--muted)]">{formatMoney(myShare(t, cur), cur)}</span>
+                    <span className="shrink-0 tabular-nums text-[var(--muted)]">{formatMoney(myShare(t, cur), cur)}</span>
                   </button>
                 </li>
               ))}
@@ -164,37 +200,71 @@ export default function TodayView({ setTab }: { setTab: (t: Tab) => void }) {
           )}
         </section>
 
-        <section>
-          <SectionTitle>Pinned stickies</SectionTitle>
-          {pinned.length === 0 ? (
-            <p className="text-sm text-[var(--faint)]">Pin a sticky (📌 on hover) to see it here.</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {pinned.map((s) => (
-                <div key={s.id} className="group relative w-40 rounded-md p-2 text-[13px] leading-snug shadow-[var(--shadow)]" style={{ background: `var(--sticky-${s.color})` }}>
-                  {s.text || <span className="text-[var(--faint)]">Empty</span>}
-                  <button className="absolute right-1 top-1 opacity-0 group-hover:opacity-100" onClick={() => updateSticky(s.id, { pinned: false })} aria-label="Unpin">
-                    <Icon name="x" size={12} />
+        <section className={section}>
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className={label}>Quick notes</h3>
+            {quick.length > 0 && <button className={link} onClick={() => setTab("notes")}>All notes →</button>}
+          </div>
+          <form onSubmit={(e) => { e.preventDefault(); saveQuick(); }}>
+            <textarea
+              id="quick-note-input"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); saveQuick(); } }}
+              rows={1}
+              placeholder="Write something down…"
+              aria-label="Quick note"
+              className="input-plain w-full resize-none border-b border-[var(--line)] pb-2 text-base [field-sizing:content] placeholder:text-[var(--faint)] focus:border-[var(--accent)]"
+            />
+            <p className="mt-1.5 text-xs text-[var(--faint)]">Enter to save · Shift+Enter for a new line. Today&apos;s notes go into the brief.</p>
+          </form>
+          {quick.length > 0 && (
+            <ul className="-mx-2 mt-3">
+              {quick.slice(0, 4).map((n) => (
+                <QuickRow key={n.id} id={n.id}>
+                  <button className="min-w-0 flex-1 truncate text-left" onClick={() => openItem("note", n.id)}>{n.title || n.content}</button>
+                  <span className="shrink-0 text-sm text-[var(--faint)]">{ago(n.createdAt)}</span>
+                  <button
+                    className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-[var(--faint)] opacity-0 hover:bg-[var(--hover)] hover:text-[var(--text)] focus:opacity-100 group-hover:opacity-100"
+                    onClick={() => remove("notes", n.id)}
+                    aria-label={`Delete “${n.title}”`}
+                  >
+                    <Icon name="x" size={14} />
                   </button>
-                </div>
+                </QuickRow>
               ))}
-            </div>
+            </ul>
           )}
         </section>
 
-        <section>
-          <SectionTitle>Heads-up</SectionTitle>
+        <section className={section}>
+          <div className="mb-3">
+            <h3 className={label}>Heads-up</h3>
+          </div>
           {alerts.length === 0 ? (
-            <p className="text-sm text-[var(--faint)]">All clear: budgets on track, no charges coming up.</p>
+            <p className="text-[var(--faint)]">All clear: budgets on track, no charges coming up.</p>
           ) : (
-            <ul className="space-y-1.5 text-sm">
-              {alerts.map((a) => (
-                <li key={a} className="flex gap-2"><Icon name="bell" size={14} className="mt-0.5 shrink-0 text-[var(--muted)]" />{a}</li>
-              ))}
+            <ul className="space-y-2">
+              {alerts.map((a) => <li key={a} className="leading-snug">{a}</li>)}
             </ul>
           )}
         </section>
       </div>
     </div>
   );
+}
+
+function QuickRow({ id, children }: { id: string; children: React.ReactNode }) {
+  const flash = useFiledFlash(id);
+  return <li className={`group flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-[var(--hover)] ${flash ? "fn-flash" : ""}`}>{children}</li>;
+}
+
+function ago(iso: string) {
+  const mins = Math.round((Date.now() - Date.parse(iso)) / 60_000);
+  if (mins < 1) return "now";
+  if (mins < 60) return `${mins}m`;
+  const h = Math.round(mins / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.round(h / 24);
+  return d < 7 ? `${d}d` : new Date(iso).toLocaleDateString("en-US", { day: "numeric", month: "short" });
 }

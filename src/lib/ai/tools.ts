@@ -43,6 +43,11 @@ export const ACTION_TOOLS = [
         dueAt: { type: ["string", "null"], description: "ISO 8601 datetime with offset, or null" },
         remindAt: { type: ["string", "null"], description: "ISO 8601 datetime with offset, or null" },
         priority: { type: "string", enum: ["low", "medium", "high"] },
+        status: {
+          type: "string",
+          enum: ["todo", "doing"],
+          description: "doing = the user is working on it right now (the board's Doing column). Default todo.",
+        },
         rrule,
         bill: {
           type: ["object", "null"],
@@ -57,6 +62,16 @@ export const ACTION_TOOLS = [
         noteRef: { type: "string", description: "ref of a note created in this same reply, to link the task to it" },
       },
       required: ["title"],
+    },
+  },
+  {
+    name: "start_todo",
+    description:
+      "Move an existing open task to the Doing column because the user says they are working on it now. Match by a distinctive part of its title.",
+    input_schema: {
+      type: "object",
+      properties: { titleContains: { type: "string" } },
+      required: ["titleContains"],
     },
   },
   {
@@ -114,7 +129,7 @@ export const ACTION_TOOLS = [
   },
   {
     name: "create_sticky",
-    description: "Pin a very short reminder (max ~15 words) to the sticky-notes bar at the top.",
+    description: "Save a very short jotting (max ~15 words) as a quick note on the Today page.",
     input_schema: {
       type: "object",
       properties: {

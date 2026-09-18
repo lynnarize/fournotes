@@ -39,7 +39,8 @@ export function validateActions(raw: unknown[]): AIAction[] {
   for (const a of raw) {
     const r = Action.safeParse(a);
     if (r.success) out.push(r.data as AIAction);
-    else console.warn("[ai] dropped invalid action", JSON.stringify(a).slice(0, 300), r.error.issues[0]?.message);
+    // Log the action type and the reason only, never its content (it may hold the user's text).
+    else console.warn("[ai] dropped invalid action", (a as { type?: unknown })?.type ?? "?", r.error.issues[0]?.message);
   }
   return out;
 }

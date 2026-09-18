@@ -258,6 +258,10 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                 </div>
               ))}
             </dl>
+            <p className="text-xs text-[var(--muted)]">
+              Full details: <a href="/privacy" className="text-[var(--accent)] underline">Privacy Policy</a> ·{" "}
+              <a href="/terms" className="text-[var(--accent)] underline">Terms of Service</a>
+            </p>
 
             <div className="space-y-2 rounded-lg border border-[var(--line)] p-3">
               <p className="font-medium">Sample data</p>

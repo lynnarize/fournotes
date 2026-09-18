@@ -259,6 +259,10 @@ export function GoogleSyncPanel() {
           </p>
         </div>
         <GoogleButton onClick={g.connect} />
+        <p className="text-[11px] leading-relaxed text-[var(--faint)]">
+          By connecting you agree to the <a href="/terms" className="underline hover:text-[var(--text)]">Terms</a> and{" "}
+          <a href="/privacy" className="underline hover:text-[var(--text)]">Privacy Policy</a>.
+        </p>
         {g.error && <p className="text-xs text-[var(--danger)]">{g.error}</p>}
       </div>
     );

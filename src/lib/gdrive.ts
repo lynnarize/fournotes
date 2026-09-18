@@ -38,6 +38,7 @@ export interface SyncCursor {
 
 export class NotConnectedError extends Error {}
 class DriveUnauthorizedError extends Error {}
+class DriveNotFoundError extends Error {}
 
 // ---- Auth (tokens come from this app's server; see src/app/api/google) ---------
 export const startGoogleConnect = () => window.location.assign("/api/google/start");
@@ -58,16 +59,44 @@ export async function disconnectGoogle() {
 async function drive(token: string, url: string, init: RequestInit = {}) {
   const res = await fetch(url, { ...init, headers: { Authorization: `Bearer ${token}`, ...(init.headers ?? {}) } });
   if (res.status === 401) throw new DriveUnauthorizedError("Google token expired");
-  if (res.status === 403) throw new Error("Google Drive access wasn't allowed. Disconnect, then connect again and allow Drive access.");
+  if (res.status === 403 || res.status === 429) throw new Error(await driveErrorMessage(res));
+  if (res.status === 404) throw new DriveNotFoundError("Google Drive file not found");
   if (!res.ok) throw new Error(`Google Drive error (${res.status})`);
   return res;
 }
 
-async function findFile(token: string): Promise<{ id: string; modifiedTime: string } | null> {
+/** Drive uses 403 for very different problems; only one of them is fixed by reconnecting. */
+async function driveErrorMessage(res: Response): Promise<string> {
+  const body = (await res.json().catch(() => ({}))) as { error?: { status?: string; errors?: { reason?: string }[] } };
+  const reason = body.error?.errors?.[0]?.reason ?? body.error?.status ?? "";
+  switch (reason) {
+    case "accessNotConfigured":
+    case "SERVICE_DISABLED":
+      // A setup problem on the app's side, not something the user can fix.
+      return "Google Drive isn't switched on for this app yet (the Google Drive API is disabled in its Google Cloud project). Try again later.";
+    case "insufficientPermissions":
+    case "ACCESS_TOKEN_SCOPE_INSUFFICIENT":
+      return "Google Drive access wasn't allowed. Disconnect, then connect again and tick the Google Drive permission.";
+    case "rateLimitExceeded":
+    case "userRateLimitExceeded":
+    case "RESOURCE_EXHAUSTED":
+      return "Google Drive is busy right now. Sync will try again in a minute.";
+    case "storageQuotaExceeded":
+      return "Your Google Drive is full, so sync can't save. Free up some space and try again.";
+    default:
+      return res.status === 429 ? "Google Drive is busy right now. Sync will try again in a minute." : `Google Drive refused the request (${reason || res.status}).`;
+  }
+}
+
+type DriveFile = { id: string; modifiedTime: string };
+
+/** Every copy of the sync file, newest first. Normally one; two devices (or tabs)
+ *  connecting at the same moment can each create one, and sync merges them back. */
+async function findFiles(token: string): Promise<DriveFile[]> {
   const q = encodeURIComponent(`name='${FILE_NAME}' and trashed=false`);
-  const res = await drive(token, `${DRIVE}?spaces=appDataFolder&q=${q}&fields=files(id,modifiedTime)&orderBy=modifiedTime%20desc&pageSize=1`);
-  const { files } = (await res.json()) as { files?: { id: string; modifiedTime: string }[] };
-  return files?.[0] ?? null;
+  const res = await drive(token, `${DRIVE}?spaces=appDataFolder&q=${q}&fields=files(id,modifiedTime)&orderBy=modifiedTime%20desc&pageSize=20`);
+  const { files } = (await res.json()) as { files?: DriveFile[] };
+  return files ?? [];
 }
 
 async function download(token: string, id: string): Promise<SyncPayload> {
@@ -99,10 +128,13 @@ async function upload(token: string, id: string | null, payload: SyncPayload): P
   return res.json();
 }
 
+const removeFile = (token: string, id: string) => drive(token, `${DRIVE}/${id}`, { method: "DELETE" });
+
 export async function deleteCloudFile(getToken: (force?: boolean) => Promise<string>) {
   const token = await getToken();
-  const file = await findFile(token);
-  if (file) await drive(token, `${DRIVE}/${file.id}`, { method: "DELETE" });
+  for (const file of await findFiles(token)) {
+    await removeFile(token, file.id).catch((e) => { if (!(e instanceof DriveNotFoundError)) throw e; });
+  }
 }
 
 // ---- Payload & merge -------------------------------------------------------------
@@ -199,7 +231,7 @@ export async function runDriveSync(opts: {
     }
   };
 
-  const file = await call(findFile);
+  const [file = null, ...extras] = await call(findFiles);
   let merged = toPayload(opts.local);
   let remoteSig = file ? opts.cursor.lastSig : undefined;
 
@@ -209,11 +241,27 @@ export async function runDriveSync(opts: {
     merged = merge(merged, remote);
     remoteSig = signature(remote);
   }
+  // Duplicates: fold their contents in too, so nothing written to them is lost.
+  // Another device may be cleaning them up at the same moment: a vanished one is fine.
+  const gone = (e: unknown) => {
+    if (!(e instanceof DriveNotFoundError)) throw e;
+  };
+  for (const extra of extras) {
+    const remote = await call((t) => download(t, extra.id)).catch((e) => gone(e));
+    if (!remote) continue;
+    opts.apply(remote);
+    merged = merge(merged, remote);
+  }
 
   const mergedSig = signature(merged);
+  let result: SyncCursor;
   if (file && mergedSig === remoteSig) {
-    return { fileId: file.id, lastModified: file.modifiedTime, lastSig: mergedSig };
+    result = { fileId: file.id, lastModified: file.modifiedTime, lastSig: mergedSig };
+  } else {
+    const saved = await call((t) => upload(t, file?.id ?? null, merged));
+    result = { fileId: saved.id, lastModified: saved.modifiedTime, lastSig: mergedSig };
   }
-  const saved = await call((t) => upload(t, file?.id ?? null, merged));
-  return { fileId: saved.id, lastModified: saved.modifiedTime, lastSig: mergedSig };
+  // Only after the merged copy is safely saved: remove the duplicates.
+  for (const extra of extras) await call((t) => removeFile(t, extra.id)).catch(gone);
+  return result;
 }

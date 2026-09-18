@@ -15,12 +15,15 @@ import { Icon, useToast } from "./ui";
 
 const KEY = "four-notes:onboarding";
 const STEP_KEY = "four-notes:onboarding-step";
+const START_EVT = "four-notes:onboarding-start";
 
 export const needsOnboarding = () => {
   try { return localStorage.getItem(KEY) === "pending"; } catch { return false; }
 };
+/** Opens the wizard straight away — no reload, which would fight the back stack. */
 export const startOnboarding = () => {
   try { localStorage.setItem(KEY, "pending"); localStorage.setItem(STEP_KEY, "0"); } catch { /* storage blocked */ }
+  window.dispatchEvent(new Event(START_EVT));
 };
 const finishOnboarding = () => {
   try { localStorage.setItem(KEY, "done"); localStorage.removeItem(STEP_KEY); } catch { /* storage blocked */ }
@@ -49,6 +52,13 @@ export default function Onboarding() {
     setStep(returned ? 3 : Number.isFinite(saved) ? Math.min(Math.max(saved, 0), STEPS.length - 1) : 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store.ready]);
+
+  // "Run first-time setup again" from Settings.
+  useEffect(() => {
+    const onStart = () => { setStep(0); setOpen(true); };
+    window.addEventListener(START_EVT, onStart);
+    return () => window.removeEventListener(START_EVT, onStart);
+  }, []);
 
   useEffect(() => {
     if (open) fetch("/api/ai/status").then((r) => r.json()).then(setServer).catch(() => {});

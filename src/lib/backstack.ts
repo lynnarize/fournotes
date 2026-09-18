@@ -110,8 +110,12 @@ export function useTabHistory(tab: string, setTab: (tab: string) => void) {
       setRef.current(t);
     };
     enqueue(() => {
-      const state = history.state as { fnTab?: string } | null;
-      if (!state?.fnTab) history.replaceState({ ...(state ?? {}), fnTab: shown.current }, "");
+      // A reload can land on an entry left over from a layer that no longer exists:
+      // relabel it as this tab so back still means something.
+      const state = history.state as { fnTab?: string; fnLayer?: string } | null;
+      if (!state?.fnTab || state.fnLayer) {
+        history.replaceState({ ...(state ?? {}), fnLayer: undefined, fnTab: shown.current }, "");
+      }
     });
     return () => { tabHandler = null; };
   }, []);

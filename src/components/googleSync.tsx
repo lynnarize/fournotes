@@ -120,7 +120,10 @@ export function GoogleSyncProvider({ children }: { children: ReactNode }) {
     running.current = true;
     setStatus("syncing");
     try {
-      const cursor = await runDriveSync({
+      // One sync at a time across this browser's tabs, so two tabs can't both create the file.
+      const locked = async <T,>(fn: () => Promise<T>): Promise<T> =>
+        navigator.locks ? await navigator.locks.request("four-notes-drive-sync", fn) : fn();
+      const cursor = await locked(() => runDriveSync({
         getToken,
         local: storeRef.current.all,
         cursor: current,
@@ -132,7 +135,7 @@ export function GoogleSyncProvider({ children }: { children: ReactNode }) {
           s.mergeRemote("stickies", remote.stickies);
           s.mergeSettings(remote.settings);
         },
-      });
+      }));
       if (savedRef.current?.email === current.email) setSaved({ ...current, ...cursor });
       setLast(new Date().toISOString());
       setError(null);

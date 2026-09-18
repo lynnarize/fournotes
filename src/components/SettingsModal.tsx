@@ -127,7 +127,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
             </label>
             <button
               className="justify-self-start rounded-md border border-[var(--line)] px-3 py-1.5 text-sm hover:bg-[var(--hover)] sm:col-span-2 sm:justify-self-auto sm:w-fit"
-              onClick={() => { startOnboarding(); onClose(); window.location.reload(); }}
+              onClick={() => { onClose(); startOnboarding(); }}
             >
               Run first-time setup again
             </button>

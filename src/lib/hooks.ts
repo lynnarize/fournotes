@@ -60,3 +60,33 @@ export function usePresence(open: boolean, ms = 200) {
 }
 
 export const isMac = () => typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+
+/**
+ * The current time, refreshed every minute and when the app comes back into view, so
+ * anything time-based (like Today's greeting) doesn't go stale while the app stays open.
+ */
+export function useNow(everyMs = 60_000) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const tick = () => setNow(new Date());
+    const id = setInterval(tick, everyMs);
+    const onShow = () => document.visibilityState === "visible" && tick();
+    document.addEventListener("visibilitychange", onShow);
+    window.addEventListener("focus", tick);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onShow);
+      window.removeEventListener("focus", tick);
+    };
+  }, [everyMs]);
+  return now;
+}
+
+/** Greeting for the device's local time: 5–11 morning, 12–16 afternoon, 17–23 evening, 0–4 late night. */
+export function greetingFor(d: Date) {
+  const h = d.getHours();
+  if (h >= 5 && h < 12) return "Good Morning";
+  if (h >= 12 && h < 17) return "Good Afternoon";
+  if (h >= 17) return "Good Evening";
+  return "Up late?";
+}

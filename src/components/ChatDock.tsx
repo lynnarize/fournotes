@@ -167,7 +167,7 @@ export default function ChatDock({ minimized = false }: { minimized?: boolean })
       <>
         <button
           onClick={() => reveal(true)}
-          className="no-print fn-pop fn-press fixed bottom-[calc(env(safe-area-inset-bottom)+16px)] right-4 z-40 grid h-14 w-14 place-items-center rounded-full bg-[var(--accent)] text-white shadow-[0_6px_20px_rgba(0,0,0,0.22)] md:right-6"
+          className="no-print fn-pop fn-press fixed bottom-[calc(env(safe-area-inset-bottom)+16px)] right-4 z-[46] grid h-14 w-14 place-items-center rounded-full bg-[var(--accent)] text-white shadow-[0_6px_20px_rgba(0,0,0,0.22)] md:right-6"
           aria-label={unread ? "Open assistant (new reply)" : "Open assistant"}
           title="Assistant"
         >
@@ -184,7 +184,8 @@ export default function ChatDock({ minimized = false }: { minimized?: boolean })
     <div
       data-state="open"
       className={`no-print pointer-events-none px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-2 sm:px-4 ${
-        minimized ? "fn-sheet fixed inset-x-0 bottom-0 z-40 md:left-60" : "sticky bottom-0 z-20"
+        // Above full-screen notes and tasks (z-45), so it opens there too.
+        minimized ? "fn-sheet fixed inset-x-0 bottom-0 z-[47] md:left-60" : "sticky bottom-0 z-20"
       }`}
     >
       <div className="pointer-events-auto mx-auto max-w-4xl overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--bg)] shadow-[var(--shadow)]">

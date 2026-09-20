@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { looksLikeThinking } from "@/lib/ai/text";
 import { api } from "@/lib/client";
-import { useOnline } from "@/lib/hooks";
+import { greetingFor, useNow, useOnline } from "@/lib/hooks";
 import { budgetStatus, detectSubscriptions, myShare, owedToMe } from "@/lib/insights";
 import { useFiledFlash } from "@/lib/highlight";
 import { openItem } from "@/lib/nav";
@@ -91,8 +91,8 @@ export default function TodayView({ setTab }: { setTab: (t: Tab) => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [brief, online]);
 
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good Morning" : hour < 18 ? "Good Afternoon" : "Good Evening";
+  // Updates on its own while the app stays open (see useNow).
+  const greeting = greetingFor(useNow());
   const firstName = settings.name?.trim().split(/\s+/)[0];
 
   // Stickies are gone: any left from before become quick notes, once.

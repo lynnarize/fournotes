@@ -125,10 +125,6 @@ export default function Sidebar({ tab, setTab, onClose, onSearch, onSettings }: 
         <button className="touch-row flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[var(--muted)] hover:bg-[var(--hover)]" onClick={() => { onSettings(); onClose?.(); }}>
           <Icon name="settings" /> Settings
         </button>
-        <div className="flex gap-3 px-2 pt-1 text-[11px] text-[var(--faint)]">
-          <a href="/privacy" className="hover:text-[var(--text)] hover:underline">Privacy</a>
-          <a href="/terms" className="hover:text-[var(--text)] hover:underline">Terms</a>
-        </div>
       </div>
     </nav>
   );

@@ -333,6 +333,17 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
             <Icon name="coffee" size={16} /> Buy me a coffee
           </a>
         </div>
+
+        {/* Legal pages (moved here from the sidebar) */}
+        <nav aria-label="Legal" className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 pt-1 text-sm text-[var(--muted)]">
+          <a href="/privacy" className="inline-flex min-h-10 items-center gap-1.5 hover:text-[var(--text)] hover:underline">
+            <Icon name="shield" size={14} /> Privacy Policy
+          </a>
+          <span aria-hidden className="text-[var(--faint)]">·</span>
+          <a href="/terms" className="inline-flex min-h-10 items-center gap-1.5 hover:text-[var(--text)] hover:underline">
+            <Icon name="note" size={14} /> Terms of Service
+          </a>
+        </nav>
       </div>
     </Modal>
   );

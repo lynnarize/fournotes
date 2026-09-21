@@ -3,7 +3,7 @@
 // alerts (budgets, subscriptions, money owed) and a 3-line AI summary.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { looksLikeThinking } from "@/lib/ai/text";
-import { api } from "@/lib/client";
+import { api, localIso } from "@/lib/client";
 import { greetingFor, useNow, useOnline } from "@/lib/hooks";
 import { budgetStatus, detectSubscriptions, myShare, owedToMe } from "@/lib/insights";
 import { useFiledFlash } from "@/lib/highlight";
@@ -63,7 +63,7 @@ export default function TodayView({ setTab }: { setTab: (t: Tab) => void }) {
     try {
       const now = new Date();
       const input: BriefInput = {
-        now: now.toISOString(),
+        now: localIso(now),
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         currency: cur,
         name: settings.name,

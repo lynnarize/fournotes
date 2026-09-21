@@ -85,9 +85,11 @@ export class AnthropicProvider implements LLMProvider {
             {
               type: "text",
               text:
-                "Read this image (OCR). Decide if it is a receipt (including e-wallet / m-banking payment screenshots), " +
-                "handwritten/typed note, a to-do list, or other, then call file_capture. For notes, transcribe faithfully and tidy formatting. " +
-                "For receipts, extract merchant, grand total, date, category and line items. 'Rp 25.000' means 25000.",
+                "Read this image (OCR). Decide if it is a receipt (including e-wallet / m-banking payment screenshots), a ticket or booking " +
+                "(train, bus, flight, event, hotel, appointment), a handwritten/typed note, a to-do list, or other, then call file_capture. " +
+                "For notes, transcribe faithfully and tidy formatting. For receipts, extract merchant, grand total, date, category and line items. " +
+                "For a ticket, put the booking details in `note` AND add a todo whose dueAt is the departure/start date and time, copied exactly as printed " +
+                "(local time with the user's offset, never converted to UTC; if the year is missing use the next occurrence of that date). 'Rp 25.000' means 25000.",
             },
           ],
         },

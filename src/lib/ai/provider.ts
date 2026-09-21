@@ -57,6 +57,29 @@ export const isCompleteReceipt = (input: Record<string, unknown>) => {
 };
 
 // Convert the forced `file_capture` tool output into app actions.
+/**
+ * Models sometimes repeat the same task (once with a time, once without). Keep one per
+ * title, preferring the copy that has a date.
+ */
+function dedupeTodos<T extends { title?: string; dueAt?: string | null }>(todos: T[]): T[] {
+  const byTitle = new Map<string, T>();
+  for (const t of todos) {
+    const key = (t.title ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+    if (!key) continue;
+    const seen = byTitle.get(key);
+    if (!seen || (!seen.dueAt && t.dueAt)) byTitle.set(key, t);
+  }
+  return [...byTitle.values()];
+}
+
+/** `iso` minus `h` hours, keeping it a valid ISO string; null when there is no time. */
+function hoursBefore(iso: string | null | undefined, h: number): string | null {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return null;
+  return new Date(t - h * 3_600_000).toISOString();
+}
+
 export function captureToActions(input: Record<string, unknown>, ctx: ClientContext): CaptureResult {
   const kind = (input.kind as CaptureResult["kind"]) ?? "other";
   const actions: unknown[] = [];
@@ -84,9 +107,11 @@ export function captureToActions(input: Record<string, unknown>, ctx: ClientCont
   }
 
   if (note) actions.push({ type: "create_note", title: note.title, content: note.content, tags: note.tags, ref: "capture" });
-  for (const t of todos) {
+  for (const t of dedupeTodos(todos)) {
+    // Tickets: remind a couple of hours before departure, not at departure.
+    const remindAt = kind === "ticket" ? hoursBefore(t.dueAt, 2) : t.dueAt ?? null;
     actions.push({
-      type: "create_todo", title: t.title, dueAt: t.dueAt ?? null, remindAt: t.dueAt ?? null, priority: t.priority,
+      type: "create_todo", title: t.title, dueAt: t.dueAt ?? null, remindAt, priority: kind === "ticket" ? "high" : t.priority,
       rrule: t.rrule ?? null, noteRef: note ? "capture" : undefined,
     });
   }
@@ -99,7 +124,8 @@ Always reply in English, even when the user writes in Indonesian or another lang
 Understand Indonesian input and amount shorthand: "rb"/"k" = thousand, "jt"/"M" = million.
 
 When the user wants something saved, call the matching tool instead of only describing it:
-- tasks / reminders -> create_todo (convert relative dates to absolute ISO time in the user's timezone)
+- tasks / reminders -> create_todo. Times: "Current time" below is already the user's local time with their UTC offset. Copy times exactly as the user (or a ticket, invitation or screenshot) states them and keep that same offset — NEVER convert to UTC and never shift the clock. A departure at 20:15 must be written "...T20:15:00" with the user's offset, not 13:15 and not "Z".
+- travel or appointment bookings (train, bus, flight, hotel, doctor) -> create_todo with dueAt = departure/start time and remindAt about 2 hours earlier, plus create_note with the booking details
 - what the user is doing right now ("I'm doing chores", "working on the report now", "lagi nyuci") -> start_todo when it matches an open task in <user_data> todos, otherwise create_todo with status "doing". Finished something -> complete_todo.
 - repeating tasks and bills ("pay rent on the 5th of every month", "Netflix every month") -> create_todo with rrule, plus bill {amount, category} when it costs money
 - spending or income ("coffee 25k", "paid 150k for gas") -> add_transaction
@@ -116,7 +142,7 @@ export function dynamicContext(ctx: ClientContext) {
   const relevant = ctx.relevantNotes?.length
     ? `\n<relevant_notes>\n${ctx.relevantNotes.map((n) => `## ${n.title} (edited ${n.updatedAt.slice(0, 10)})\n${n.content}`).join("\n\n")}\n</relevant_notes>`
     : "";
-  return `Current time: ${ctx.now} (user timezone: ${ctx.timezone}). Default currency: ${ctx.currency}.
+  return `Current local time: ${ctx.now} (timezone ${ctx.timezone}; the offset in that timestamp is the user's). Default currency: ${ctx.currency}.
 <user_data>
 ${JSON.stringify({ notes: ctx.notes, todos: ctx.todos, transactions: ctx.transactions, budgets: ctx.budgets ?? {}, categories: ctx.categories ?? [] })}
 </user_data>${relevant}`;

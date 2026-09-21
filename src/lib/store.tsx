@@ -27,6 +27,7 @@ import type {
   Todo,
   Transaction,
 } from "./types";
+import { localIso } from "./client";
 import { quickNote } from "./quickNote";
 
 // ---------------------------------------------------------------------------
@@ -472,7 +473,7 @@ export function StoreProvider({ children, adapter = localAdapter }: { children: 
         const live = <T extends { deletedAt?: string | null; spaceId?: string | null }>(xs: T[]) =>
           xs.filter((x) => !x.deletedAt && (x.spaceId ?? null) === d.currentSpaceId);
         return {
-          now: new Date().toISOString(),
+          now: localIso(),
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           currency: d.settings.currency,
           notes: live(d.notes).slice(0, 30).map((n) => ({ title: n.title, snippet: n.content.slice(0, 240) })),

@@ -155,3 +155,18 @@ export function toLocalInput(iso?: string | null) {
   const d = new Date(iso);
   return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
 }
+
+/**
+ * The local wall-clock time with the device's UTC offset: 2026-09-25T20:15:00+07:00.
+ * The models get times in this shape (never "…Z"), so they never shift the clock when
+ * they copy a time out of a ticket or a sentence.
+ */
+export function localIso(d = new Date()) {
+  const p = (n: number) => String(n).padStart(2, "0");
+  const off = -d.getTimezoneOffset();
+  const sign = off >= 0 ? "+" : "-";
+  return (
+    `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}` +
+    `${sign}${p(Math.floor(Math.abs(off) / 60))}:${p(Math.abs(off) % 60)}`
+  );
+}

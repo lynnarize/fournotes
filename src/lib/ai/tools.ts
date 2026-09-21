@@ -40,8 +40,8 @@ export const ACTION_TOOLS = [
       properties: {
         title: { type: "string" },
         notes: { type: "string" },
-        dueAt: { type: ["string", "null"], description: "ISO 8601 datetime with offset, or null" },
-        remindAt: { type: ["string", "null"], description: "ISO 8601 datetime with offset, or null" },
+        dueAt: { type: ["string", "null"], description: "ISO 8601 in the user's LOCAL time with their UTC offset, e.g. 2026-09-25T20:15:00+07:00. Never convert to UTC. Null if there is no date." },
+        remindAt: { type: ["string", "null"], description: "Same format as dueAt. For travel bookings, about 2 hours before dueAt." },
         priority: { type: "string", enum: ["low", "medium", "high"] },
         status: {
           type: "string",
@@ -151,14 +151,16 @@ export const FILE_CAPTURE_TOOL = {
     properties: {
       kind: {
         type: "string",
-        enum: ["receipt", "handwritten_note", "todo_list", "other"],
+        enum: ["receipt", "ticket", "handwritten_note", "todo_list", "other"],
         description:
-          "receipt = store receipt / invoice / payment proof / e-wallet or bank app screenshot (GoPay, OVO, DANA, QRIS, m-banking). handwritten_note = handwriting or typed notes. todo_list = a checklist of tasks. other = anything else.",
+          "receipt = store receipt / invoice / payment proof / e-wallet or bank app screenshot (GoPay, OVO, DANA, QRIS, m-banking). " +
+          "ticket = a booking or reservation with a date and time: train, bus, flight or ferry ticket, boarding pass, event ticket, hotel or appointment confirmation. " +
+          "handwritten_note = handwriting or typed notes. todo_list = a checklist of tasks. other = anything else.",
       },
       reply: { type: "string", description: "One friendly sentence telling the user where it was filed." },
       note: {
         type: "object",
-        description: "For handwritten_note, other, or recordings: transcribed/summarized note.",
+        description: "For handwritten_note, ticket, other, or recordings: transcribed/summarized note. For a ticket, put the booking details here (route, seat, class, times, booking code).",
         properties: {
           title: { type: "string" },
           content: { type: "string" },
@@ -181,12 +183,20 @@ export const FILE_CAPTURE_TOOL = {
       },
       todos: {
         type: "array",
-        description: "Tasks / action items found (checklists, or action items in a recording). Never put receipt line items here; they go in receipt.items.",
+        description:
+          "Tasks / action items found (checklists, or action items in a recording). " +
+          "ALWAYS add one for a ticket, with dueAt filled in: title like 'Take the 20:15 train to Jakarta', dueAt = departure/start date and time. " +
+          "Also add one for anything else with a deadline in the image (appointment, bill due date). Never put receipt line items here; they go in receipt.items.",
         items: {
           type: "object",
           properties: {
             title: { type: "string" },
-            dueAt: { type: ["string", "null"] },
+            dueAt: {
+              type: ["string", "null"],
+              description:
+                "ISO 8601 in the user's LOCAL time with their UTC offset (e.g. 2026-09-25T20:15:00+07:00). Copy the time shown; never convert to UTC. " +
+                "REQUIRED for a ticket: use the departure/start date and time. If the year is not printed, use the next occurrence of that date after the current local time.",
+            },
             priority: { type: "string", enum: ["low", "medium", "high"] },
             rrule,
           },

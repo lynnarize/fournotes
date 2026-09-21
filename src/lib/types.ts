@@ -180,7 +180,7 @@ export interface ChatResponse {
 }
 
 export interface CaptureResult {
-  kind: "receipt" | "handwritten_note" | "todo_list" | "other";
+  kind: "receipt" | "ticket" | "handwritten_note" | "todo_list" | "other";
   reply: string;
   actions: AIAction[];
   demo?: boolean;

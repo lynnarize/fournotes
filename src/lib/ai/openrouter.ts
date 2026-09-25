@@ -43,10 +43,42 @@ const safeJson = (text: string): Record<string, unknown> | null => {
   } catch {
     // Some models wrap JSON in prose or ``` fences.
     const match = text.match(/\{[\s\S]*\}/);
-    if (!match) return null;
-    try { return JSON.parse(match[0]) as Record<string, unknown>; } catch { return null; }
+    if (match) {
+      try { return JSON.parse(match[0]) as Record<string, unknown>; } catch { /* fall through */ }
+    }
+    // Or the answer ran out of tokens mid-JSON: close what is open and keep the fields we got.
+    try { return JSON.parse(closeJson(text)) as Record<string, unknown>; } catch { return null; }
   }
 };
+
+/** Close a JSON object that was cut off part-way, dropping the half-written last field. */
+function closeJson(text: string): string {
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+  for (const ch of text) {
+    if (escaped) { escaped = false; continue; }
+    if (inString) {
+      if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{" || ch === "[") stack.push(ch);
+    else if (ch === "}" || ch === "]") stack.pop();
+  }
+  let out = text.trimEnd();
+  if (inString) out += '"';
+  out = out.replace(/,\s*$/, "");                       // dangling comma
+  out = out.replace(/,?\s*"[^"]*"\s*:\s*$/, "");        // a key with no value yet
+  out = out.replace(/,\s*"[^"]*"\s*$/, "");             // a key that was cut off mid-name
+  while (stack.length) out += stack.pop() === "{" ? "}" : "]";
+  return out;
+}
+
+/** One entry per thing the model asks for, so a repeated call in a later turn isn't filed twice. */
+const actionKey = (a: Record<string, unknown>) =>
+  [a.type, a.title ?? a.text ?? a.merchant ?? a.titleContains ?? a.category ?? ""].join(":").toLowerCase().replace(/\s+/g, " ").trim();
 
 const TOOL_NAMES = [...ACTION_TOOLS, FILE_CAPTURE_TOOL].map((t) => t.name);
 const PLANNING = new RegExp(`\\b(${TOOL_NAMES.join("|")}|dueAt|remindAt|tool_calls?|function call)\\b`, "i");
@@ -171,14 +203,15 @@ export class OpenRouterProvider implements LLMProvider {
     return local();
   }
 
-  async chat(history: ChatMessage[], ctx: ClientContext): Promise<ChatResponse> {
+  async chat(history: ChatMessage[], ctx: ClientContext, opts?: { tools?: boolean }): Promise<ChatResponse> {
     const base: Msg[] = [
       { role: "system", content: `${STATIC_INSTRUCTIONS}\n\n${dynamicContext(ctx)}` },
       ...history.slice(-20).map((m) => ({ role: m.role, content: m.content })),
     ];
-    let out = await this.chatLoop(base, "auto");
+    const tools = opts?.tools !== false;
+    let out = await this.chatLoop(base, tools ? "auto" : null);
     // Some free models describe the tool call in prose instead of making it: insist once.
-    if (!out.raw.length && looksLikePlanning(out.reply)) {
+    if (tools && !out.raw.length && looksLikePlanning(out.reply)) {
       out = await this.chatLoop(base, "required").catch(() => out);
     }
     const actions = validateActions(out.raw);
@@ -187,19 +220,20 @@ export class OpenRouterProvider implements LLMProvider {
     return { reply, actions };
   }
 
-  private async chatLoop(start: Msg[], firstChoice: "auto" | "required") {
+  /** `firstChoice` null: no tools at all. */
+  private async chatLoop(start: Msg[], firstChoice: "auto" | "required" | null) {
     const messages = [...start];
     const raw: unknown[] = [];
     let reply = "";
 
+    const seen = new Set<string>();
     for (let turn = 0; turn < 3; turn++) {
       const res = await this.complete({
         model: this.model,
-        max_tokens: 2048, // reasoning models spend part of this thinking
+        max_tokens: 4096, // reasoning models spend part of this thinking, and tools must still fit
         messages,
-        tools: toOpenAiTools(ACTION_TOOLS),
         // "required" only on the first turn, or the model could never stop calling tools.
-        tool_choice: turn === 0 ? firstChoice : "auto",
+        ...(firstChoice ? { tools: toOpenAiTools(ACTION_TOOLS), tool_choice: turn === 0 ? firstChoice : "auto" } : {}),
       });
       const message = res.choices?.[0]?.message;
       const text = cleanText(message?.content ?? "");
@@ -209,7 +243,16 @@ export class OpenRouterProvider implements LLMProvider {
       if (!calls.length) break;
       for (const call of calls) {
         const args = safeJson(call.function.arguments || "{}");
-        if (args) raw.push({ type: call.function.name, ...args });
+        if (!args) {
+          // Never lose a request silently: the user is told the app saved it.
+          console.warn("[ai] could not read the arguments of", call.function.name, `(${(call.function.arguments ?? "").length} chars)`);
+          continue;
+        }
+        const action = { type: call.function.name, ...args };
+        const key = actionKey(action);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        raw.push(action);
       }
       messages.push({ role: "assistant", content: message?.content ?? "", tool_calls: calls });
       for (const call of calls) messages.push({ role: "tool", tool_call_id: call.id, content: "saved" });

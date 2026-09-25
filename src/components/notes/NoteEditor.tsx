@@ -125,7 +125,74 @@ function TB({ icon, label, onClick, active, disabled, className = "" }: {
   );
 }
 
-const Divider = () => <span className="mx-1 h-6 w-px shrink-0 bg-[var(--line)]" aria-hidden />;
+/** Where a note came from, when it wasn't typed here. */
+const SOURCE_NAME: Partial<Record<Note["source"], string>> = {
+  chat: "Written by the assistant", ocr: "Scanned", recording: "Voice recording", share: "Shared",
+};
+
+/** A hairline between the editor's sections, inset to the content. */
+const Rule = () => <div className="mx-5 h-px shrink-0 bg-[var(--line)] md:mx-9" aria-hidden />;
+
+/** A run of related tools that wraps as one piece. */
+const Group = ({ children }: { children: React.ReactNode }) => <div className="flex shrink-0 items-center gap-0.5">{children}</div>;
+
+const TOOLBAR_KEY = "four-notes:toolbar-expanded";
+
+/**
+ * The formatting tools on one line; the chevron at its end shows the rest on lines below,
+ * and hides them again. It is only there when they don't all fit.
+ */
+function Toolbar({ children }: { children: React.ReactNode }) {
+  const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    try { setExpanded(localStorage.getItem(TOOLBAR_KEY) === "1"); } catch { /* storage blocked */ }
+  }, []);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // Wrapped onto a second line means some tools are out of sight while collapsed.
+    const check = () => {
+      const kids = [...el.children] as HTMLElement[];
+      setOverflows(kids.some((k) => k.offsetTop > kids[0].offsetTop + 4));
+    };
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const toggle = () => {
+    setExpanded((v) => {
+      try { localStorage.setItem(TOOLBAR_KEY, v ? "0" : "1"); } catch { /* storage blocked */ }
+      return !v;
+    });
+  };
+  return (
+    <div className="relative shrink-0 px-2 py-1 md:px-5">
+      <div
+        ref={ref}
+        className={`flex flex-wrap items-center gap-x-2.5 gap-y-1 overflow-hidden transition-[max-height] duration-300 ${overflows ? "pr-11" : ""}`}
+        style={{ maxHeight: expanded ? 400 : 44 }}
+      >
+        {children}
+      </div>
+      {overflows && (
+        <button
+          type="button"
+          onMouseDown={keep}
+          onClick={toggle}
+          aria-expanded={expanded}
+          aria-label={expanded ? "Show fewer tools" : "Show all tools"}
+          title={expanded ? "Show fewer tools" : "Show all tools"}
+          className="tb-btn absolute right-2 top-1 bg-[var(--bg)] md:right-5"
+        >
+          <Icon name="chevronDown" size={16} className={`transition-transform duration-300 ${expanded ? "rotate-180" : ""}`} />
+        </button>
+      )}
+    </div>
+  );
+}
 
 export default function NoteEditor({ note, onBack, listHidden, onToggleList, focusMode, onToggleFocus, anim, onAnimDone }: {
   note: Note;
@@ -497,15 +564,17 @@ export default function NoteEditor({ note, onBack, listHidden, onToggleList, foc
   };
 
   const duplicate = () => {
-    const copyNote = store.addNote({ title: `${note.title || "Untitled"} (copy)`, content: plain(), html: editor?.getHTML(), tags: [...note.tags] });
+    const copyNote = store.addNote({ title: note.title.trim() ? `${note.title} copy` : "Untitled copy", content: plain(), html: editor?.getHTML(), tags: [...note.tags], source: note.source, imageDataUrl: note.imageDataUrl });
     openItem("note", copyNote.id);
-    toast("Duplicated");
+    toast("Note duplicated");
   };
 
+  // No "are you sure?": the toast offers Undo instead, as the macOS app does.
   const del = () => {
-    if (!window.confirm(`Delete “${note.title || "Untitled"}”?`)) return;
-    store.remove("notes", note.id);
-    toast("Note deleted");
+    const id = note.id;
+    if (focusMode) onToggleFocus();
+    store.remove("notes", id);
+    toast("Note deleted", "ok", { label: "Undo", run: () => { storeRef.current.updateNote(id, { deletedAt: null }); openItem("note", id); } });
     onBack?.();
   };
 
@@ -515,12 +584,18 @@ export default function NoteEditor({ note, onBack, listHidden, onToggleList, foc
     setTagDraft(null);
   };
 
-  const setReminder = (value: string) => {
-    const at = new Date(value);
+  const setReminder = (at: Date) => {
     if (Number.isNaN(at.getTime())) return;
     store.addTodo({ title: note.title || "Look at this note", noteId: note.id, dueAt: at.toISOString(), remindAt: at.toISOString() });
     toast(`⏰ Reminder set for ${fmtDateTime(at.toISOString())}`);
   };
+  /** In an hour; or a day or a week from now, at 9:00. */
+  const remindIn = (hours: number) => {
+    const at = new Date(Date.now() + hours * 3_600_000);
+    if (hours >= 24) at.setHours(9, 0, 0, 0);
+    setReminder(at);
+  };
+  const [pickReminder, setPickReminder] = useState(false);
 
   const linkedTodos = alive(store.todos).filter((t) => t.noteId === note.id);
   const linkedTxs = alive(store.transactions).filter((t) => t.noteId === note.id);
@@ -533,25 +608,27 @@ export default function NoteEditor({ note, onBack, listHidden, onToggleList, foc
   })();
   const fontLabel = FONTS.find((f) => f.value === (ui?.font ?? ""))?.label ?? "Custom";
   const textStyleLabel = ui?.heading ? `Heading ${ui.heading}` : ui?.quote ? "Quote" : ui?.code ? "Code" : "Normal text";
+  const stamp = (iso: string) => new Date(iso).toLocaleString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+  const column = `mx-auto w-full ${focusMode ? "max-w-[800px]" : "max-w-[760px] md:mx-0"}`;
 
   return (
     <div
       data-anim={anim}
       onAnimationEnd={(e) => { if (e.target === e.currentTarget) onAnimDone?.(); }}
       className={`note-card flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--bg)] ${
-        focusMode ? "fixed inset-0 z-[45] pt-[env(safe-area-inset-top)]" : "rounded-2xl border border-[var(--line)] md:shadow-[var(--shadow)]"
+        focusMode ? "fixed inset-0 z-[45] pt-[env(safe-area-inset-top)]" : ""
       }`}
     >
       {/* Header */}
-      <div className="flex shrink-0 items-center gap-1 px-2 pt-2 md:px-4 md:pt-3">
+      <div className="flex shrink-0 items-center gap-1 px-2 pb-2 pt-2 md:px-6 md:pt-3">
         {onBack ? (
           <button className="tb-btn gap-1 pr-2" onClick={onBack} aria-label="Back to notes">
             <Icon name="chevronLeft" size={20} /> <span className="text-sm">Notes</span>
           </button>
         ) : (
-          onToggleList && <TB icon={listHidden ? "collapseRight" : "collapseLeft"} label={listHidden ? "Show note list" : "Hide note list"} onClick={onToggleList} />
+          onToggleList && !focusMode && <TB icon={listHidden ? "collapseRight" : "collapseLeft"} label={listHidden ? "Show note list" : "Hide note list"} onClick={onToggleList} />
         )}
-        <TB icon={focusMode ? "shrink" : "expand"} label={focusMode ? "Exit focus mode" : "Focus mode"} onClick={onToggleFocus} />
+        <TB icon={focusMode ? "shrink" : "expand"} label={focusMode ? "Exit focus mode (Esc)" : "Focus mode"} onClick={onToggleFocus} />
         <span className="mx-1 hidden h-6 w-px bg-[var(--line)] sm:block" aria-hidden />
         <nav className="hidden min-w-0 flex-1 items-center gap-1.5 truncate text-sm text-[var(--muted)] sm:flex" aria-label="Breadcrumb">
           <span>Notes</span>
@@ -559,15 +636,15 @@ export default function NoteEditor({ note, onBack, listHidden, onToggleList, foc
           <span className="truncate text-[var(--text)]">{note.title || "Untitled"}</span>
         </nav>
         <div className="ml-auto flex items-center gap-1">
-          <div className="flex overflow-hidden rounded-lg bg-[var(--accent)] text-white">
-            <button className="flex min-h-9 items-center gap-1.5 px-3 text-sm font-medium hover:brightness-110" onClick={share}>
+          <div className="flex overflow-hidden rounded-[10px] bg-[var(--accent)] text-white">
+            <button className="flex min-h-8 items-center gap-1.5 px-3 text-sm font-medium hover:brightness-110" onClick={share}>
               <Icon name="share" size={15} /> Share
             </button>
-            <button className="grid min-h-9 w-9 place-items-center border-l border-white/25 hover:brightness-110" onClick={copy} aria-label="Copy note text" title="Copy note text">
+            <button className="grid min-h-8 w-8 place-items-center border-l border-white/25 hover:brightness-110" onClick={copy} aria-label="Copy note text" title="Copy note text">
               <Icon name="copy" size={15} />
             </button>
           </div>
-          <Dropdown label="More actions" button={<Icon name="more" size={20} />} width={220}>
+          <Dropdown label="More actions" button={<Icon name="more" size={20} />} width={220} align="right" chevron={false}>
             {(close) => (
               <>
                 <MenuItem icon="copy" label="Duplicate" onSelect={() => { close(); duplicate(); }} />
@@ -583,10 +660,11 @@ export default function NoteEditor({ note, onBack, listHidden, onToggleList, foc
           </Dropdown>
         </div>
       </div>
+      <Rule />
 
-      {/* Toolbar */}
-      <div className="note-toolbar scroll-thin flex shrink-0 items-center gap-0.5 overflow-x-auto border-b border-[var(--line)] bg-[var(--bg)] px-2 py-1.5 md:px-4">
-        <Dropdown label="Insert" button={<span className="grid h-6 w-6 place-items-center rounded-full bg-[var(--accent)] text-white"><Icon name="plus" size={15} /></span>} width={230}>
+      {/* Toolbar: the groups run from the most used to the least, on one line unless expanded. */}
+      <Toolbar>
+        <Dropdown label="Insert" chevron={false} button={<span className="grid h-6 w-6 place-items-center rounded-full bg-[var(--accent)] text-white"><Icon name="plus" size={15} /></span>} width={230}>
           {(close) => (
             <>
               <MenuItem icon="checklist" label="Checklist" onSelect={() => { close(); chain().toggleTaskList().run(); }} />
@@ -596,20 +674,56 @@ export default function NoteEditor({ note, onBack, listHidden, onToggleList, foc
               <MenuItem icon="code" label="Code block" onSelect={() => { close(); chain().toggleCodeBlock().run(); }} />
               <MenuItem icon="divider" label="Divider" onSelect={() => { close(); chain().setHorizontalRule().run(); }} />
               <MenuSep />
-              <MenuItem icon="link" label="Link" onSelect={() => { close(); insertLink(); }} />
+              <MenuItem icon="link" label="Link…" onSelect={() => { close(); insertLink(); }} />
               <MenuItem icon="calendar" label="Today's date" onSelect={() => { close(); chain().insertContent(today()).run(); }} />
-              <MenuItem icon="calendar" label="Current time" onSelect={() => { close(); chain().insertContent(new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })).run(); }} />
+              <MenuItem icon="clock" label="Current time" onSelect={() => { close(); chain().insertContent(new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })).run(); }} />
             </>
           )}
         </Dropdown>
-        <TB icon="mic" label={listening ? "Stop dictation" : "Dictate"} onClick={dictate} active={listening} className={listening ? "recording text-[var(--danger)]" : ""} />
-        <TB icon="checklist" label="Checklist" onClick={() => chain().toggleTaskList().run()} active={ui?.task} />
-        <TB icon="calendar" label="Insert today's date" onClick={() => chain().insertContent(today()).run()} />
-        <Divider />
-        <TB icon="undo" label="Undo" onClick={() => chain().undo().run()} disabled={!ui?.canUndo} />
-        <TB icon="redo" label="Redo" onClick={() => chain().redo().run()} disabled={!ui?.canRedo} />
-        <Divider />
-        <Dropdown label="AI" title="AI writing help" button={<><Icon name="sparkle" size={18} className="text-[var(--accent)]" /><span className="text-sm font-medium">AI</span></>} width={250}>
+        <Group>
+          <Dropdown label="Text style" title={textStyleLabel} button={<Icon name="textSize" size={19} />} width={210} chevron={false}>
+            {(close) => (
+              <>
+                <MenuItem label="Normal text" active={textStyleLabel === "Normal text"} onSelect={() => { close(); chain().setParagraph().run(); }} />
+                {([1, 2, 3] as const).map((l) => (
+                  <MenuItem key={l} label={`Heading ${l}`} active={ui?.heading === l} onSelect={() => { close(); chain().toggleHeading({ level: l }).run(); }} />
+                ))}
+                <MenuItem label="Quote" active={ui?.quote} onSelect={() => { close(); chain().toggleBlockquote().run(); }} />
+                <MenuItem label="Code" active={ui?.code} onSelect={() => { close(); chain().toggleCodeBlock().run(); }} />
+              </>
+            )}
+          </Dropdown>
+          <Dropdown label="Font" button={<span className="w-[4.6rem] truncate text-left text-sm">{fontLabel}</span>} width={210}>
+            {(close) => FONTS.map((f) => (
+              <MenuItem key={f.label} label={f.label} active={(ui?.font ?? "") === f.value} onSelect={() => {
+                close();
+                if (f.value) chain().setFontFamily(f.value).run();
+                else chain().unsetFontFamily().run();
+              }} />
+            ))}
+          </Dropdown>
+          <Dropdown label="Font size" button={<span className="w-6 text-sm tabular-nums">{ui?.size ?? DEFAULT_SIZE}</span>} width={130}>
+            {(close) => SIZES.map((sz) => (
+              <MenuItem key={sz} label={String(sz)} active={(ui?.size ?? DEFAULT_SIZE) === sz} onSelect={() => {
+                close();
+                if (sz === DEFAULT_SIZE) chain().unsetFontSize().run();
+                else chain().setFontSize(`${sz}px`).run();
+              }} />
+            ))}
+          </Dropdown>
+        </Group>
+        <Group>
+          <TB icon="bold" label="Bold (⌘B)" onClick={() => chain().toggleBold().run()} active={ui?.bold} />
+          <TB icon="italic" label="Italic (⌘I)" onClick={() => chain().toggleItalic().run()} active={ui?.italic} />
+          <TB icon="underline" label="Underline (⌘U)" onClick={() => chain().toggleUnderline().run()} active={ui?.underline} />
+          <TB icon="strike" label="Strikethrough" onClick={() => chain().toggleStrike().run()} active={ui?.strike} />
+        </Group>
+        <Group>
+          <TB icon="listBullet" label="Bulleted list" onClick={() => chain().toggleBulletList().run()} active={ui?.bullet} />
+          <TB icon="listOrdered" label="Numbered list" onClick={() => chain().toggleOrderedList().run()} active={ui?.ordered} />
+          <TB icon="checklist" label="Checklist" onClick={() => chain().toggleTaskList().run()} active={ui?.task} />
+        </Group>
+        <Dropdown label="AI" title="AI writing help" chevron={false} button={<>{aiBusy ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-[var(--line)] border-t-[var(--accent)]" /> : <Icon name="sparkle" size={18} className="text-[var(--accent)]" />}<span className="text-sm font-medium text-[var(--text)]">AI</span></>} width={250}>
           {(close) => (
             <>
               <MenuLabel>{editor && !editor.state.selection.empty ? "For the selected text" : "For this note"}</MenuLabel>
@@ -627,45 +741,33 @@ export default function NoteEditor({ note, onBack, listHidden, onToggleList, foc
             </>
           )}
         </Dropdown>
-        <Divider />
-        <Dropdown label="Text style" button={<Icon name="textSize" size={19} />} width={210}>
-          {(close) => (
-            <>
-              <MenuItem label="Normal text" active={textStyleLabel === "Normal text"} onSelect={() => { close(); chain().setParagraph().run(); }} />
-              {([1, 2, 3] as const).map((l) => (
-                <MenuItem key={l} label={`Heading ${l}`} active={ui?.heading === l} onSelect={() => { close(); chain().toggleHeading({ level: l }).run(); }} />
-              ))}
-              <MenuItem label="Quote" active={ui?.quote} onSelect={() => { close(); chain().toggleBlockquote().run(); }} />
-              <MenuItem label="Code" active={ui?.code} onSelect={() => { close(); chain().toggleCodeBlock().run(); }} />
-            </>
-          )}
-        </Dropdown>
-        <Dropdown label="Font" button={<span className="max-w-[7.5rem] truncate text-sm">{fontLabel}</span>} width={210}>
-          {(close) => FONTS.map((f) => (
-            <MenuItem key={f.label} label={f.label} active={(ui?.font ?? "") === f.value} onSelect={() => {
-              close();
-              if (f.value) chain().setFontFamily(f.value).run();
-              else chain().unsetFontFamily().run();
-            }} />
-          ))}
-        </Dropdown>
-        <Dropdown label="Font size" button={<span className="w-6 text-sm tabular-nums">{ui?.size ?? DEFAULT_SIZE}</span>} width={130}>
-          {(close) => SIZES.map((sz) => (
-            <MenuItem key={sz} label={String(sz)} active={(ui?.size ?? DEFAULT_SIZE) === sz} onSelect={() => {
-              close();
-              if (sz === DEFAULT_SIZE) chain().unsetFontSize().run();
-              else chain().setFontSize(`${sz}px`).run();
-            }} />
-          ))}
-        </Dropdown>
-        <TB icon="bold" label="Bold (⌘B)" onClick={() => chain().toggleBold().run()} active={ui?.bold} />
-        <TB icon="italic" label="Italic (⌘I)" onClick={() => chain().toggleItalic().run()} active={ui?.italic} />
-        <TB icon="underline" label="Underline (⌘U)" onClick={() => chain().toggleUnderline().run()} active={ui?.underline} />
-        <Dropdown label="More formatting" button={<span className="text-sm">More</span>} width={260}>
-          {(close) => (
-            <>
-              <MenuLabel>Font color</MenuLabel>
-              <div className="flex flex-wrap gap-1.5 px-2.5 pb-1">
+        <Group>
+          {/* Left is lit only once chosen, not on every ordinary paragraph. */}
+          <TB icon="alignLeft" label="Left-align" onClick={() => chain().setTextAlign("left").run()} active={editor?.isActive({ textAlign: "left" })} />
+          <TB icon="alignCenter" label="Center-align" onClick={() => chain().setTextAlign("center").run()} active={ui?.align === "center"} />
+          <TB icon="alignRight" label="Right-align" onClick={() => chain().setTextAlign("right").run()} active={ui?.align === "right"} />
+        </Group>
+        <Group>
+          <TB icon="link" label="Insert link" onClick={insertLink} />
+          <TB icon="calendar" label="Insert today's date" onClick={() => chain().insertContent(today()).run()} />
+          <TB icon="mic" label={listening ? "Stop dictation" : "Dictate"} onClick={dictate} active={listening} className={listening ? "recording text-[var(--danger)]" : ""} />
+        </Group>
+        <Group>
+          <TB icon="undo" label="Undo (⌘Z)" onClick={() => chain().undo().run()} disabled={!ui?.canUndo} />
+          <TB icon="redo" label="Redo (⇧⌘Z)" onClick={() => chain().redo().run()} disabled={!ui?.canRedo} />
+        </Group>
+        <Group>
+          <TB icon="indent" label="Indent (Tab)" disabled={!ui?.inList} onClick={() => chain().sinkListItem(editor!.isActive("taskItem") ? "taskItem" : "listItem").run()} />
+          <TB icon="outdent" label="Outdent (⇧Tab)" disabled={!ui?.inList} onClick={() => chain().liftListItem(editor!.isActive("taskItem") ? "taskItem" : "listItem").run()} />
+        </Group>
+        <Group>
+          <TB icon="superscript" label="Superscript" onClick={() => chain().toggleSuperscript().run()} active={ui?.superscript} />
+          <TB icon="subscript" label="Subscript" onClick={() => chain().toggleSubscript().run()} active={ui?.subscript} />
+        </Group>
+        <Group>
+          <Dropdown label="Font colour" chevron={false} button={<Icon name="palette" size={19} className={ui?.color ? "" : undefined} />} width={244}>
+            {(close) => (
+              <div className="flex flex-wrap gap-1.5 p-1.5">
                 {TEXT_COLORS.map((c) => (
                   <button key={c.label} type="button" onMouseDown={keep} title={c.label} aria-label={`Text color ${c.label}`}
                     onClick={() => { close(); if (c.value) chain().setColor(c.value).run(); else chain().unsetColor().run(); }}
@@ -675,8 +777,11 @@ export default function NoteEditor({ note, onBack, listHidden, onToggleList, foc
                   </button>
                 ))}
               </div>
-              <MenuLabel>Highlight</MenuLabel>
-              <div className="flex flex-wrap gap-1.5 px-2.5 pb-1">
+            )}
+          </Dropdown>
+          <Dropdown label="Highlight" chevron={false} button={<Icon name="highlight" size={19} />} width={214}>
+            {(close) => (
+              <div className="flex flex-wrap gap-1.5 p-1.5">
                 {HIGHLIGHTS.map((c) => (
                   <button key={c.label} type="button" onMouseDown={keep} title={c.label} aria-label={`Highlight ${c.label}`}
                     onClick={() => { close(); if (c.value) chain().setHighlight({ color: c.value }).run(); else chain().unsetHighlight().run(); }}
@@ -685,37 +790,16 @@ export default function NoteEditor({ note, onBack, listHidden, onToggleList, foc
                   />
                 ))}
               </div>
-              <MenuSep />
-              <MenuItem icon="strike" label="Strikethrough" active={ui?.strike} onSelect={() => chain().toggleStrike().run()} />
-              <MenuItem icon="superscript" label="Superscript" active={ui?.superscript} onSelect={() => chain().toggleSuperscript().run()} />
-              <MenuItem icon="subscript" label="Subscript" active={ui?.subscript} onSelect={() => chain().toggleSubscript().run()} />
-              <MenuSep />
-              <MenuItem icon="listBullet" label="Bulleted list" active={ui?.bullet} onSelect={() => { close(); chain().toggleBulletList().run(); }} />
-              <MenuItem icon="listOrdered" label="Numbered list" active={ui?.ordered} onSelect={() => { close(); chain().toggleOrderedList().run(); }} />
-              <MenuItem icon="checklist" label="Checklist" active={ui?.task} onSelect={() => { close(); chain().toggleTaskList().run(); }} />
-              <MenuItem icon="link" label="Insert link" onSelect={() => { close(); insertLink(); }} />
-              <MenuSep />
-              <MenuItem icon="alignLeft" label="Left-align" active={ui?.align === "left"} onSelect={() => chain().setTextAlign("left").run()} />
-              <MenuItem icon="alignCenter" label="Center-align" active={ui?.align === "center"} onSelect={() => chain().setTextAlign("center").run()} />
-              <MenuItem icon="alignRight" label="Right-align" active={ui?.align === "right"} onSelect={() => chain().setTextAlign("right").run()} />
-              <MenuItem icon="indent" label="Indent" onSelect={() => {
-                if (!ui?.inList) return toast("Indent works inside lists and checklists.");
-                chain().sinkListItem(editor!.isActive("taskItem") ? "taskItem" : "listItem").run();
-              }} />
-              <MenuItem icon="outdent" label="Outdent" onSelect={() => {
-                if (!ui?.inList) return;
-                chain().liftListItem(editor!.isActive("taskItem") ? "taskItem" : "listItem").run();
-              }} />
-              <MenuSep />
-              <MenuItem icon="eraser" label="Clear formatting" onSelect={() => { close(); chain().unsetAllMarks().clearNodes().run(); }} />
-            </>
-          )}
-        </Dropdown>
-      </div>
+            )}
+          </Dropdown>
+          <TB icon="eraser" label="Clear formatting" onClick={() => chain().unsetAllMarks().clearNodes().run()} />
+        </Group>
+      </Toolbar>
+      <Rule />
 
-      {/* Writing area: the only part that scrolls. */}
-      <div className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-10 pt-6 md:px-12 md:pt-10">
-        <div className={`fn-note-in mx-auto ${focusMode ? "max-w-3xl" : "max-w-[46rem]"}`}>
+      {/* Writing area: the title, the note's properties and the text scroll as one. */}
+      <div className={`scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-10 pt-6 ${focusMode ? "md:px-12" : "md:px-9"}`}>
+        <div className={`fn-note-in ${column}`}>
           <textarea
             ref={titleRef}
             rows={1}
@@ -729,8 +813,60 @@ export default function NoteEditor({ note, onBack, listHidden, onToggleList, foc
             }}
             placeholder="Untitled"
             aria-label="Note title"
-            className="input-plain block w-full resize-none overflow-hidden text-[2.25rem] font-bold leading-tight tracking-tight md:text-[2.6rem]"
+            className="input-plain fn-serif block w-full resize-none overflow-hidden text-[2.15rem] leading-tight"
           />
+
+          {/* Properties: focus mode keeps only what you might still change. */}
+          <dl className="mt-4 grid grid-cols-[6.5rem_minmax(0,1fr)] items-baseline gap-x-4 gap-y-2.5 text-sm">
+            {!focusMode && (
+              <>
+                <dt className="text-[var(--faint)]">Created</dt>
+                <dd>{stamp(note.createdAt)}</dd>
+                <dt className="text-[var(--faint)]">Last modified</dt>
+                <dd>{status === "saving" ? "Saving…" : stamp(note.updatedAt)}</dd>
+                {SOURCE_NAME[note.source] && (
+                  <>
+                    <dt className="text-[var(--faint)]">Source</dt>
+                    <dd>{SOURCE_NAME[note.source]}</dd>
+                  </>
+                )}
+              </>
+            )}
+            <dt className="self-center text-[var(--faint)]">Tags</dt>
+            <dd className="flex flex-wrap items-center gap-2">
+              {note.tags.map((t) => (
+                <span key={t} className="fn-pop flex h-7 items-center gap-1 rounded-[5px] border border-[var(--line)] bg-[var(--panel)] pl-2.5 pr-1 text-xs font-medium tracking-[0.02em] text-[var(--muted)]">
+                  {t[0]?.toUpperCase() + t.slice(1)}
+                  <button onClick={() => store.updateNote(note.id, { tags: note.tags.filter((x) => x !== t) })} aria-label={`Remove tag ${t}`} title="Remove tag" className="grid h-5 w-5 place-items-center rounded opacity-60 hover:bg-[var(--hover)] hover:opacity-100">
+                    <Icon name="x" size={10} />
+                  </button>
+                </span>
+              ))}
+              {tagDraft === null ? (
+                <button
+                  className="flex h-7 items-center gap-1.5 rounded-[5px] border border-dashed border-[var(--line)] bg-[color-mix(in_srgb,var(--panel)_60%,transparent)] px-2.5 text-xs font-medium tracking-[0.02em] text-[var(--muted)] hover:text-[var(--text)]"
+                  onClick={() => setTagDraft("")}
+                  aria-label="Add tag"
+                >
+                  <Icon name="plus" size={12} /> Add new tag
+                </button>
+              ) : (
+                <input
+                  autoFocus
+                  value={tagDraft}
+                  onChange={(e) => setTagDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addTag(tagDraft); }
+                    if (e.key === "Escape") { e.stopPropagation(); setTagDraft(null); }
+                  }}
+                  onBlur={() => (tagDraft.trim() ? addTag(tagDraft) : setTagDraft(null))}
+                  placeholder="tag name"
+                  aria-label="New tag"
+                  className="h-7 w-32 rounded-md border border-[var(--line)] bg-[var(--bg)] px-2 text-xs outline-none focus:border-[color-mix(in_srgb,var(--accent)_55%,transparent)]"
+                />
+              )}
+            </dd>
+          </dl>
 
           {note.imageDataUrl && (
             // eslint-disable-next-line @next/next/no-img-element
@@ -819,55 +955,42 @@ export default function NoteEditor({ note, onBack, listHidden, onToggleList, foc
       </div>
 
       {/* Footer */}
-      <div className={`flex shrink-0 flex-wrap items-center gap-1 border-t border-[var(--line)] px-2 py-1.5 pr-20 md:pl-4 md:pr-24 ${focusMode ? "pb-[calc(env(safe-area-inset-bottom)+6px)]" : "rounded-b-2xl"}`}>
-        <Dropdown label="Set a reminder" button={<Icon name="bell" size={18} />} width={250}>
-          {(close) => (
-            <form
-              className="space-y-2 p-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                const v = (e.currentTarget.elements.namedItem("when") as HTMLInputElement).value;
-                close();
-                setReminder(v);
-              }}
-            >
-              <p className="text-sm font-medium">Remind me about this note</p>
-              <input name="when" type="datetime-local" defaultValue={tomorrow9} className="h-10 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-2 text-sm" />
-              <button className="min-h-9 w-full rounded-md bg-[var(--accent)] text-sm font-medium text-white">Set reminder</button>
-            </form>
-          )}
+      <Rule />
+      <div className={`flex shrink-0 items-center gap-1 py-1 pl-2 pr-44 md:pl-6 ${focusMode ? "pb-[calc(env(safe-area-inset-bottom)+4px)]" : ""}`}>
+        <Dropdown label="Set a reminder" chevron={false} button={<Icon name="bell" size={17} />} width={260}>
+          {(close) =>
+            pickReminder ? (
+              <form
+                className="space-y-2 p-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const v = (e.currentTarget.elements.namedItem("when") as HTMLInputElement).value;
+                  close();
+                  setPickReminder(false);
+                  setReminder(new Date(v));
+                }}
+              >
+                <p className="text-sm font-medium">Remind me about this note</p>
+                <input name="when" type="datetime-local" defaultValue={tomorrow9} className="h-10 w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-2 text-sm" />
+                <div className="flex justify-end gap-1.5">
+                  <button type="button" className="min-h-9 rounded-md px-3 text-sm text-[var(--muted)] hover:bg-[var(--hover)]" onClick={() => setPickReminder(false)}>Back</button>
+                  <button className="min-h-9 rounded-md bg-[var(--accent)] px-3 text-sm font-medium text-white">Set reminder</button>
+                </div>
+              </form>
+            ) : (
+              <>
+                <MenuLabel>Remind me about this note</MenuLabel>
+                <MenuItem icon="clock" label="In an hour" onSelect={() => { close(); remindIn(1); }} />
+                <MenuItem icon="today" label="Tomorrow at 9:00" onSelect={() => { close(); remindIn(24); }} />
+                <MenuItem icon="calendar" label="Next week" onSelect={() => { close(); remindIn(24 * 7); }} />
+                <MenuSep />
+                <MenuItem icon="bell" label="Pick a date and time…" onSelect={() => setPickReminder(true)} />
+              </>
+            )
+          }
         </Dropdown>
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-          {note.tags.map((t) => (
-            <span key={t} className="chip min-h-7 gap-1">
-              #{t}
-              <button onClick={() => store.updateNote(note.id, { tags: note.tags.filter((x) => x !== t) })} aria-label={`Remove tag ${t}`} className="opacity-60 hover:opacity-100">
-                <Icon name="x" size={11} />
-              </button>
-            </span>
-          ))}
-          {tagDraft === null ? (
-            <button className="flex min-h-9 items-center gap-1.5 rounded-md px-2 text-sm text-[var(--faint)] hover:bg-[var(--hover)] hover:text-[var(--text)]" onClick={() => setTagDraft("")}>
-              <Icon name="tag" size={15} /> Add tag
-            </button>
-          ) : (
-            <input
-              autoFocus
-              value={tagDraft}
-              onChange={(e) => setTagDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addTag(tagDraft); }
-                if (e.key === "Escape") setTagDraft(null);
-              }}
-              onBlur={() => (tagDraft.trim() ? addTag(tagDraft) : setTagDraft(null))}
-              placeholder="tag name"
-              aria-label="New tag"
-              className="h-8 w-28 rounded-md border border-[var(--line)] bg-[var(--bg)] px-2 text-sm"
-            />
-          )}
-        </div>
-        <span className="ml-auto flex items-center gap-1.5 text-xs text-[var(--faint)]" role="status">
-          {ui?.words ? `${ui.words} word${ui.words === 1 ? "" : "s"} · ` : ""}
+        <span className="ml-auto flex items-center gap-1.5 whitespace-nowrap text-xs text-[var(--faint)]" role="status">
+          {ui?.words ? <span className="tabular-nums">{`${ui.words} word${ui.words === 1 ? "" : "s"} ·`}</span> : null}
           {status === "saving" ? "Saving…" : <><Icon name="check" size={13} /> All changes saved</>}
         </span>
       </div>

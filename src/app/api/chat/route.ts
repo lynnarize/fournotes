@@ -15,12 +15,14 @@ export async function POST(req: Request) {
   const blocked = guardSharedKey(req, keys);
   if (blocked) return blocked;
   try {
-    const { messages, context } = (await req.json()) as { messages: ChatMessage[]; context: ClientContext };
+    const { messages, context, tools } = (await req.json()) as { messages: ChatMessage[]; context: ClientContext; tools?: boolean };
     if (!Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json({ error: "messages required" }, { status: 400 });
     }
     const provider = await getProvider(keys);
-    return NextResponse.json(await provider.chat(messages, context));
+    const res = await provider.chat(messages, context, { tools: tools !== false });
+    // A question is answered, never filed — whichever provider answered (demo mode files by rule).
+    return NextResponse.json(tools === false ? { ...res, actions: [] } : res);
   } catch (e) {
     return aiError(e, "chat", activeSource(keys));
   }

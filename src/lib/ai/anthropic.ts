@@ -1,7 +1,8 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import type { BriefInput, CaptureResult, ChatMessage, ChatResponse, ClientContext, Transaction } from "../types";
-import { captureToActions, dynamicContext, STATIC_INSTRUCTIONS, type LLMProvider } from "./provider";
+import { ProviderError } from "./errors";
+import { captureToActions, dynamicContext, STATIC_INSTRUCTIONS, type LLMProvider, type WebAnswer } from "./provider";
 import { ACTION_TOOLS, FILE_CAPTURE_TOOL } from "./tools";
 import { validateActions } from "./validate";
 import { WRITING_SYSTEM, writingPrompt, type WritingTask } from "./writing";
@@ -34,7 +35,7 @@ export class AnthropicProvider implements LLMProvider {
     this.fastModel = opts.fastModel;
   }
 
-  async chat(history: ChatMessage[], ctx: ClientContext): Promise<ChatResponse> {
+  async chat(history: ChatMessage[], ctx: ClientContext, opts?: { tools?: boolean }): Promise<ChatResponse> {
     const messages: Anthropic.MessageParam[] = history.slice(-20).map((m) => ({ role: m.role, content: m.content }));
     const raw: unknown[] = [];
     let reply = "";
@@ -46,7 +47,7 @@ export class AnthropicProvider implements LLMProvider {
         model: this.model,
         max_tokens: 1024,
         system: system(ctx),
-        tools: CACHED_TOOLS,
+        ...(opts?.tools === false ? {} : { tools: CACHED_TOOLS }),
         messages,
       });
       logUsage("chat", res);
@@ -175,7 +176,44 @@ export class AnthropicProvider implements LLMProvider {
     logUsage("write", res);
     return res.content.map((b) => (b.type === "text" ? b.text : "")).join("").trim();
   }
+  /**
+   * "Ideas from the web" for a note: Anthropic's server-side web search, only ever run
+   * from the user's own tap, since it sends the note to Anthropic and searches.
+   */
+  async webIdeas(title: string, content: string, question: string): Promise<WebAnswer> {
+    // Dynamic filtering needs a current Sonnet or Opus; Haiku keeps the basic search tool.
+    const tool = this.model.includes("haiku")
+      ? { type: "web_search_20250305" as const, name: "web_search" as const, max_uses: 4 }
+      : { type: "web_search_20260209" as const, name: "web_search" as const, max_uses: 4 };
+    const ask = question.trim() || "Suggest a few concrete, current recommendations that would help with this note.";
+    const messages: Anthropic.MessageParam[] = [{ role: "user", content: `My note “${title}”:\n${content.slice(0, 6000)}\n\n${ask}` }];
+    const blocks: Anthropic.ContentBlock[] = [];
+    // A long search can come back paused; sending the turn back as it stands lets it carry on.
+    for (let i = 0; i < 3; i++) {
+      const res = await this.client.messages.create({ model: this.model, max_tokens: 4000, system: WEB_IDEAS_SYSTEM, tools: [tool], messages });
+      logUsage("web", res);
+      blocks.push(...res.content);
+      if (res.stop_reason !== "pause_turn") break;
+      messages.push({ role: "assistant", content: res.content });
+    }
+    const sources: WebAnswer["sources"] = [];
+    let text = "";
+    for (const b of blocks) {
+      if (b.type !== "text") continue;
+      text += b.text;
+      for (const c of b.citations ?? []) {
+        if (c.type === "web_search_result_location" && !sources.some((s) => s.url === c.url)) sources.push({ title: c.title || c.url, url: c.url });
+      }
+    }
+    if (!text.trim()) throw new ProviderError("The web search came back empty. Try again in a moment.", 502);
+    return { text: text.trim(), sources: sources.slice(0, 6) };
+  }
 }
+
+const WEB_IDEAS_SYSTEM =
+  "You help someone act on one of their own notes. Search the web for current, specific information, then answer in a short list of 3 to 6 " +
+  "recommendations, each one line: the recommendation and why it fits the note. Name real places, products or resources. Plain Markdown only " +
+  "(bold and bullets), no headings, no preamble, and no closing offer to help further. Answer in the language the note is written in.";
 
 function firstToolInput(res: Anthropic.Message): Record<string, unknown> {
   const block = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");

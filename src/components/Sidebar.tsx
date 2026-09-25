@@ -1,11 +1,16 @@
 "use client";
+// The sidebar, laid out like the macOS app (macos/FourNotes/Views/SidebarView.swift):
+// an account card, a search card, the four tabs as cards with the open one raised,
+// then quick capture and settings as flat rows.
 import { usePulsingTabs } from "@/lib/highlight";
 import { isMac } from "@/lib/hooks";
+import { openItem } from "@/lib/nav";
 import { alive, localMonth, useStore } from "@/lib/store";
 import type { Tab } from "@/lib/types";
 import { useAssistant } from "./assistant";
 import { useCloud } from "./cloud";
 import { GOOGLE_STATUS_LABEL, useGoogleSync } from "./googleSync";
+import { Dropdown, MenuItem, MenuLabel, MenuSep } from "./notes/Dropdown";
 import ScanPicker from "./ScanPicker";
 import Logo from "./Logo";
 import { Icon } from "./ui";
@@ -19,10 +24,17 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
 
 const STATUS_LABEL = { off: "", "signed-out": "Not synced", syncing: "Syncing…", synced: "Synced", offline: "Offline", error: "Sync error" } as const;
 
+/** Half of the capture row: an outlined button, icon and name. */
+const CAPTURE = "fn-press flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[var(--line)] text-[var(--muted)] transition-colors hover:bg-[var(--hover)] hover:text-[var(--text)] disabled:opacity-50";
+
+/** A flat sidebar row: only the pointer lights it up. */
+const ROW = "flex w-full items-center gap-3 rounded-xl px-3.5 text-left text-[var(--muted)] transition-colors hover:bg-[var(--hover)] hover:text-[var(--text)] disabled:opacity-50 disabled:hover:bg-transparent";
+
 export default function Sidebar({ tab, setTab, onClose, onSearch, onSettings }: {
   tab: Tab; setTab: (t: Tab) => void; onClose?: () => void; onSearch: () => void; onSettings: () => void;
 }) {
-  const { notes, todos, transactions, spaces, currentSpaceId, switchSpace } = useStore();
+  const store = useStore();
+  const { notes, todos, transactions, spaces, currentSpaceId, switchSpace, settings } = store;
   const { scan, recording, startRecording, stopRecording, busy, voice, toggleVoice } = useAssistant();
   const cloud = useCloud();
   const google = useGoogleSync();
@@ -38,94 +50,198 @@ export default function Sidebar({ tab, setTab, onClose, onSearch, onSettings }: 
     finance: alive(transactions).filter((t) => t.date.startsWith(month)).length,
   };
   const go = (t: Tab) => { setTab(t); onClose?.(); };
+  const search = () => { onSearch(); onClose?.(); };
+  const openSettings = () => { onSettings(); onClose?.(); };
   const pulsing = usePulsingTabs();
   // In the phone drawer, rows follow the slide-in one after another.
   const enter = (i: number) => (onClose ? { animationDelay: `${90 + i * 35}ms` } : undefined);
 
+  const name = settings.name?.trim();
+  const initials = name ? name.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase() : null;
+  const spaceLabel = spaces.find((s) => s.id === currentSpaceId)?.name ?? "Personal";
+
+  // Making something from outside its own tab: each one opens what it made.
+  const newNote = () => { const n = store.addNote({ title: "" }); setTab("notes"); openItem("note", n.id); onClose?.(); };
+  const newTask = () => { const t = store.addTodo({ title: "" }); setTab("todo"); openItem("todo", t.id); onClose?.(); };
+  const newTransaction = () => { const t = store.addTransaction({ merchant: "" }); setTab("finance"); openItem("transaction", t.id); onClose?.(); };
+  const record = () => { recording ? stopRecording() : startRecording(); onClose?.(); };
+
   return (
-    <nav className={`flex h-full flex-col bg-[var(--panel)] px-2 py-3 text-sm ${onClose ? "w-72 max-w-[85vw] pt-[calc(env(safe-area-inset-top)+12px)]" : "w-60"}`}>
-      <div className="mb-4 flex items-center justify-between px-1 py-1">
-        <button className="flex items-center gap-2.5 rounded-lg p-1 hover:bg-[var(--hover)]" onClick={() => go("today")} aria-label="Four Notes, go to Today">
-          <Logo size={48} className="shrink-0" />
-          <span className="whitespace-nowrap text-[22px] font-bold leading-none tracking-tight">Four Notes</span>
-        </button>
+    <nav className={`flex h-full flex-col bg-[var(--panel)] px-3.5 pb-4 pt-3.5 text-sm ${onClose ? "w-[86vw] max-w-[22rem] pt-[calc(env(safe-area-inset-top)+14px)]" : "w-64"}`}>
+      {/* Account: whose notes these are, which space, and the two ways out of here */}
+      <div className="flex items-center gap-1">
+        <Dropdown
+          label={`${name || "Four Notes"}, ${spaceLabel}`}
+          title="Spaces and settings"
+          width={250}
+          chevron={false}
+          className="flex h-[60px] min-w-0 flex-1 items-center gap-2.5 rounded-xl px-3 text-left transition-colors hover:bg-[var(--hover)]"
+          button={
+            <>
+              {initials ? (
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[9px] bg-[var(--accent)] text-[14px] font-semibold text-white">{initials}</span>
+              ) : (
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[9px] bg-[var(--bg)]"><Logo size={28} /></span>
+              )}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[15px] font-semibold text-[var(--text)]">{name || "Four Notes"}</span>
+                <span className="block truncate text-xs text-[var(--faint)]">{spaceLabel}</span>
+              </span>
+              <Icon name="chevronDown" size={14} className="shrink-0 text-[var(--muted)]" />
+            </>
+          }
+        >
+          {(close) => (
+            <>
+              {(spaces.length > 0 || cloud.email) && (
+                <>
+                  <MenuLabel>Space</MenuLabel>
+                  <MenuItem label="Personal" active={!currentSpaceId} onSelect={() => { close(); switchSpace(null); }} />
+                  {spaces.map((s) => (
+                    <MenuItem key={s.id} label={s.name} active={currentSpaceId === s.id} onSelect={() => { close(); switchSpace(s.id); }} />
+                  ))}
+                  <MenuSep />
+                </>
+              )}
+              <MenuItem icon="search" label="Search or quick add…" hint={`${isMac() ? "⌘" : "Ctrl"} K`} onSelect={() => { close(); search(); }} />
+              <MenuItem icon="settings" label="Settings…" onSelect={() => { close(); openSettings(); }} />
+            </>
+          )}
+        </Dropdown>
         {onClose && (
           <button className="tap-target fn-press fn-pop md:hidden" style={{ animationDelay: "120ms" }} onClick={onClose} aria-label="Close menu"><Icon name="x" size={20} /></button>
         )}
       </div>
 
-      {cloud.enabled && (spaces.length > 0 || cloud.email) && (
-        <label className="mb-2 flex items-center gap-2 rounded-md px-2 py-1 text-[var(--muted)] hover:bg-[var(--hover)]">
-          <Icon name="users" size={14} />
-          <select value={currentSpaceId ?? ""} onChange={(e) => switchSpace(e.target.value || null)} aria-label="Space"
-            className="min-w-0 flex-1 bg-transparent text-[var(--text)]">
-            <option value="">Personal</option>
-            {spaces.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-        </label>
-      )}
-
-      <button className="touch-row mb-3 flex items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--bg)] px-2 py-1.5 text-[var(--muted)] hover:text-[var(--text)]"
-        onClick={() => { onSearch(); onClose?.(); }}>
-        <Icon name="search" size={14} />
-        <span className="flex-1 text-left">Search or quick add</span>
-        <kbd>{isMac() ? "⌘" : "Ctrl"} K</kbd>
+      <button className={`${ROW} mt-1 h-[46px]`} onClick={search}>
+        <Icon name="search" size={17} />
+        <span className="flex-1">Search…</span>
+        <kbd className="rounded bg-[var(--hover)] px-1.5 py-px text-[11px] text-[var(--faint)]">{isMac() ? "⌘" : "Ctrl"} K</kbd>
       </button>
 
-      {TABS.map((t, i) => (
-        <button
-          key={t.id}
-          onClick={() => go(t.id)}
-          style={enter(i)}
-          className={`${onClose ? "fn-rise" : ""} touch-row mb-0.5 flex items-center gap-2 rounded-md px-2 py-1.5 text-left ${
-            tab === t.id ? "bg-[var(--hover)] font-medium text-[var(--text)]" : "text-[var(--muted)] hover:bg-[var(--hover)]"
-          }`}
-          aria-current={tab === t.id ? "page" : undefined}
-        >
-          <Icon name={t.icon} />
-          <span className="flex-1">{t.label}</span>
-          {pulsing.includes(t.id) && tab !== t.id && <span className="fn-ping relative" aria-label="New from the assistant" />}
-          <span className="text-xs text-[var(--faint)]">{counts[t.id] || ""}</span>
-        </button>
-      ))}
+      {/* The tabs: the open one is a raised card, the rest sit flat */}
+      <div className="mt-7 space-y-1.5">
+        {TABS.map((t, i) => {
+          const selected = tab === t.id;
+          return (
+            <div
+              key={t.id}
+              style={enter(i)}
+              className={`${onClose ? "fn-rise" : ""} group relative flex items-center rounded-xl border transition-colors ${
+                selected ? "border-[var(--line)] bg-[var(--bg)] shadow-[var(--shadow)]" : "border-transparent hover:bg-[var(--hover)]"
+              }`}
+            >
+              <button
+                onClick={() => go(t.id)}
+                aria-current={selected ? "page" : undefined}
+                className={`flex min-h-[46px] min-w-0 flex-1 items-center gap-3 rounded-xl pl-3.5 text-left ${
+                  selected ? "font-medium text-[var(--text)]" : "text-[var(--muted)] group-hover:text-[var(--text)]"
+                }`}
+              >
+                <Icon name={t.icon} size={18} className="shrink-0" />
+                <span className="truncate">{t.label}</span>
+                {/* Still being shaped: said plainly beside its name. */}
+                {t.id === "finance" && (
+                  <span className="rounded border border-[color-mix(in_srgb,var(--danger)_45%,transparent)] bg-[color-mix(in_srgb,var(--danger)_12%,transparent)] px-[5px] py-px text-[10px] font-semibold leading-tight text-[var(--danger)]">Beta</span>
+                )}
+                <span className="flex-1" />
+                {pulsing.includes(t.id) && !selected && <span className="fn-ping relative shrink-0" aria-label="New from the assistant" />}
+              </button>
+              {/* The count gives way to the menu while the row is in use. */}
+              {counts[t.id] > 0 && (
+                <span className={`pr-3.5 text-xs tabular-nums text-[var(--faint)] ${selected ? "hidden" : "group-hover:hidden"}`}>{counts[t.id]}</span>
+              )}
+              <span className={`pr-2 ${selected ? "" : "hidden group-hover:block"}`}>
+                <Dropdown
+                  label={`${t.label} actions`}
+                  width={230}
+                  align="right"
+                  chevron={false}
+                  className="grid h-[30px] w-[30px] place-items-center rounded-lg text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)]"
+                  button={<Icon name="more" size={18} />}
+                >
+                  {(close) => (
+                    <>
+                      {t.id === "today" && (
+                        <>
+                          <MenuItem icon="today" label="Open Today" onSelect={() => { close(); go("today"); }} />
+                          <MenuItem icon="search" label="Search or quick add…" onSelect={() => { close(); search(); }} />
+                        </>
+                      )}
+                      {t.id === "notes" && (
+                        <>
+                          <MenuItem icon="noteAdd" label="New note" onSelect={() => { close(); newNote(); }} />
+                          <ScanPicker onFile={(f) => { onClose?.(); scan(f); }}>
+                            {(pick) => <MenuItem icon="scan" label="Scan a note…" onSelect={() => { close(); pick(); }} />}
+                          </ScanPicker>
+                          <MenuItem icon={recording ? "stop" : "mic"} label={recording ? "Stop recording" : "Record to note"} onSelect={() => { close(); record(); }} />
+                        </>
+                      )}
+                      {t.id === "todo" && <MenuItem icon="todo" label="New task" onSelect={() => { close(); newTask(); }} />}
+                      {t.id === "finance" && (
+                        <>
+                          <MenuItem icon="finance" label="New transaction" onSelect={() => { close(); newTransaction(); }} />
+                          <ScanPicker onFile={(f) => { onClose?.(); scan(f); }}>
+                            {(pick) => <MenuItem icon="scan" label="Scan a receipt…" onSelect={() => { close(); pick(); }} />}
+                          </ScanPicker>
+                        </>
+                      )}
+                    </>
+                  )}
+                </Dropdown>
+              </span>
+            </div>
+          );
+        })}
+      </div>
 
-      <div className="mt-6 px-2 text-xs font-medium text-[var(--faint)]">Quick capture</div>
-      <ScanPicker onFile={(f) => { onClose?.(); scan(f); }}>
-        {(pick) => (
-          <button className="touch-row mt-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[var(--muted)] hover:bg-[var(--hover)]" onClick={pick} disabled={!!busy}>
-            <Icon name="scan" /> Scan receipt / note
+      <div className="mt-auto" />
+
+      {/* Capture, side by side; then voice mode and settings as flat rows at the bottom */}
+      <div className="space-y-0.5">
+        <div className="mb-1.5 grid grid-cols-2 gap-1.5">
+          <ScanPicker onFile={(f) => { onClose?.(); scan(f); }}>
+            {(pick) => (
+              <button className={CAPTURE} onClick={pick} disabled={!!busy} title="Scan a receipt, note or e-wallet screenshot">
+                <Icon name="scan" size={17} /> Scan
+              </button>
+            )}
+          </ScanPicker>
+          <button
+            className={`${CAPTURE} ${recording ? "!text-[var(--danger)]" : ""}`}
+            onClick={record}
+            disabled={(!!busy && !recording) || voice !== "off"}
+            title={recording ? "Stop recording" : "Record a voice note"}
+          >
+            <Icon name={recording ? "stop" : "mic"} size={17} /> {recording ? "Stop" : "Record"}
           </button>
-        )}
-      </ScanPicker>
-      <button className="touch-row flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[var(--muted)] hover:bg-[var(--hover)]"
-        onClick={recording ? stopRecording : startRecording} disabled={(!!busy && !recording) || voice !== "off"}>
-        <Icon name={recording ? "stop" : "mic"} className={recording ? "text-[var(--danger)]" : ""} />
-        {recording ? "Stop recording" : "Record to note"}
-      </button>
-      <button className="touch-row flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[var(--muted)] hover:bg-[var(--hover)]"
-        onClick={toggleVoice} disabled={recording}>
-        <Icon name="wave" className={voice !== "off" ? "text-[var(--accent)]" : ""} />
-        {voice !== "off" ? "End voice mode" : "Voice assistant"}
-      </button>
-
-      <div className="mt-auto space-y-1">
-        {(google.enabled || cloud.enabled) && (
-          <button className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs text-[var(--faint)] hover:bg-[var(--hover)]" onClick={() => { onSettings(); onClose?.(); }}
-            title={(google.email ? google.error : cloud.error) ?? undefined}>
-            <Icon name="cloud" size={13} className={`shrink-0 ${syncTone}`} />
-            <span className="truncate">
-              {google.email
-                ? `${GOOGLE_STATUS_LABEL[google.status]} · Google Drive`
-                : cloud.enabled && cloud.email
-                  ? `${STATUS_LABEL[cloud.status]} · ${cloud.email}`
-                  : "Turn on sync"}
-            </span>
-          </button>
-        )}
-        <button className="touch-row flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[var(--muted)] hover:bg-[var(--hover)]" onClick={() => { onSettings(); onClose?.(); }}>
-          <Icon name="settings" /> Settings
+        </div>
+        <button className={`${ROW} h-[46px]`} onClick={toggleVoice} disabled={recording}>
+          <Icon name="wave" size={18} className={voice !== "off" ? "text-[var(--accent)]" : ""} />
+          {voice !== "off" ? "End voice mode" : "Voice assistant"}
         </button>
       </div>
+
+      {(google.enabled || cloud.enabled) && (
+        <button
+          className="mt-1 flex w-full items-center gap-2 rounded-lg px-3.5 py-1.5 text-left text-xs text-[var(--faint)] hover:bg-[var(--hover)]"
+          onClick={openSettings}
+          title={(google.email ? google.error : cloud.error) ?? undefined}
+        >
+          <Icon name="cloud" size={13} className={`shrink-0 ${syncTone}`} />
+          <span className="truncate">
+            {google.email
+              ? `${GOOGLE_STATUS_LABEL[google.status]} · Google Drive`
+              : cloud.enabled && cloud.email
+                ? `${STATUS_LABEL[cloud.status]} · ${cloud.email}`
+                : "Turn on sync"}
+          </span>
+        </button>
+      )}
+
+      <button className={`${ROW} mt-0.5 h-[46px]`} onClick={openSettings}>
+        <Icon name="settings" size={18} /> Settings
+      </button>
     </nav>
   );
 }

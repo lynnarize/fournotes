@@ -5,7 +5,7 @@ import { suggestReminder } from "@/lib/insights";
 import { useFiledFlash } from "@/lib/highlight";
 import { useBackDismiss } from "@/lib/backstack";
 import { openItem, scrollToId, useOpenItem } from "@/lib/nav";
-import { makeRrule, parseRrule, rruleLabel, type Freq } from "@/lib/recurrence";
+import { makeRrule, normaliseRrule, parseRrule, rruleLabel, type Freq } from "@/lib/recurrence";
 import { alive, formatMoney, parseAmount, useStore } from "@/lib/store";
 import type { ExpenseCategory, Todo } from "@/lib/types";
 import EmptyStart from "./EmptyStart";
@@ -403,7 +403,11 @@ function TaskPanel({ todo, isNew, expanded, mobile, anim, onToggleExpand, onClos
             </Prop>
             <Prop icon="calendar" label="Date">
               <input type="datetime-local" value={toLocalInput(todo.dueAt)} aria-label="Due date" data-empty={!todo.dueAt}
-                onChange={(e) => updateTodo(todo.id, { dueAt: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                onChange={(e) => {
+                  const dueAt = e.target.value ? new Date(e.target.value).toISOString() : null;
+                  // A repeat follows the new date's day of the month.
+                  updateTodo(todo.id, { dueAt, ...(rule && dueAt ? { rrule: normaliseRrule(makeRrule(rule.freq, rule.interval), dueAt) } : {}) });
+                }}
                 className="prop-input" />
             </Prop>
             <Prop icon="bell" label="Alarm">
@@ -431,7 +435,10 @@ function TaskPanel({ todo, isNew, expanded, mobile, anim, onToggleExpand, onClos
                 aria-label="Repeat frequency"
                 value={rule?.freq ?? ""}
                 data-empty={!rule}
-                onChange={(e) => updateTodo(todo.id, { rrule: e.target.value ? makeRrule(e.target.value as Freq, rule?.interval ?? 1) : null })}
+                onChange={(e) => updateTodo(todo.id, {
+                  // A month-end date keeps its day: the 31st comes back on the 31st, not the 28th for ever after February.
+                  rrule: e.target.value ? normaliseRrule(makeRrule(e.target.value as Freq, rule?.interval ?? 1), todo.dueAt ?? todo.remindAt) : null,
+                })}
                 className="prop-input w-auto"
               >
                 <option value="">Doesn&apos;t repeat</option>
@@ -441,7 +448,7 @@ function TaskPanel({ todo, isNew, expanded, mobile, anim, onToggleExpand, onClos
               {rule && (
                 <label className="flex items-center gap-1 text-[var(--muted)]">every
                   <input type="number" min={1} max={99} value={rule.interval} aria-label="Repeat interval"
-                    onChange={(e) => updateTodo(todo.id, { rrule: makeRrule(rule.freq, Math.max(1, Number(e.target.value) || 1)) })}
+                    onChange={(e) => updateTodo(todo.id, { rrule: makeRrule(rule.freq, Math.max(1, Number(e.target.value) || 1), rule.monthDay) })}
                     className="prop-input w-16" />
                 </label>
               )}

@@ -1,11 +1,13 @@
 "use client";
-// Finance overview, laid out like an operations dashboard:
-//   row 1  three stat cards: spent · income · transactions (each vs last month)
-//   left   spending chart (month by day · year by month · categories), upcoming payments
-//   right  budget progress bar, monthly review (AI), heads-up alerts with actions
+// Finance overview, laid out as the macOS app has it (Views/Finance/FinanceDashboard.swift):
+//   three soft stat cards: spent · income · transactions (each vs last month); the
+//   spending chart opens from "Spent"; one banner with what the month comes to, today's
+//   pace and the month's review; then what's coming up (payments / heads-up).
 // Everything but the review is computed on the device.
 import { useMemo, useRef, useState } from "react";
 import { baseAmount, budgetStatus, detectSubscriptions, myShare, owedToMe, spendByCategory, type Subscription } from "@/lib/insights";
+import { reviewLines } from "@/lib/monthlyReview";
+import { normaliseRrule } from "@/lib/recurrence";
 import { alive, formatMoney, localDate, localMonth, useStore } from "@/lib/store";
 import type { MonthlySummary, Tab, Transaction } from "@/lib/types";
 import { Icon, useToast } from "../ui";
@@ -68,18 +70,20 @@ const inDays = (n: number) => (n === 0 ? "today" : n === 1 ? "tomorrow" : n > 0 
 type ChartView = "month" | "year" | "category";
 const VIEW_KEY = "four-notes:finance-view";
 const DISMISSED_KEY = "four-notes:finance-dismissed";
+const CHART_KEY = "four-notes:finance-chart-open";
 
-export default function Dashboard({ month, setTab, summary, summarizing, onSummarize, onBudgets, onOpenTransactions, onOpenTransaction }: {
+export default function Dashboard({ month, summary, summarizing, onSummarize, onReport, onBudgets, onOpenTransactions, onOpenTransaction }: {
   month: string;
-  setTab: (t: Tab) => void;
+  setTab?: (t: Tab) => void;
   summary?: MonthlySummary;
   summarizing: boolean;
   onSummarize: () => void;
+  onReport: () => void;
   onBudgets: () => void;
   onOpenTransactions: () => void;
   onOpenTransaction: (id: string) => void;
 }) {
-  const { transactions, todos, settings, addTodo, toggleTodo, remove } = useStore();
+  const { transactions, todos, settings, addTodo, toggleTodo } = useStore();
   const toast = useToast();
   const cur = settings.currency;
   const live = useMemo(() => alive(transactions), [transactions]);
@@ -147,7 +151,8 @@ export default function Dashboard({ month, setTab, summary, summarizing, onSumma
   }, [todos, live, cur]);
   const trackSub = (s: Subscription) => {
     const due = new Date(`${s.nextDate}T09:00:00`).toISOString();
-    addTodo({ title: `Pay ${s.merchant}`, dueAt: due, remindAt: due, rrule: "FREQ=MONTHLY;INTERVAL=1", bill: { amount: s.amount, currency: s.currency, category: s.category } });
+    // Anchored to its day, so a bill on the 31st comes back on the 31st (or the month's last day), not the 28th for ever after February.
+    addTodo({ title: `Pay ${s.merchant}`, dueAt: due, remindAt: due, rrule: normaliseRrule("FREQ=MONTHLY;INTERVAL=1", due), bill: { amount: s.amount, currency: s.currency, category: s.category } });
     toast(`🔁 Monthly bill added: ${s.merchant}`);
   };
 
@@ -192,12 +197,6 @@ export default function Dashboard({ month, setTab, summary, summarizing, onSumma
     return out.filter((a) => !dismissed.includes(`${month}:${a.id}`));
   }, [budgets, cur, onBudgets, isCurrent, live, today, monthTxs, dayOfMonth, onOpenTransactions, onOpenTransaction, dismissed, month]);
   const critical = alerts.filter((a) => a.critical).length;
-  const [openTx, setOpenTx] = useState<string | null>(null);
-  const recent = useMemo(
-    () => [...monthTxs].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)).slice(0, 5),
-    [monthTxs],
-  );
-  const todayCount = monthTxs.filter((t) => t.date === today).length;
   const [panel, setPanelState] = useState<Panel>(() => {
     try {
       const v = localStorage.getItem(PANEL_KEY);
@@ -208,260 +207,210 @@ export default function Dashboard({ month, setTab, summary, summarizing, onSumma
     setPanelState(v);
     try { localStorage.setItem(PANEL_KEY, v); } catch { /* storage blocked */ }
   };
+  // The spending chart opens from the Spent card.
+  const [chartOpen, setChartOpenState] = useState(() => {
+    try { return localStorage.getItem(CHART_KEY) === "1"; } catch { return false; }
+  });
+  const toggleChart = () => {
+    setChartOpenState((v) => {
+      try { localStorage.setItem(CHART_KEY, v ? "0" : "1"); } catch { /* storage blocked */ }
+      return !v;
+    });
+  };
 
+  // The three numbers, each on its own soft colour with its icon.
   const stats = [
-    {
-      label: isCurrent ? "Spent so far" : "Spent", icon: "wallet", value: <Money amount={spent} currency={cur} />, delta: <Delta pct={pct(spent, prevSpent)} />,
-      diff: `${spent >= prevSpent ? "+" : "−"}${formatMoney(Math.abs(spent - prevSpent), cur, true)}`, open: () => setView("category"), openLabel: "Spending by category",
-    },
-    {
-      label: "Income", icon: "download", value: <Money amount={income} currency={cur} />, delta: <Delta pct={pct(income, prevIncome)} upIsGood />,
-      diff: `${income >= prevIncome ? "+" : "−"}${formatMoney(Math.abs(income - prevIncome), cur, true)}`, open: onOpenTransactions, openLabel: "Show transactions",
-    },
-    {
-      label: "Transactions", icon: "bill", value: <span className="tabular-nums">{monthTxs.length}</span>, delta: <Delta pct={pct(monthTxs.length, prevTxs.length)} upIsGood />,
-      diff: `${monthTxs.length >= prevTxs.length ? "+" : "−"}${Math.abs(monthTxs.length - prevTxs.length)}`, open: onOpenTransactions, openLabel: "Show transactions",
-    },
+    { label: isCurrent ? "Spent so far" : "Spent", icon: "wallet", tint: "var(--board-red)", value: <Money amount={spent} currency={cur} />, delta: <Delta pct={pct(spent, prevSpent)} />, open: toggleChart, openLabel: "Show or hide the spending chart", selected: chartOpen },
+    { label: "Income", icon: "download", tint: "var(--fin-a)", value: <Money amount={income} currency={cur} />, delta: <Delta pct={pct(income, prevIncome)} upIsGood />, open: onOpenTransactions, openLabel: "Show transactions", selected: false },
+    { label: "Transactions", icon: "bill", tint: "var(--fin-b)", value: <span className="tabular-nums">{monthTxs.length}</span>, delta: <Delta pct={pct(monthTxs.length, prevTxs.length)} upIsGood />, open: onOpenTransactions, openLabel: "Show transactions", selected: false },
   ];
 
   return (
     <div className="space-y-4">
-      {/* Row 1: stat cards */}
       <div className="grid gap-4 md:grid-cols-3">
         {stats.map((s) => (
-          <section key={s.label} className={`${FCARD} p-4`}>
-            <div className="flex items-start gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="text-sm text-[var(--muted)]">{s.label}</div>
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <span className="text-2xl font-semibold leading-tight xl:text-[1.9rem]">{s.value}</span>
-                  {s.delta}
-                </div>
-              </div>
-              <span className={`${TILE} grid h-10 w-10 shrink-0 place-items-center text-[var(--accent)] xl:h-12 xl:w-12`}><Icon name={s.icon} size={20} /></span>
-            </div>
-            <div className="mt-3 flex items-center gap-1.5 border-t border-[var(--line)] pt-3 text-sm">
-              <span className="font-medium tabular-nums">{s.diff}</span>
-              <span className="truncate text-[var(--muted)]">from last month{isCurrent ? " (same days)" : ""}</span>
-              <button className="ml-auto grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)]" onClick={s.open} aria-label={s.openLabel} title={s.openLabel}>
-                <Icon name="arrowUpRight" size={17} />
-              </button>
-            </div>
-          </section>
+          <button
+            key={s.label}
+            onClick={s.open}
+            title={`${s.openLabel}${isCurrent ? " · compared with the same days last month" : " · compared with last month"}`}
+            aria-pressed={s.label.startsWith("Spent") ? s.selected : undefined}
+            className="fn-press flex items-center gap-3 rounded-[20px] border-[1.5px] p-5 text-left transition-colors"
+            style={{
+              background: `color-mix(in srgb, ${s.tint} 16%, var(--bg))`,
+              borderColor: s.selected ? `color-mix(in srgb, ${s.tint} 60%, transparent)` : "transparent",
+            }}
+          >
+            <span className="min-w-0 flex-1">
+              <span className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                <span className="whitespace-nowrap text-[1.75rem] font-semibold leading-tight">{s.value}</span>
+                {s.delta}
+              </span>
+              <span className="mt-1 block truncate text-sm text-[var(--muted)]">{s.label}</span>
+            </span>
+            <span className="grid h-[54px] w-[54px] shrink-0 place-items-center rounded-full bg-[color-mix(in_srgb,var(--bg)_75%,transparent)]" style={{ color: s.tint }}>
+              <Icon name={s.icon} size={24} />
+            </span>
+          </button>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-5 xl:grid-cols-3">
-        {/* Left column: spending chart, then payments / heads-up / review */}
-        <div className="flex min-w-0 flex-col gap-4 md:col-span-3 xl:col-span-2">
-          <section className={`${FCARD} p-5`}>
-            <CardTitle icon="chart" title="Spending" hint="Your share of each expense, in your main currency">
-              <Tabs
-                label="Chart"
-                value={view}
-                onChange={(v) => setView(v as ChartView)}
-                items={[["month", "Month"], ["year", "Year"], ["category", "Categories"]]}
+      {chartOpen && (
+        <section className={`${FCARD} fn-rise p-5`}>
+          <CardTitle icon="chart" title="Spending" hint="Your share of each expense, in your main currency">
+            <Tabs
+              label="Chart"
+              value={view}
+              onChange={(v) => setView(v as ChartView)}
+              items={[["month", "Month"], ["year", "Year"], ["category", "Categories"]]}
+            />
+          </CardTitle>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <span className="text-[1.8rem] font-semibold leading-tight">
+              <Money amount={view === "year" ? yearToDate : spent} currency={cur} />
+            </span>
+            {view === "year" ? <Delta pct={pct(yearToDate, lastYear)} /> : <Delta pct={pct(spent, prevSpent)} />}
+            <span className="text-xs text-[var(--muted)]">{view === "year" ? `vs ${y - 1}` : "vs last month"}</span>
+          </div>
+          <div key={view} className="fn-note-in mt-3">
+            {view === "month" && (
+              <LineChart
+                values={daily}
+                total={days}
+                currency={cur}
+                label={(i) => `${i + 1} ${MONTHS[m - 1]}`}
+                ticks={[1, 5, 10, 15, 20, 25, days].filter((d, i, a) => a.indexOf(d) === i).map((d) => ({ at: d - 1, text: String(d) }))}
               />
-            </CardTitle>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <span className="text-[1.8rem] font-semibold leading-tight">
-                <Money amount={view === "year" ? yearToDate : spent} currency={cur} />
-              </span>
-              {view === "year" ? <Delta pct={pct(yearToDate, lastYear)} /> : <Delta pct={pct(spent, prevSpent)} />}
-              <span className="text-xs text-[var(--muted)]">{view === "year" ? `vs ${y - 1}` : "vs last month"}</span>
-            </div>
-            <div key={view} className="fn-note-in mt-3">
-              {view === "month" && (
-                <LineChart
-                  values={daily}
-                  total={days}
-                  currency={cur}
-                  label={(i) => `${i + 1} ${MONTHS[m - 1]}`}
-                  ticks={[1, 5, 10, 15, 20, 25, days].filter((d, i, a) => a.indexOf(d) === i).map((d) => ({ at: d - 1, text: String(d) }))}
-                />
-              )}
-              {view === "year" && (
-                <LineChart
-                  values={yearly.slice(0, y === new Date().getFullYear() ? new Date().getMonth() + 1 : 12)}
-                  total={12}
-                  currency={cur}
-                  label={(i) => `${MONTHS[i]} ${y}`}
-                  ticks={MONTHS.map((t, i) => ({ at: i, text: t }))}
-                  pill={m - 1}
-                />
-              )}
-              {view === "category" && (
-                <ul className="scroll-thin h-[11.5rem] space-y-1.5 overflow-y-auto xl:h-[13.5rem]">
-                  {byCat.length === 0 && <li className="py-10 text-center text-sm text-[var(--faint)]">No spending this month.</li>}
-                  {byCat.map(([c, v]) => (
-                    <li key={c} className={`${TILE} flex items-center gap-3 px-3 py-2`}>
-                      <span className="fin-tab-on grid h-8 w-8 shrink-0 place-items-center rounded-lg"><Icon name={categoryIcon(c)} size={16} /></span>
-                      <span className="w-28 shrink-0 truncate text-sm font-medium sm:w-32">{c}</span>
-                      <span className="relative h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-[var(--hover)]">
-                        <span className="absolute inset-y-0 left-0 rounded-full bg-[var(--accent)]" style={{ width: `${(v / byCat[0][1]) * 100}%` }} />
-                      </span>
-                      <span className="w-16 shrink-0 text-right text-sm tabular-nums sm:w-20">{formatMoney(v, cur, true)}</span>
-                      <span className="hidden w-9 shrink-0 text-right text-xs tabular-nums text-[var(--faint)] sm:block">{spent ? Math.round((v / spent) * 100) : 0}%</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </section>
-
-          <section className={`${FCARD} flex-1 p-5`}>
-            <CardTitle icon={panel === "upcoming" ? "calendar" : "warning"} title={PANELS[panel]}>
-              <Tabs
-                label="Show"
-                value={panel}
-                onChange={(v) => setPanel(v as Panel)}
-                items={[["upcoming", "Payments"], ["alerts", alerts.length ? `Heads-up · ${alerts.length}` : "Heads-up"]]}
-                alert={critical > 0 ? "alerts" : undefined}
+            )}
+            {view === "year" && (
+              <LineChart
+                values={yearly.slice(0, y === new Date().getFullYear() ? new Date().getMonth() + 1 : 12)}
+                total={12}
+                currency={cur}
+                label={(i) => `${MONTHS[i]} ${y}`}
+                ticks={MONTHS.map((t, i) => ({ at: i, text: t }))}
+                pill={m - 1}
               />
-            </CardTitle>
-
-            <div key={panel} className="fn-note-in mt-3">
-              {panel === "upcoming" && (upcoming.length === 0 ? (
-                <p className="py-4 text-sm text-[var(--faint)]">No bills due soon. Repeating bills you add to To-Do show up here.</p>
-              ) : (
-                <ul>
-                  {upcoming.map((p) => {
-                    const n = daysFromToday(p.date);
-                    const status = !p.todoId ? { text: "Likely", cls: "fin-pill-muted" }
-                      : n < 0 ? { text: "Overdue", cls: "fin-pill-bad" }
-                      : n <= 3 ? { text: "Due soon", cls: "fin-pill-warn" }
-                      : { text: "Scheduled", cls: "fin-pill-good" };
-                    return (
-                      <li key={p.key} className="flex items-center gap-3 py-2">
-                        {p.todoId ? (
-                          <input
-                            type="checkbox"
-                            className="h-[18px] w-[18px] shrink-0 accent-[var(--accent)]"
-                            aria-label={`Mark ${p.title} as paid`}
-                            onChange={() => { const extra = toggleTodo(p.todoId!, true); toast([`☑️ Paid: ${p.title}`, ...extra].join("\n")); }}
-                          />
-                        ) : (
-                          <span className="w-[18px] shrink-0" />
-                        )}
-                        <span className="hidden w-12 shrink-0 text-xs tabular-nums text-[var(--muted)] sm:block">{shortDate(p.date)}</span>
-                        <span className="hidden h-10 w-px shrink-0 bg-[var(--line)] sm:block" aria-hidden />
-                        <span className={`${TILE} grid h-11 w-11 shrink-0 place-items-center text-[var(--accent)]`}><Icon name={categoryIcon(p.category)} size={19} /></span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[15px] font-medium">{p.title}</span>
-                          <span className="block truncate text-xs text-[var(--muted)]">
-                            <span className="sm:hidden">{shortDate(p.date)} · </span>{p.sub} · <Money amount={p.amount} currency={p.currency} />
-                          </span>
-                        </span>
-                        <span className="hidden shrink-0 text-xs text-[var(--muted)] sm:block">{inDays(n)}</span>
-                        {p.sub_ ? (
-                          <button className="fin-pill fin-pill-muted hover:brightness-95" onClick={() => trackSub(p.sub_!)}>Track</button>
-                        ) : (
-                          <span className={`fin-pill ${status.cls}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{status.text}</span>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              ))}
-
-              {panel === "alerts" && (alerts.length === 0 ? (
-                <p className="flex items-center gap-3 py-3 text-sm">
-                  <span className="fin-pill-good grid h-10 w-10 place-items-center rounded-lg"><Icon name="check" size={18} /></span>
-                  All clear: budgets on track, nobody owes you.
-                </p>
-              ) : (
-                <ul>
-                  {alerts.map((a) => (
-                    <li key={a.id} className="flex items-center gap-3 py-2">
-                      <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${a.critical ? "fin-pill-bad" : "fin-pill-warn"}`}><Icon name="warning" size={19} /></span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[15px] font-medium">{a.title}</span>
-                        <span className="flex min-w-0 items-center gap-1.5 text-xs">
-                          <span className="shrink-0 text-[var(--accent)]">{a.place}</span>
-                          <span className="h-1 w-1 shrink-0 rounded-full bg-[var(--faint)]" />
-                          <span className="truncate text-[var(--muted)]">{a.detail}</span>
-                        </span>
-                      </span>
-                      <span className="hidden shrink-0 text-xs text-[var(--muted)] sm:block">{a.when}</span>
-                      {a.action && <button className="fin-pill fin-tab-on border-transparent hover:brightness-95" onClick={a.action.run}>{a.action.label}</button>}
-                      <button className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[var(--faint)] hover:bg-[var(--hover)] hover:text-[var(--text)]" onClick={() => dismiss(a.id)} aria-label={`Dismiss: ${a.title}`} title="Dismiss for this month">
-                        <Icon name="x" size={15} />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ))}
-
-            </div>
-          </section>
-        </div>
-
-        {/* Right column: daily brief, then recent transactions */}
-        <div className="flex min-w-0 flex-col gap-4 md:col-span-2 xl:col-span-1">
-          <DailyBrief
-            live={live}
-            monthTxs={monthTxs}
-            isCurrent={isCurrent}
-            days={days}
-            dayOfMonth={dayOfMonth}
-            budget={budgetTotal}
-            currency={cur}
-            summary={summary}
-            summarizing={summarizing}
-            onSummarize={onSummarize}
-            onBudgets={onBudgets}
-          />
-
-          <section className={`${FCARD} flex-1 p-5`}>
-            <CardTitle icon="bill" title="Transactions">
-              {todayCount > 0 && <span className="fin-pill fin-pill-good"><span className="h-1.5 w-1.5 rounded-full bg-current" />{todayCount} today</span>}
-              <button className="ml-auto grid h-8 w-8 place-items-center rounded-lg text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)]" onClick={onOpenTransactions} aria-label="Show all transactions" title="Show all transactions">
-                <Icon name="arrowUpRight" size={17} />
-              </button>
-            </CardTitle>
-            {recent.length === 0 ? (
-              <p className="mt-3 text-sm text-[var(--faint)]">Nothing logged this month yet.</p>
-            ) : (
-              <ul className="mt-3 space-y-2">
-                {recent.map((t) => {
-                  const open = openTx === t.id;
-                  const inc = t.amount < 0;
-                  return (
-                    <li key={t.id} className={`${TILE} overflow-hidden`}>
-                      <button className="flex w-full items-center gap-3 px-3 py-2.5 text-left" onClick={() => setOpenTx(open ? null : t.id)} aria-expanded={open}>
-                        <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-lg ${inc ? "fin-pill-good" : "fin-tab-on"}`}><Icon name={categoryIcon(t.category)} size={19} /></span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[15px] font-medium">{t.merchant}</span>
-                          <span className="flex min-w-0 items-center gap-1.5 text-xs">
-                            <span className={`shrink-0 font-medium ${inc ? "text-[var(--ok)]" : "text-[var(--accent)]"}`}>
-                              {inc ? "+" : ""}{formatMoney(inc ? Math.abs(baseAmount(t, cur)) : myShare(t, cur), cur, true)}
-                            </span>
-                            <span className="h-1 w-1 shrink-0 rounded-full bg-[var(--faint)]" />
-                            <span className="truncate text-[var(--muted)]">{t.category}{t.splits?.length ? " · split" : ""}</span>
-                          </span>
-                        </span>
-                        <span className="shrink-0 text-xs text-[var(--muted)]">{ago(t.date)}</span>
-                      </button>
-                      <div className="fn-collapse" data-open={open}>
-                        <div>
-                          <div className="mx-3 flex gap-2 border-t border-[var(--line)] py-3">
-                            <button className="min-h-10 flex-1 rounded-lg bg-[var(--accent)] text-sm font-medium text-white hover:brightness-110" onClick={() => onOpenTransaction(t.id)}>
-                              Edit / split
-                            </button>
-                            <button className="min-h-10 flex-1 rounded-lg border border-[var(--line)] text-sm text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--danger)]" onClick={() => { remove("transactions", t.id); toast("Transaction deleted"); }}>
-                              Delete
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </li>
-                  );
-                })}
+            )}
+            {view === "category" && (
+              <ul className="scroll-thin h-[11.5rem] space-y-1.5 overflow-y-auto xl:h-[13.5rem]">
+                {byCat.length === 0 && <li className="py-10 text-center text-sm text-[var(--faint)]">No spending this month.</li>}
+                {byCat.map(([c, v]) => (
+                  <li key={c} className={`${TILE} flex items-center gap-3 px-3 py-2`}>
+                    <span className="fin-tab-on grid h-8 w-8 shrink-0 place-items-center rounded-lg"><Icon name={categoryIcon(c)} size={16} /></span>
+                    <span className="w-28 shrink-0 truncate text-sm font-medium sm:w-32">{c}</span>
+                    <span className="relative h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-[var(--hover)]">
+                      <span className="absolute inset-y-0 left-0 rounded-full bg-[var(--accent)]" style={{ width: `${(v / byCat[0][1]) * 100}%` }} />
+                    </span>
+                    <span className="w-16 shrink-0 text-right text-sm tabular-nums sm:w-20">{formatMoney(v, cur, true)}</span>
+                    <span className="hidden w-9 shrink-0 text-right text-xs tabular-nums text-[var(--faint)] sm:block">{spent ? Math.round((v / spent) * 100) : 0}%</span>
+                  </li>
+                ))}
               </ul>
             )}
-          </section>
+          </div>
+        </section>
+      )}
+
+      <HeroCard
+        live={live}
+        monthTxs={monthTxs}
+        month={month}
+        isCurrent={isCurrent}
+        days={days}
+        dayOfMonth={dayOfMonth}
+        budget={budgetTotal}
+        spent={spent}
+        currency={cur}
+        summary={summary}
+        summarizing={summarizing}
+        onSummarize={onSummarize}
+        onReport={onReport}
+        onBudgets={onBudgets}
+      />
+
+      <section className={`${FCARD} p-5`}>
+        <CardTitle icon={panel === "upcoming" ? "calendar" : "warning"} title={PANELS[panel]}>
+          <Tabs
+            label="Show"
+            value={panel}
+            onChange={(v) => setPanel(v as Panel)}
+            items={[["upcoming", "Payments"], ["alerts", alerts.length ? `Heads-up · ${alerts.length}` : "Heads-up"]]}
+            alert={critical > 0 ? "alerts" : undefined}
+          />
+        </CardTitle>
+
+        <div key={panel} className="fn-note-in mt-3">
+          {panel === "upcoming" && (upcoming.length === 0 ? (
+            <p className="py-4 text-sm text-[var(--faint)]">No bills due soon. Repeating bills you add to To-Do show up here.</p>
+          ) : (
+            <ul>
+              {upcoming.map((p) => {
+                const n = daysFromToday(p.date);
+                const status = n < 0 ? { text: "Overdue", cls: "fin-pill-bad" }
+                  : n <= 3 ? { text: "Due soon", cls: "fin-pill-warn" }
+                  : { text: "Scheduled", cls: "fin-pill-good" };
+                return (
+                  <li key={p.key} className="flex items-center gap-3 py-2">
+                    {p.todoId ? (
+                      <button
+                        className="grid h-4 w-4 shrink-0 rounded-[4px] border-[1.2px] border-[var(--faint)] hover:border-[var(--accent)]"
+                        aria-label={`Mark ${p.title} as paid`}
+                        title="Mark as paid"
+                        onClick={() => { const extra = toggleTodo(p.todoId!, true); toast([`☑️ Paid: ${p.title}`, ...extra].join("\n")); }}
+                      />
+                    ) : (
+                      <span className="w-4 shrink-0" />
+                    )}
+                    <span className="hidden w-12 shrink-0 text-xs tabular-nums text-[var(--muted)] sm:block">{shortDate(p.date)}</span>
+                    <span className="hidden h-10 w-px shrink-0 bg-[var(--line)] sm:block" aria-hidden />
+                    <span className={`${TILE} grid h-11 w-11 shrink-0 place-items-center text-[var(--accent)]`}><Icon name={categoryIcon(p.category)} size={19} /></span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[15px] font-medium">{p.title}</span>
+                      <span className="block truncate text-xs text-[var(--muted)]">
+                        <span className="sm:hidden">{shortDate(p.date)} · </span>{p.sub} · <Money amount={p.amount} currency={p.currency} />
+                      </span>
+                    </span>
+                    <span className="hidden shrink-0 text-xs text-[var(--muted)] sm:block">{inDays(n)}</span>
+                    {p.sub_ ? (
+                      <button className="fin-pill fin-pill-muted hover:brightness-95" onClick={() => trackSub(p.sub_!)}>Track</button>
+                    ) : (
+                      <span className={`fin-pill ${status.cls}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{status.text}</span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          ))}
+
+          {panel === "alerts" && (alerts.length === 0 ? (
+            <p className="flex items-center gap-3 py-3 text-sm">
+              <span className="fin-pill-good grid h-10 w-10 place-items-center rounded-lg"><Icon name="check" size={18} /></span>
+              All clear: budgets on track, nobody owes you.
+            </p>
+          ) : (
+            <ul>
+              {alerts.map((a) => (
+                <li key={a.id} className="flex items-center gap-3 py-2">
+                  <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${a.critical ? "fin-pill-bad" : "fin-pill-warn"}`}><Icon name="warning" size={19} /></span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[15px] font-medium">{a.title}</span>
+                    <span className="flex min-w-0 items-center gap-1.5 text-xs">
+                      <span className="shrink-0 text-[var(--accent)]">{a.place}</span>
+                      <span className="h-1 w-1 shrink-0 rounded-full bg-[var(--faint)]" />
+                      <span className="truncate text-[var(--muted)]">{a.detail}</span>
+                    </span>
+                  </span>
+                  <span className="hidden shrink-0 text-xs text-[var(--muted)] sm:block">{a.when}</span>
+                  {a.action && <button className="fin-pill fin-tab-on border-transparent hover:brightness-95" onClick={a.action.run}>{a.action.label}</button>}
+                  <button className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[var(--faint)] hover:bg-[var(--hover)] hover:text-[var(--text)]" onClick={() => dismiss(a.id)} aria-label={`Dismiss: ${a.title}`} title="Dismiss for this month">
+                    <Icon name="x" size={15} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ))}
         </div>
-      </div>
+      </section>
     </div>
   );
 }
@@ -487,18 +436,14 @@ function Tabs({ label, value, onChange, items, alert }: {
   );
 }
 
-const ago = (date: string) => {
-  const n = -daysFromToday(date);
-  return n <= 0 ? "Today" : n === 1 ? "Yesterday" : n < 7 ? `${n}d ago` : shortDate(date);
-};
 
 /**
- * The AI's review of the month, headed by today's numbers: spent today and what the
- * day can still take (the budget left spread over the days left, or your usual day).
+ * The banner: what the month comes to, today's pace (the budget left spread over the days
+ * left, or your usual day), and the month's review beside it.
  */
-function DailyBrief({ live, monthTxs, isCurrent, days, dayOfMonth, budget, currency, summary, summarizing, onSummarize, onBudgets }: {
-  live: Transaction[]; monthTxs: Transaction[]; isCurrent: boolean; days: number; dayOfMonth: number; budget: number; currency: string;
-  summary?: MonthlySummary; summarizing: boolean; onSummarize: () => void; onBudgets: () => void;
+function HeroCard({ live, monthTxs, month, isCurrent, days, dayOfMonth, budget, spent, currency, summary, summarizing, onSummarize, onReport, onBudgets }: {
+  live: Transaction[]; monthTxs: Transaction[]; month: string; isCurrent: boolean; days: number; dayOfMonth: number; budget: number; spent: number; currency: string;
+  summary?: MonthlySummary; summarizing: boolean; onSummarize: () => void; onReport: () => void; onBudgets: () => void;
 }) {
   const today = localDate();
   const spentToday = spendOf(live.filter((t) => t.date === today && t.amount > 0), currency);
@@ -506,39 +451,59 @@ function DailyBrief({ live, monthTxs, isCurrent, days, dayOfMonth, budget, curre
   const daysLeft = days - dayOfMonth + 1;
   const allowance = budget > 0 ? Math.max(0, (budget - before) / daysLeft) : before / Math.max(1, dayOfMonth - 1);
   const left = allowance - spentToday;
+  const monthDate = new Date(`${month}-01T00:00:00`);
+  const monthName = monthDate.toLocaleDateString("en-US", { month: "long" });
+  const monthYear = monthDate.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  // The review, without the total the headline already says.
+  const lines = summary ? reviewLines(summary.text, currency).filter((l) => !/^total$/i.test(l.label ?? "")) : [];
+  const ghost = "min-h-9 rounded-[10px] px-3 text-sm font-medium text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)] disabled:opacity-40";
 
   return (
-    <section className={`${FCARD} p-5`}>
-      <CardTitle icon="sparkle" title="Daily brief" hint="The AI's review of this month's spending">
-        {monthTxs.length > 0 && (
-          <button className="min-h-8 rounded-lg px-2 text-sm font-medium text-[var(--accent)] hover:bg-[var(--hover)] disabled:opacity-40" onClick={onSummarize} disabled={summarizing}>
-            {summarizing ? "Writing…" : summary ? "Refresh" : "Generate"}
-          </button>
-        )}
-      </CardTitle>
-      {isCurrent && (
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          <div className={`${TILE} min-w-0 px-3 py-2`}>
-            <div className="truncate text-xs text-[var(--muted)]">Spent today</div>
-            <div className="truncate font-semibold tabular-nums">{formatMoney(spentToday, currency, true)}</div>
-          </div>
-          <div className={`${TILE} min-w-0 px-3 py-2`}>
-            <div className="truncate text-xs text-[var(--muted)]">{left >= 0 ? "Left today" : "Over today"}</div>
-            {allowance > 0 || budget > 0 ? (
-              <div className={`truncate font-semibold tabular-nums ${left < 0 ? "text-[var(--danger)]" : ""}`}>{formatMoney(Math.abs(left), currency, true)}</div>
-            ) : (
-              <button className="text-sm font-medium text-[var(--accent)] hover:underline" onClick={onBudgets}>Set a budget</button>
+    <section className="fn-rise grid gap-8 rounded-[20px] border border-[var(--line)] bg-[var(--panel)] p-6 md:grid-cols-2 md:p-7">
+      <div className="min-w-0">
+        <h3 className="fn-serif text-[1.9rem] leading-tight tracking-[-0.02em]">
+          {formatMoney(spent, currency, true)} spent {isCurrent ? `so far this ${monthName}` : `in ${monthYear}`}
+        </h3>
+        {isCurrent && (
+          <p className="mt-3 text-sm text-[var(--muted)]">
+            {formatMoney(spentToday, currency, true)} {allowance > 0 || budget > 0 ? "today · " : "spent today"}
+            {(allowance > 0 || budget > 0) && (
+              <span className={left < 0 ? "text-[var(--danger)]" : "text-[var(--text)]"}>{formatMoney(Math.abs(left), currency, true)} {left >= 0 ? "left" : "over"} for today</span>
             )}
-          </div>
+          </p>
+        )}
+        <div className="mt-5 flex flex-wrap items-center gap-2">
+          <button className="fn-press flex min-h-9 items-center gap-2 rounded-[10px] bg-[var(--accent)] px-3.5 text-sm font-medium text-white hover:brightness-110" onClick={onReport}>
+            <Icon name="download" size={15} /> Monthly report
+          </button>
+          {monthTxs.length > 0 && (
+            <button className={ghost} onClick={onSummarize} disabled={summarizing}>{summarizing ? "Writing…" : summary ? "Refresh review" : "Write review"}</button>
+          )}
+          {budget === 0 && <button className={ghost} onClick={onBudgets}>Set a budget</button>}
         </div>
-      )}
-      <div className="mt-3 whitespace-pre-wrap text-[15px] leading-relaxed">
-        {summarizing ? (
-          <span className="text-[var(--muted)]">Reading this month&apos;s spending…</span>
-        ) : summary?.text ?? (
-          <span className="text-[var(--muted)]">
-            {monthTxs.length ? "Tap Generate for a short AI review of this month, with suggestions. It's also written automatically when the month ends." : "Log some spending first; the review is written from it."}
-          </span>
+      </div>
+
+      <div className="min-w-0 text-sm">
+        {summarizing && !lines.length ? (
+          <p className="text-[var(--muted)]">Reading this month&apos;s spending…</p>
+        ) : lines.length ? (
+          <ul className="space-y-3">
+            {lines.map((l, i) => (
+              <li key={i} className="flex gap-2.5">
+                <span className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-[7px] bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-[var(--accent)]">
+                  <Icon name={l.icon} size={13} />
+                </span>
+                <span className="min-w-0">
+                  {l.label && <span className="block text-xs font-medium text-[var(--muted)]">{l.label}</span>}
+                  <span className="block text-[14px] leading-snug">{l.body.replace(/\*\*(.+?)\*\*/g, "$1")}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-[var(--muted)]">
+            {monthTxs.length ? "A short review of the month, with a tip, is written here as you spend." : "Log some spending first; the review is written from it."}
+          </p>
         )}
       </div>
     </section>

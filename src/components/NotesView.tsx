@@ -27,41 +27,54 @@ const SORTS = { updated: "Last edited", created: "Date created", title: "Title (
 type Sort = keyof typeof SORTS;
 const PREFS = "four-notes:notes-view";
 
-function timeAgo(iso: string) {
+/** "19 APR", or "19 APR 2025" once it is not this year. */
+function cardDate(iso: string) {
   const d = new Date(iso);
-  const mins = Math.round((Date.now() - d.getTime()) / 60_000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins} minute${mins === 1 ? "" : "s"} ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
-  if (hours < 48) return "Yesterday";
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return `${d.getDate()} ${d.toLocaleDateString("en-US", { month: "short" })}${sameYear ? "" : ` ${d.getFullYear()}`}`.toUpperCase();
 }
 
 function NoteCard({ note, selected, linked, onOpen }: { note: Note; selected: boolean; linked: number; onOpen: () => void }) {
   const flash = useFiledFlash(note.id);
   const preview = snippet(note.content);
+  const source = SOURCE_LABEL[note.source];
+  const tags = note.tags;
   return (
     <li id={`note-row-${note.id}`} className={flash ? "fn-flash" : ""}>
       <button
         onClick={onOpen}
         aria-current={selected ? "true" : undefined}
-        className={`flex min-h-[8.5rem] w-full flex-col rounded-xl border px-4 py-3.5 text-left transition-colors ${
-          selected ? "border-[var(--accent)] bg-[var(--bg)] shadow-[var(--shadow)]" : "border-transparent hover:bg-[var(--hover)]"
+        className={`fn-press flex w-full flex-col rounded-[10px] border px-4 py-4 text-left transition-colors ${
+          selected ? "border-[color-mix(in_srgb,var(--faint)_35%,transparent)] bg-[var(--hover)]" : "border-transparent bg-[var(--panel)] hover:bg-[var(--hover)]"
         }`}
       >
-        <span className="line-clamp-1 text-[15px] font-semibold">{note.title || "Untitled"}</span>
-        <span className="mt-1 line-clamp-2 text-sm leading-relaxed text-[var(--muted)]">{preview || <span className="text-[var(--faint)]">No text yet</span>}</span>
-        <span className="mt-auto flex items-center gap-2 pt-3 text-xs text-[var(--faint)]">
-          {timeAgo(note.updatedAt)}
-          {SOURCE_LABEL[note.source] && <span className="chip">{SOURCE_LABEL[note.source]}</span>}
-          {linked > 0 && <span className="flex items-center gap-0.5"><Icon name="link" size={11} />{linked}</span>}
-          {note.tags.slice(0, 2).map((t) => <span key={t}>#{t}</span>)}
+        <span className="flex items-center gap-1.5 text-[11px] font-medium tracking-[0.08em] text-[var(--faint)]">
+          <span>{cardDate(note.updatedAt)}</span>
+          {source && <><span>·</span><span className="truncate">{source.toUpperCase()}</span></>}
+          {linked > 0 && (
+            <span className="ml-auto flex shrink-0 items-center gap-0.5" title={`${linked} linked item${linked === 1 ? "" : "s"}`}>
+              <Icon name="link" size={11} />{linked}
+            </span>
+          )}
         </span>
+        <span className={`mt-2 line-clamp-1 text-[15px] ${selected ? "font-semibold text-[var(--text)]" : "font-medium text-[color-mix(in_srgb,var(--text)_78%,transparent)]"}`}>
+          {note.title || "Untitled"}
+        </span>
+        <span className={`mt-1.5 line-clamp-2 text-[13px] leading-relaxed ${selected ? "text-[var(--muted)]" : "text-[var(--faint)]"}`}>{preview || "No text yet"}</span>
+        {tags.length > 0 && (
+          <span className="mt-3.5 flex flex-wrap gap-1.5">
+            {tags.slice(0, 3).map((t) => <TagChip key={t}>{t[0]?.toUpperCase() + t.slice(1)}</TagChip>)}
+            {tags.length > 3 && <TagChip>+{tags.length - 3} more</TagChip>}
+          </span>
+        )}
       </button>
     </li>
   );
 }
+
+const TagChip = ({ children }: { children: React.ReactNode }) => (
+  <span className="flex h-6 items-center rounded-[5px] border border-[var(--line)] bg-[color-mix(in_srgb,var(--bg)_60%,transparent)] px-2 text-[11px] font-medium tracking-[0.03em] text-[var(--muted)]">{children}</span>
+);
 
 /** A note that was opened but never written in: no title, no text, no scan, nothing linked. */
 const isBlank = (n: Note, todos: { noteId?: string | null; deletedAt?: string | null }[], txs: { noteId?: string | null; deletedAt?: string | null }[]) =>
@@ -199,7 +212,8 @@ export default function NotesView() {
 
   if (liveCount === 0) {
     return (
-      <div className="mx-auto max-w-3xl pt-2">
+      <div className="mx-auto w-full max-w-3xl">
+        <h2 className="fn-serif mb-5 mt-5 text-[2.1rem] leading-tight md:mt-7">Notes</h2>
         <EmptyStart
           title="No notes yet"
           hint="Start a note, photograph handwriting, record a voice note — or ask the assistant to write one."
@@ -220,32 +234,37 @@ export default function NotesView() {
   return (
     // Fills the space below the header exactly: the list and the note each scroll on
     // their own, so headers, toolbar and footer stay in place.
-    <div className="flex min-h-0 flex-1 gap-4 md:gap-5">
+    <div className="-mx-4 flex min-h-0 flex-1 md:-mx-8">
       {(mobile ? showList : listPresence.mounted) && (
         <aside
-          className={`fn-aside flex min-h-0 w-full shrink-0 flex-col md:w-[340px] ${mobile && returned ? "fn-list-back" : ""}`}
+          className={`fn-aside flex min-h-0 w-full shrink-0 flex-col md:w-[331px] md:border-r md:border-[var(--line)] ${mobile && returned ? "fn-list-back" : ""}`}
           data-state={mobile ? undefined : listPresence.state}
           inert={!mobile && listHidden ? true : undefined}
         >
           {/* Fixed width inside, so the cards don't reflow while the list folds. */}
-          <div className="flex min-h-0 w-full flex-1 flex-col md:w-[340px]">
-          {/* The page title ("Notes") sits above, like every tab; this row counts and acts. */}
-          <div className="flex items-center justify-between gap-2 px-1 pb-2">
-            <span className="text-sm text-[var(--muted)]">{liveCount} note{liveCount === 1 ? "" : "s"}</span>
+          <div className="flex min-h-0 w-full flex-1 flex-col px-4 md:w-[330px] md:px-[18px]">
+          {/* The list carries the tab's title, as the macOS app has it. */}
+          <div className="flex items-center justify-between gap-2 pb-4 pt-5 md:pt-7">
+            <h2 className="fn-serif text-[2.1rem] leading-tight" title={`${liveCount} note${liveCount === 1 ? "" : "s"}`}>Notes</h2>
             <div className="flex items-center gap-0.5">
-              <button className="tb-btn" onClick={newNote} aria-label="New note" title="New note"><Icon name="noteAdd" size={20} /></button>
-              <Dropdown label="Sort notes" button={<Icon name="sort" size={20} />} width={200}>
+              <Dropdown label="Sort notes" button={<Icon name="sort" size={19} />} width={200} chevron={false} align="right">
                 {(close) => (Object.keys(SORTS) as Sort[]).map((s) => (
                   <MenuItem key={s} label={SORTS[s]} active={sort === s} onSelect={() => { close(); setSort(s); }} />
                 ))}
               </Dropdown>
               <button className={`tb-btn ${searching ? "bg-[var(--hover)] text-[var(--text)]" : ""}`} onClick={() => { setSearching((v) => !v); if (searching) setQuery(""); }} aria-label="Search notes" aria-pressed={searching}>
-                <Icon name="search" size={19} />
+                <Icon name="search" size={18} />
               </button>
             </div>
           </div>
+          <button
+            onClick={newNote}
+            className="fn-press mb-3 flex min-h-12 w-full items-center gap-3 rounded-[10px] bg-[var(--panel)] px-4 text-left text-sm text-[color-mix(in_srgb,var(--text)_85%,transparent)] hover:bg-[var(--hover)] hover:text-[var(--text)]"
+          >
+            <Icon name="plus" size={18} /> Add new note
+          </button>
           {searching && (
-            <div className="fn-rise px-1 pb-2">
+            <div className="fn-rise pb-3">
               <input
                 autoFocus
                 value={query}
@@ -259,7 +278,7 @@ export default function NotesView() {
               )}
             </div>
           )}
-          <ul className="scroll-thin -mx-1 min-h-0 flex-1 space-y-1 overflow-y-auto px-1 pb-4">
+          <ul className="scroll-thin -mx-1 min-h-0 flex-1 space-y-2.5 overflow-y-auto px-1 pb-24">
             {list.map((n) => (
               <NoteCard key={n.id} note={n} selected={!mobile && selected?.id === n.id} linked={linkedCount(n.id)} onOpen={() => open(n.id)} />
             ))}

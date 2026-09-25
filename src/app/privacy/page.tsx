@@ -15,7 +15,8 @@ export default function PrivacyPage() {
       <p>
         Four Notes (&ldquo;the app&rdquo;, &ldquo;we&rdquo;) is a notes, to-do and personal-finance app with an AI assistant, available at{" "}
         <a href="https://fournotes.vercel.app">fournotes.vercel.app</a>. This policy explains what information the app handles, where it goes, and the
-        choices you have. We don&apos;t sell your information, show ads, or use tracking or analytics tools.
+        choices you have. We don&apos;t sell your information, show ads, or track you across sites; the only analytics are the anonymous, cookie-free page and speed
+        statistics described in section 4.
       </p>
 
       <p className="callout">
@@ -175,6 +176,12 @@ export default function PrivacyPage() {
         <li>
           <strong>Hosting</strong> — the app is hosted on <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noreferrer">Vercel</a>,
           which processes standard request information (such as IP address and browser type) to serve the site.
+        </li>
+        <li>
+          <strong>Usage and speed statistics</strong> — Vercel{" "}
+          <a href="https://vercel.com/docs/analytics/privacy-policy" target="_blank" rel="noreferrer">Web Analytics</a> and Speed Insights count
+          page views and measure how fast pages load (for example the page address, referrer, browser, device type and country). They use no cookies
+          and don&apos;t identify you, and none of your notes, tasks, spending or messages are included.
         </li>
       </ul>
 

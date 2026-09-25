@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
-/* Notion-like neutral palette. Components use these tokens via Tailwind's
-   arbitrary values, e.g. bg-[var(--panel)]. */
+/* Notion-like neutral palette, shared with the macOS app (Design/Theme.swift).
+   Components use these tokens via Tailwind's arbitrary values, e.g. bg-[var(--panel)]. */
 :root {
   color-scheme: light;
   --logo-ink: #000000;
@@ -16,6 +16,11 @@
   --accent: #2383e2;
   --danger: #e03e3e;
   --ok: #0f7b6c;
+  /* Corner radii, matching FN.radius / cardRadius in the macOS app. */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 12px;
+  --r-xl: 16px;
   --sticky-yellow: #fbf3db;
   --sticky-pink: #fbe4e4;
   --sticky-blue: #e7f3f8;
@@ -38,6 +43,55 @@
   --fin-d: #f0a93b;
   --fin-e: #5aa9e6;
   --fin-rest: #e6e5e1;
+  /* Today's and setup's soft light: a warm and a cool glow over the page colour. */
+  --calm-warm: #f6c7b6;
+  --calm-cool: #c9ddf3;
+  --calm-glow: 45%;
+  /* Quick-note cards on Today sit a shade apart from the page. */
+  --card-paper: #ffffff;
+  /* Titles: the system serif where there is one (New York on Apple), else Newsreader. */
+  --font-serif: ui-serif, "New York", var(--font-newsreader), Georgia, "Times New Roman", serif;
+}
+
+/* Paper: light, on warm paper — cream pages, ink-brown text, a terracotta accent. */
+:root[data-theme="paper"] {
+  color-scheme: light;
+  --logo-ink: #2e2819;
+  --logo-red: #d2402b;
+  --bg: #fbf6e8;
+  --panel: #f4edd9;
+  --text: #3a3326;
+  --muted: #6b624f;
+  --faint: #857b66;
+  --line: #e6dcc2;
+  --hover: rgba(58, 51, 38, 0.07);
+  --accent: #b0582a;
+  --danger: #c23b2c;
+  --ok: #3f7a4e;
+  --sticky-yellow: #f6ecc8;
+  --sticky-pink: #f6e0d6;
+  --sticky-blue: #e4edea;
+  --sticky-green: #e8eed8;
+  --shadow: 0 1px 2px rgba(90, 70, 30, 0.08), 0 4px 16px rgba(90, 70, 30, 0.1);
+  --board-red: #c9503e;
+  --board-red-ink: #a43a2a;
+  --board-amber: #c99a2e;
+  --board-amber-ink: #80601a;
+  --board-green: #5e9a63;
+  --board-green-ink: #366a3d;
+  --board-col-mix: 7%;
+  --board-card-mix: 0%;
+  --board-label-mix: 24%;
+  --fin-a: #9a7fd6;
+  --fin-b: #7db88a;
+  --fin-c: #3a3326;
+  --fin-d: #e0a040;
+  --fin-e: #6fa3c8;
+  --fin-rest: #e6dcc2;
+  --calm-warm: #f2c9a8;
+  --calm-cool: #d3e1d6;
+  --calm-glow: 50%;
+  --card-paper: #fffcf3;
 }
 
 /* Dark theme: <html data-theme="dark"> is set before first paint from
@@ -76,6 +130,10 @@
   --fin-d: #f5c26b;
   --fin-e: #7cc4f5;
   --fin-rest: #333333;
+  --calm-warm: #5a2e26;
+  --calm-cool: #1f3550;
+  --calm-glow: 42%;
+  --card-paper: var(--panel);
 }
 
 html,
@@ -88,6 +146,23 @@ body {
   color: var(--text);
   font-family: var(--font-open-sans), ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Titles in the serif, as the macOS app sets them. */
+.fn-serif {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  letter-spacing: -0.012em;
+}
+
+/* Today and first-run setup: a soft wash of warm and cool light over the page colour.
+   Radial glows, not a mesh, so it is cheap to draw behind a page. */
+.fn-calm {
+  background:
+    radial-gradient(47vmax circle at 42% 28%, color-mix(in srgb, var(--calm-warm) var(--calm-glow), transparent), transparent 70%),
+    radial-gradient(42vmax circle at 82% 82%, color-mix(in srgb, var(--calm-cool) var(--calm-glow), transparent), transparent 70%),
+    radial-gradient(30vmax circle at 10% 95%, color-mix(in srgb, var(--calm-warm) calc(var(--calm-glow) * 0.7), transparent), transparent 70%),
+    var(--bg);
 }
 
 /* One focus ring everywhere, and only for keyboard users (a click doesn't leave one behind). */
@@ -210,7 +285,8 @@ kbd {
     display: block !important;
   }
   :root,
-  :root[data-theme="dark"] {
+  :root[data-theme="dark"],
+  :root[data-theme="paper"] {
     color-scheme: light;
     --bg: #fff;
     --text: #111;
@@ -354,6 +430,51 @@ kbd {
 .fn-press { transition: transform 0.12s ease; }
 .fn-press:active:not(:disabled) { transform: scale(0.94); }
 
+/* ---- The assistant (Ask pill, thinking indicator) --------------------------------- */
+@keyframes fn-sway {
+  0%, 100% { transform: scale(0.88) rotate(-10deg); }
+  50% { transform: scale(1.16) rotate(16deg); }
+}
+.fn-sway { animation: fn-sway 3.2s ease-in-out infinite; }
+@keyframes fn-breathe {
+  0%, 100% { transform: scale(0.88); }
+  50% { transform: scale(1.05); }
+}
+.fn-breathe { animation: fn-breathe 2.1s ease-in-out infinite; }
+/* A band of light that crosses the words now and then: 1.4s across, then a rest. */
+/* The gradient is 2.5× the text's width; within 0–100% it always covers the text, so the words never vanish. */
+@keyframes fn-shimmer {
+  0% { background-position: 100% 0; }
+  32%, 100% { background-position: 0% 0; }
+}
+.fn-shimmer {
+  background: linear-gradient(90deg, currentColor 0%, currentColor 35%, var(--text) 50%, currentColor 65%, currentColor 100%) 100% 0 / 250% 100% no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: fn-shimmer 4.4s ease-in-out infinite;
+}
+/* The corner composer grows out of the corner the pill sits in (phones keep the bottom sheet). */
+@keyframes fn-corner-in { from { opacity: 0; transform: scale(0.4); } }
+@media (min-width: 640px) {
+  .fn-sheet.fn-corner[data-state="open"] { animation: fn-corner-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) backwards; transform-origin: bottom right; }
+}
+
+/* ---- First-run setup ------------------------------------------------------------------ */
+.fn-onboarding { --ob-accent: #c0643c; }
+:root[data-theme="dark"] .fn-onboarding { --ob-accent: #e08a62; }
+/* Steps arrive out of a soft blur, from the side they were moved towards. */
+@keyframes fn-step-fwd { from { opacity: 0; filter: blur(14px); transform: translateX(18px); } }
+@keyframes fn-step-back { from { opacity: 0; filter: blur(14px); transform: translateX(-18px); } }
+.fn-step[data-dir="fwd"] { animation: fn-step-fwd 0.55s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+.fn-step[data-dir="back"] { animation: fn-step-back 0.55s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+/* Pictures come in piece by piece (each sets its own animation-delay). */
+@keyframes fn-arrive { from { opacity: 0; filter: blur(6px); translate: 0 10px; } }
+.fn-arrive { animation: fn-arrive 0.6s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+/* The celebration: the mark rises out of the row. */
+@keyframes fn-raise { from { transform: translateY(0) scale(0.73); } to { transform: translateY(-14px) scale(1); } }
+.fn-raise { display: block; animation: fn-raise 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) 0.25s both; }
+
 /* ---- To-Do board --------------------------------------------------------------- */
 [data-hue="red"] { --hue: var(--board-red); --hue-ink: var(--board-red-ink); }
 [data-hue="amber"] { --hue: var(--board-amber); --hue-ink: var(--board-amber-ink); }
@@ -439,6 +560,7 @@ kbd {
 
 @media (prefers-reduced-motion: reduce) {
   .fn-rise, .fn-pop, .fn-toast, .fn-flash, .fn-dot, .fn-nudge, .fn-ping::after, .recording,
+  .fn-sway, .fn-breathe, .fn-shimmer, .fn-corner, .fn-step, .fn-arrive,
   .fn-backdrop, .fn-sheet, .fn-dialog, .fn-drawer,
   .note-card, .fn-list-back, .fn-aside, .fn-note-in {
     animation: none !important;
@@ -446,6 +568,7 @@ kbd {
   .fn-collapse, .fn-burger line { transition: none; }
   .fn-press { transition: none; }
   .fn-flash { background-color: color-mix(in srgb, var(--accent) 14%, transparent); }
+  .fn-raise { animation: none; transform: translateY(-14px); }
 }
 
 /* ---- Privacy Policy / Terms of Service ---------------------------------------- */

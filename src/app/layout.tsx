@@ -1,11 +1,16 @@
 import type { Metadata, Viewport } from "next";
-import { Open_Sans } from "next/font/google";
+import { Newsreader, Open_Sans } from "next/font/google";
 import localFont from "next/font/local";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { themeInitScript, THEME_COLORS } from "@/lib/theme-script";
 import "./globals.css";
 
 // Downloaded at build time and served from this site: visitors never contact Google Fonts.
 const openSans = Open_Sans({ subsets: ["latin"], display: "swap", variable: "--font-open-sans" });
+// Titles are set in a serif, as the macOS app does. Browsers with the system serif
+// (New York on Apple devices) use that first; see --font-serif in globals.css.
+const newsreader = Newsreader({ subsets: ["latin"], display: "swap", variable: "--font-newsreader" });
 // Google's branding rules require Google Sans Medium on the "Continue with Google" button.
 // Self-hosted (SIL Open Font License, see src/fonts/GoogleSans-OFL.txt).
 const googleSans = localFont({
@@ -37,11 +42,16 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     // data-theme is set by the inline script before hydration, so React must not warn about it.
-    <html lang="en" className={`${openSans.variable} ${googleSans.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${openSans.variable} ${newsreader.variable} ${googleSans.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        {/* Anonymous page views and Core Web Vitals, cookie-free (see the Privacy Policy, section 4). */}
+        <Analytics />
+        <SpeedInsights />
+      </body>
     </html>
   );
 }

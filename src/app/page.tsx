@@ -53,9 +53,10 @@ function Shell() {
   const [settings, setSettings] = useState(false);
   const spaceName = spaces.find((s) => s.id === currentSpaceId)?.name;
   const pulsing = usePulsingTabs().filter((t) => t !== tab);
-  // Notes gets the whole width for its list + editor.
-  // Notes fills the height (its list and editor scroll on their own); other tabs scroll the page.
+  // Notes fills the height (its list and editor scroll on their own), and Today is one page
+  // that fits the window; the other tabs scroll the page.
   const wide = tab === "notes";
+  const fits = tab === "notes" || tab === "today";
   // Phones: the header stays on top; it gets a border once the page scrolls under it.
   const [scrolled, setScrolled] = useState(false);
 
@@ -116,9 +117,13 @@ function Shell() {
             </div>
           )}
 
-          <main className="relative flex min-w-0 flex-1 flex-col overflow-y-auto" onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 4)}>
+          {/* Today sits on the setup's soft light; the other tabs are plain. */}
+          <main
+            className={`relative flex min-w-0 flex-1 flex-col overflow-y-auto transition-[background] duration-500 ${tab === "today" ? "fn-calm" : ""}`}
+            onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 4)}
+          >
             <header
-              className={`sticky top-0 z-30 flex items-center gap-1 bg-[var(--bg)] px-2 pb-1.5 pt-[calc(env(safe-area-inset-top)+6px)] transition-[border-color,box-shadow] md:hidden ${
+              className={`sticky top-0 z-30 flex items-center gap-1 px-2 pb-1.5 ${tab === "today" && !scrolled ? "bg-transparent" : "bg-[var(--bg)]"} pt-[calc(env(safe-area-inset-top)+6px)] transition-[border-color,box-shadow] md:hidden ${
                 scrolled ? "border-b border-[var(--line)] shadow-[0_1px_8px_rgba(0,0,0,0.06)]" : "border-b border-transparent"
               }`}
             >
@@ -140,9 +145,9 @@ function Shell() {
 
 
             {/* Every tab: same width, same side padding, same title position. */}
-            <div key={tab} className={`fn-rise mx-auto w-full max-w-[1500px] flex-1 px-4 md:px-8 ${wide ? "flex min-h-0 flex-col pb-3" : "pb-8"}`}>
-              {/* Today's big greeting stands in for the title. */}
-              <h1 className={`mb-5 mt-5 flex shrink-0 items-center gap-3 text-4xl font-bold tracking-tight md:mt-7 ${tab === "today" ? "sr-only" : ""}`}>
+            <div key={tab} className={`fn-rise mx-auto w-full flex-1 px-4 md:px-8 ${fits ? "flex min-h-0 flex-col" : "pb-24"} ${wide ? "" : "max-w-[1500px]"}`}>
+              {/* Today's big greeting stands in for the title, and Notes has its own in the list. */}
+              <h1 className={`fn-serif mb-5 mt-5 flex shrink-0 items-center gap-3 text-[2.1rem] leading-tight md:mt-7 ${fits ? "sr-only" : ""}`}>
                 {TITLES[tab]}
                 {spaceName && <span className="chip self-center text-sm font-normal"><Icon name="users" size={12} />{spaceName}</span>}
               </h1>
@@ -159,8 +164,8 @@ function Shell() {
               )}
             </div>
 
-            {/* Full assistant bar on Today; a round button everywhere else. */}
-            <ChatDock minimized={tab !== "today"} />
+            {/* Today has the assistant in the middle of its page; everywhere else it's a pill in the corner. */}
+            {tab !== "today" && <ChatDock minimized />}
           </main>
         </div>
       </div>

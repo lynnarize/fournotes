@@ -14,13 +14,24 @@ const offlineGuard = () => {
 };
 
 export const api = {
-  chat: (messages: ChatMessage[], context: ClientContext) => {
+  /** `tools: false` asks for an answer only: nothing can be filed. */
+  chat: (messages: ChatMessage[], context: ClientContext, opts?: { tools?: boolean }) => {
     offlineGuard();
     return fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...keyHeaders() },
-      body: JSON.stringify({ messages, context }),
+      body: JSON.stringify({ messages, context, tools: opts?.tools !== false }),
     }).then((r) => asJson<ChatResponse>(r));
+  },
+
+  /** "Ideas from the web" for a note (needs Claude: web search is Anthropic's). */
+  webIdeas: (title: string, content: string, question: string) => {
+    offlineGuard();
+    return fetch("/api/ai/web-ideas", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...keyHeaders() },
+      body: JSON.stringify({ title, content, question }),
+    }).then((r) => asJson<{ text: string; sources: { title: string; url: string }[] }>(r));
   },
 
   captureImage: (file: Blob, context: ClientContext) => {

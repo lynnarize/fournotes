@@ -6,7 +6,7 @@ import Logo from "./Logo";
 
 /** Who to contact about privacy or the terms. Shown on both pages. */
 export const CONTACT_EMAIL = "lynnarize@gmail.com";
-export const LAST_UPDATED = "September 18, 2026";
+export const LAST_UPDATED = "September 25, 2026";
 
 export default function LegalPage({ title, children }: { title: string; children: ReactNode }) {
   return (

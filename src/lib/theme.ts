@@ -1,11 +1,11 @@
 "use client";
-// Dark mode: "system" follows the device, "light"/"dark" override it.
-// Stored per device (not synced) and applied via <html data-theme="…">.
+// Themes: "system" follows the device; "light", "paper" (warm paper, ink-brown text)
+// and "dark" override it. Stored per device (not synced) and applied via <html data-theme="…">.
 import { useEffect, useState } from "react";
 import { THEME_COLORS, THEME_KEY } from "./theme-script";
 
-export type ThemePref = "system" | "light" | "dark";
-export type ResolvedTheme = "light" | "dark";
+export type ThemePref = "system" | "light" | "paper" | "dark";
+export type ResolvedTheme = "light" | "paper" | "dark";
 
 const EVT = "four-notes:theme-changed";
 const darkQuery = () => window.matchMedia("(prefers-color-scheme: dark)");
@@ -13,7 +13,7 @@ const darkQuery = () => window.matchMedia("(prefers-color-scheme: dark)");
 export function getThemePref(): ThemePref {
   try {
     const v = localStorage.getItem(THEME_KEY);
-    return v === "light" || v === "dark" ? v : "system";
+    return v === "light" || v === "paper" || v === "dark" ? v : "system";
   } catch {
     return "system";
   }
@@ -21,6 +21,9 @@ export function getThemePref(): ThemePref {
 
 export const resolveTheme = (pref: ThemePref): ResolvedTheme =>
   pref === "system" ? (darkQuery().matches ? "dark" : "light") : pref;
+
+/** Light and paper are both light looks: anything with only two looks treats paper as light. */
+export const isDark = (t: ResolvedTheme) => t === "dark";
 
 /** Browser UI (address bar, installed app title bar) follows the chosen theme. */
 function syncThemeColor(resolved: ResolvedTheme) {

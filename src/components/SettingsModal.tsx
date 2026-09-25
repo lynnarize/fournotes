@@ -8,6 +8,8 @@ import { useTheme } from "@/lib/theme";
 import { CURRENCIES } from "@/lib/types";
 import ApiKeysSection from "./ApiKeysSection";
 import AppearanceSection from "./AppearanceSection";
+import BriefStyleSection from "./BriefStyleSection";
+import { useBriefStyle } from "@/lib/briefParagraph";
 import BudgetEditor from "./BudgetEditor";
 import CategoryEditor from "./CategoryEditor";
 import { useCloud } from "./cloud";
@@ -36,6 +38,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
   const cloud = useCloud();
   const google = useGoogleSync();
   const theme = useTheme();
+  const [briefStyle] = useBriefStyle();
   const { keys } = useUserKeys();
   const toast = useToast();
   const install = useInstallPrompt();
@@ -107,8 +110,12 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
       <div className="space-y-3 p-4 text-sm">
 
         <SettingsSection id="appearance" icon="moon" title="Appearance" defaultOpen
-          summary={theme.pref === "system" ? `System (${theme.resolved})` : theme.pref === "dark" ? "Dark" : "Light"}>
+          summary={theme.pref === "system" ? `System (${theme.resolved})` : theme.pref[0].toUpperCase() + theme.pref.slice(1)}>
           <AppearanceSection />
+        </SettingsSection>
+
+        <SettingsSection id="today" icon="today" title="Today" summary={briefStyle === "paragraph" ? "Brief as one paragraph" : "Brief point by point"}>
+          <BriefStyleSection />
         </SettingsSection>
 
         <SettingsSection id="general" icon="settings" title="General"
@@ -314,6 +321,22 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
               </TypeToConfirm>
             </div>
           </div>
+        </SettingsSection>
+
+        <SettingsSection id="about" icon="info" title="About" summary={`Version ${process.env.NEXT_PUBLIC_APP_VERSION}`}>
+          <div className="flex flex-wrap gap-x-8 gap-y-2 select-text">
+            <div>
+              <div className="text-xs text-[var(--muted)]">Version</div>
+              <div className="font-medium tabular-nums">{process.env.NEXT_PUBLIC_APP_VERSION}</div>
+            </div>
+            {process.env.NEXT_PUBLIC_APP_COMMIT && (
+              <div>
+                <div className="text-xs text-[var(--muted)]">Commit</div>
+                <div className="font-medium tabular-nums">{process.env.NEXT_PUBLIC_APP_COMMIT}</div>
+              </div>
+            )}
+          </div>
+          <p className="mt-2 text-xs text-[var(--faint)]">The web app updates itself: reloading the page always runs the latest version.</p>
         </SettingsSection>
 
         <div className="flex flex-col items-start gap-3 rounded-xl border border-[var(--line)] bg-[var(--hover)] p-4 sm:flex-row sm:items-center">

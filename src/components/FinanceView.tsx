@@ -1,9 +1,12 @@
 "use client";
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/client";
 import { baseAmount, myShare, spendByCategory } from "@/lib/insights";
 import { useFiledFlash } from "@/lib/highlight";
 import { scrollToId, useOpenItem } from "@/lib/nav";
+import { fingerprint } from "@/lib/fingerprint";
+import { useOnline } from "@/lib/hooks";
+import { composeReview, isComposedReview } from "@/lib/monthlyReview";
 import { alive, formatMoney, localDate, localMonth, parseAmount, useStore } from "@/lib/store";
 import { CURRENCIES, type Tab } from "@/lib/types";
 import { parseWalletNotification } from "@/lib/wallet";
@@ -14,13 +17,13 @@ import ReportModal from "./ReportModal";
 import SplitEditor from "./SplitEditor";
 import EmptyStart from "./EmptyStart";
 import Dashboard, { FCARD } from "./finance/Dashboard";
-import { CARD, CardHead, Icon, inputBox, Modal, SectionTitle, useToast } from "./ui";
+import { Dropdown, MenuItem } from "./notes/Dropdown";
+import { Icon, inputBox, Modal, SectionTitle, useToast } from "./ui";
 
 const monthLabel = (m: string) =>
   new Date(`${m}-01T00:00:00`).toLocaleDateString("en-US", { month: "long", year: "numeric" });
-// Filled fields stay readable and tappable on small screens.
-const FIELD = "h-10 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-3 outline-none placeholder:text-[var(--faint)] focus:ring-1 focus:ring-[var(--accent)]";
-const ICON_BTN = "fn-press grid h-11 w-11 place-items-center rounded-xl border border-[var(--line)] bg-[var(--bg)] text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)]";
+/** The toolbar's controls and the add bar: pills, as the macOS app has them. */
+const PILL = "flex min-h-11 items-center rounded-full border border-[var(--line)] bg-[var(--bg)]";
 
 const shiftMonth = (m: string, by: number) => {
   const d = new Date(`${m}-01T00:00:00`);
@@ -41,6 +44,9 @@ export default function FinanceView({ setTab }: { setTab: (t: Tab) => void }) {
   const [budgetsOpen, setBudgetsOpen] = useState(false);
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState("");
+  /** Narrows the transaction table. */
+  const [query, setQuery] = useState("");
+  const online = useOnline();
 
   useOpenItem("transaction", (f) => {
     const t = transactions.find((x) => x.id === f.id);
@@ -61,17 +67,39 @@ export default function FinanceView({ setTab }: { setTab: (t: Tab) => void }) {
   const byCat = spendByCategory(txs, cur);
   const summary = summaries.find((s) => s.month === month);
 
-  const summarize = async () => {
+  /** `asked`: the button was pressed. Written on its own, a failure stays quiet. */
+  const summarize = async (asked = true) => {
     setLoading(true);
     try {
       const { text } = await api.monthlySummary(month, cur, txs.map((t) => ({ merchant: t.merchant, amount: myShare(t, cur), category: t.category, date: t.date })));
-      saveSummary({ month, total, currency: cur, byCategory: byCat as Record<string, number>, text, createdAt: new Date().toISOString() });
+      // The figures are the app's own; the model keeps what needs judgement.
+      saveSummary({ month, total, currency: cur, byCategory: byCat as Record<string, number>, text: composeReview(text, total, byCat as Record<string, number>, cur), createdAt: new Date().toISOString() });
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed", "error");
+      if (asked) toast(e instanceof Error ? e.message : "Failed", "error");
     } finally {
       setLoading(false);
     }
   };
+
+  // The review is rewritten each time Finance opens after the month's spending changed, or on a new day.
+  const reviewBasis = fingerprint(`${month}#${localDate()}#${txs.map((t) => `${t.id}|${t.amount}|${t.category}`).join(";")}`);
+  const requested = useRef<string | null>(null);
+  useEffect(() => {
+    if (month !== localMonth() || !txs.length || !online || requested.current === reviewBasis) return;
+    // Up to date: written today, over the same total, by the app (not an older one straight from a model).
+    if (summary && localDate(new Date(summary.createdAt)) === localDate() && Math.abs(summary.total - total) < 1 && isComposedReview(summary.text, summary.total, cur)) return;
+    // Let a burst of edits settle; a newer change cancels this one.
+    const t = setTimeout(() => { requested.current = reviewBasis; summarize(false); }, 1500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviewBasis, online]);
+
+  /** The table, narrowed by the search box. */
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return txs;
+    return txs.filter((t) => t.merchant.toLowerCase().includes(q) || t.category.toLowerCase().includes(q) || t.items.some((i) => i.name.toLowerCase().includes(q)));
+  }, [txs, query]);
 
   const submitPaste = () => {
     const text = pasteText.trim();
@@ -92,28 +120,40 @@ export default function FinanceView({ setTab }: { setTab: (t: Tab) => void }) {
 
   return (
     <div>
-      {/* Toolbar: month picker, quick actions, and the report as the main button */}
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <div className="flex min-h-11 items-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--bg)] px-1">
-          <button className="grid h-9 w-9 place-items-center rounded-lg text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)]" onClick={() => setMonth((m) => shiftMonth(m, -1))} aria-label="Previous month">
-            <Icon name="chevronLeft" size={17} />
-          </button>
-          <Icon name="calendar" size={16} className="text-[var(--muted)]" />
-          <h2 className="min-w-32 px-1 text-center text-sm font-medium">{monthLabel(month)}</h2>
-          <button className="grid h-9 w-9 place-items-center rounded-lg text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)]" onClick={() => setMonth((m) => shiftMonth(m, 1))} aria-label="Next month">
-            <Icon name="chevron" size={17} />
-          </button>
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <button className={ICON_BTN} onClick={() => setPasteOpen(true)} aria-label="Paste a payment notification" title="Paste a payment notification">
-            <Icon name="clipboard" size={18} />
-          </button>
-          <button className={ICON_BTN} onClick={() => setBudgetsOpen(true)} aria-label="Budgets" title="Budgets">
-            <Icon name="target" size={18} />
-          </button>
-          <button className="fn-press flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 text-sm font-medium text-white hover:brightness-110" onClick={() => setReportOpen(true)}>
-            <Icon name="download" size={16} /> Report
-          </button>
+      {/* Toolbar: search on the left; the month and one menu of actions on the right. */}
+      <div className="mb-4 flex flex-wrap items-center gap-2.5">
+        <label className={`${PILL} min-w-0 flex-1 gap-2.5 px-4 sm:max-w-[420px]`}>
+          <Icon name="search" size={17} className="shrink-0 text-[var(--faint)]" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Escape") setQuery(""); }}
+            onFocus={() => scrollToId("finance-transactions", "start")}
+            placeholder="Search transactions, categories or items"
+            aria-label="Search transactions"
+            className="input-plain min-w-0 flex-1 text-sm"
+          />
+          {query && <button type="button" className="grid h-6 w-6 place-items-center rounded-full text-[var(--faint)] hover:bg-[var(--hover)]" onClick={() => setQuery("")} aria-label="Clear search"><Icon name="x" size={13} /></button>}
+        </label>
+        <div className="ml-auto flex items-center gap-2.5">
+          <div className={`${PILL} gap-0.5 px-1.5`}>
+            <button className="grid h-8 w-8 place-items-center rounded-full text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)]" onClick={() => setMonth((m) => shiftMonth(m, -1))} aria-label="Previous month">
+              <Icon name="chevronLeft" size={16} />
+            </button>
+            <h2 key={month} className="fn-note-in min-w-[7.5rem] text-center text-sm font-medium">{monthLabel(month)}</h2>
+            <button className="grid h-8 w-8 place-items-center rounded-full text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)]" onClick={() => setMonth((m) => shiftMonth(m, 1))} aria-label="Next month">
+              <Icon name="chevron" size={16} />
+            </button>
+          </div>
+          <Dropdown label="Actions" title="Report, paste a notification, budgets" width={250} align="right" className={`${PILL} gap-1.5 px-4 text-sm font-medium hover:bg-[var(--hover)]`} button={<>Actions</>}>
+            {(close) => (
+              <>
+                <MenuItem icon="download" label="Monthly report…" onSelect={() => { close(); setReportOpen(true); }} />
+                <MenuItem icon="clipboard" label="Paste a payment notification…" onSelect={() => { close(); setPasteOpen(true); }} />
+                <MenuItem icon="target" label="Budgets…" onSelect={() => { close(); setBudgetsOpen(true); }} />
+              </>
+            )}
+          </Dropdown>
         </div>
       </div>
 
@@ -122,24 +162,21 @@ export default function FinanceView({ setTab }: { setTab: (t: Tab) => void }) {
         setTab={setTab}
         summary={summary}
         summarizing={loading}
-        onSummarize={summarize}
+        onSummarize={() => summarize(true)}
+        onReport={() => setReportOpen(true)}
         onBudgets={() => setBudgetsOpen(true)}
         onOpenTransactions={() => scrollToId("finance-transactions", "start")}
         onOpenTransaction={(id) => { setOpenId(id); scrollToId(`tx-${id}`); }}
       />
 
-      <section id="finance-transactions" className={`${FCARD} mt-4 scroll-mt-20 pb-2`}>
-      <div className="px-5 pt-5">
-        <CardHead title="Transactions">
-          <span className="text-sm text-[var(--faint)]">{txs.length}</span>
-        </CardHead>
-      </div>
+      <section id="finance-transactions" className="mt-6 scroll-mt-20 space-y-4">
+      {/* One line to add a transaction. */}
       <form
-        className="mx-5 mb-2 mt-3 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-[var(--line)] pb-3 text-sm lg:flex lg:flex-wrap"
+        className={`${PILL} flex-wrap gap-x-3 gap-y-1 py-1 pl-5 pr-1.5 text-sm max-sm:rounded-2xl max-sm:py-2`}
         onSubmit={(e) => {
           e.preventDefault();
           const amount = parseAmount(form.amount);
-          if (!form.merchant || !amount) return;
+          if (!form.merchant.trim() || !amount) return;
           addTransaction({
             merchant: form.merchant, amount, currency: form.currency, fxRate: null, category: form.category,
             date: month === localMonth() ? localDate() : `${month}-01`,
@@ -147,18 +184,26 @@ export default function FinanceView({ setTab }: { setTab: (t: Tab) => void }) {
           setForm({ ...form, merchant: "", amount: "" });
         }}
       >
-        <div className="col-span-2 flex min-w-0 items-center gap-2 lg:flex-1">
-          <Icon name="plus" className="shrink-0 text-[var(--faint)]" />
-          <input value={form.merchant} onChange={(e) => setForm({ ...form, merchant: e.target.value })} placeholder="Merchant" aria-label="Merchant" className={`${FIELD} w-full min-w-0`} />
-        </div>
-        <input value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="Amount (25k)" aria-label="Amount" inputMode="decimal" className={`${FIELD} w-full min-w-0 lg:w-32`} />
-        <select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} aria-label="Currency" className={`${FIELD} text-[var(--muted)]`}>
+        <Icon name="plus" size={16} className="shrink-0 text-[var(--accent)]" />
+        <input value={form.merchant} onChange={(e) => setForm({ ...form, merchant: e.target.value })} placeholder="Add a transaction — merchant" aria-label="Merchant" className="input-plain h-9 min-w-[9rem] flex-1 font-medium" />
+        <input value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="Amount (25k)" aria-label="Amount" inputMode="decimal" className="input-plain h-9 w-28 tabular-nums" />
+        <CategorySelect value={form.category} onChange={(category) => setForm({ ...form, category })} className="h-9 max-w-[10rem] cursor-pointer rounded-lg bg-transparent px-1 text-[var(--muted)] hover:bg-[var(--hover)]" />
+        <select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} aria-label="Currency" className="h-9 cursor-pointer rounded-lg bg-transparent px-1 text-[var(--muted)] hover:bg-[var(--hover)]">
           {[...new Set([cur, ...CURRENCIES])].map((c) => <option key={c}>{c}</option>)}
         </select>
-        <CategorySelect value={form.category} onChange={(category) => setForm({ ...form, category })} className={`${FIELD} w-full min-w-0 text-[var(--muted)] lg:w-auto`} />
-        <button className="h-10 rounded-lg bg-[var(--accent)] px-4 font-medium text-white hover:brightness-110">Add</button>
+        <button className="fn-press ml-auto grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--accent)] text-white hover:brightness-110" aria-label="Add transaction" title="Add">
+          <Icon name="arrowRight" size={15} />
+        </button>
       </form>
 
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+        <h3 className="fn-serif text-[1.45rem]">Transactions</h3>
+        <span className="flex min-h-[34px] items-center rounded-full border border-[var(--line)] px-3.5 text-sm tabular-nums text-[var(--muted)]">
+          {monthLabel(month)}: {formatMoney(total, cur)}
+        </span>
+      </div>
+
+      {txs.length > 0 && shown.length === 0 && <p className="py-5 text-center text-sm text-[var(--faint)]">Nothing matches “{query}”.</p>}
       {txs.length === 0 ? (
         <EmptyStart
           title="No spending logged yet"
@@ -170,7 +215,7 @@ export default function FinanceView({ setTab }: { setTab: (t: Tab) => void }) {
         <div className="overflow-x-auto px-2">
           <table className="w-full border-separate border-spacing-0 text-sm">
             <tbody>
-              {txs.map((t) => {
+              {shown.map((t) => {
                 const foreign = t.currency !== cur;
                 const isOpen = openId === t.id;
                 const unsettled = (t.splits ?? []).filter((s) => !s.settled).length;

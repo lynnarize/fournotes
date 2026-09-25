@@ -26,7 +26,7 @@ Built with Next.js, React and Tailwind v4. It runs with no API keys at all, and 
 - A monthly review written for you when the month turns over.
 
 **Everywhere**
-- Dark, light or follow-the-system theme.
+- Themes: System, Light, Paper (warm paper, ink-brown text) and Dark.
 - Installable PWA that works offline and syncs when you're back online.
 - Optional backup and sync to your own **Google Drive**, or to **Supabase** with shared spaces for a household budget.
 

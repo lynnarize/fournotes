@@ -12,7 +12,7 @@ import {
 } from "react";
 import { equalSplit } from "./insights";
 import { EXPENSE_CATEGORIES } from "./types";
-import { nextOccurrence } from "./recurrence";
+import { nextAfterCompleting } from "./recurrence";
 import { buildSamples, SAMPLE_BUDGETS } from "./sample";
 import type {
   AIAction,
@@ -253,15 +253,22 @@ export function StoreProvider({ children, adapter = localAdapter }: { children: 
         out.push(`💸 Logged bill: ${t.title}`);
       }
       if (t.rrule) {
+        const rrule = t.rrule;
         const base = t.dueAt ?? t.remindAt ?? nowIso();
-        const nextDue = t.dueAt ? nextOccurrence(t.dueAt, t.rrule) : null;
-        const nextRemind = t.remindAt ? nextOccurrence(t.remindAt, t.rrule) : null;
-        addTodo({
-          title: t.title, notes: t.notes, priority: t.priority, source: t.source, rrule: t.rrule, bill: t.bill,
-          noteId: t.noteId, spaceId: t.spaceId ?? null,
-          dueAt: nextDue ?? (t.remindAt ? null : nextOccurrence(base, t.rrule)), remindAt: nextRemind, reminded: false,
-        });
-        out.push(`🔁 Next: ${t.title}`);
+        // Roll forward: completing a task that was due months ago must not schedule the next one in the past.
+        const nextDue = t.dueAt ? nextAfterCompleting(t.dueAt, rrule) : null;
+        const nextRemind = t.remindAt ? nextAfterCompleting(t.remindAt, rrule) : null;
+        const dueAt = nextDue ?? (t.remindAt ? null : nextAfterCompleting(base, rrule));
+        // Already scheduled (ticked, unticked and ticked again): not twice.
+        const scheduled = dataRef.current.todos.some((x) =>
+          !x.deletedAt && !x.done && x.id !== t.id && x.title === t.title && x.rrule === rrule && (x.dueAt ?? null) === dueAt && (x.remindAt ?? null) === nextRemind);
+        if (!scheduled) {
+          addTodo({
+            title: t.title, notes: t.notes, priority: t.priority, source: t.source, rrule, bill: t.bill,
+            noteId: t.noteId, spaceId: t.spaceId ?? null, dueAt, remindAt: nextRemind, reminded: false,
+          });
+          out.push(`🔁 Next: ${t.title}`);
+        }
       }
       return out;
     };

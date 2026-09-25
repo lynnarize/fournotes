@@ -1,5 +1,5 @@
 "use client";
-// Settings → Appearance: System / Light / Dark
+// Settings → Appearance: System / Light / Paper / Dark
 import { isMac } from "@/lib/hooks";
 import { useTheme, type ThemePref } from "@/lib/theme";
 import { Icon } from "./ui";
@@ -7,12 +7,14 @@ import { Icon } from "./ui";
 const OPTIONS: { id: ThemePref; label: string; icon: string }[] = [
   { id: "system", label: "System", icon: "monitor" },
   { id: "light", label: "Light", icon: "today" },
+  { id: "paper", label: "Paper", icon: "book" },
   { id: "dark", label: "Dark", icon: "moon" },
 ];
 
 // Fixed colors on purpose: each card previews its theme regardless of the current one.
 const PALETTE = {
   light: { bg: "#ffffff", panel: "#f7f7f5", line: "#e9e9e7", text: "#37352f", sticky: "#fbf3db", accent: "#2383e2" },
+  paper: { bg: "#fbf6e8", panel: "#f4edd9", line: "#e6dcc2", text: "#3a3326", sticky: "#f6ecc8", accent: "#b0582a" },
   dark: { bg: "#191919", panel: "#202020", line: "#2f2f2f", text: "#e6e6e4", sticky: "#3a3326", accent: "#529cca" },
 };
 
@@ -37,7 +39,7 @@ export default function AppearanceSection() {
 
   return (
     <section>
-      <div role="radiogroup" aria-label="Theme" className="grid grid-cols-3 gap-2">
+      <div role="radiogroup" aria-label="Theme" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {OPTIONS.map((o) => {
           const active = pref === o.id;
           return (
@@ -52,7 +54,7 @@ export default function AppearanceSection() {
               }`}
             >
               <div className="flex h-14 overflow-hidden rounded-md border border-[var(--line)]" aria-hidden>
-                {o.id === "dark" ? <Mini p={PALETTE.dark} /> : o.id === "light" ? <Mini p={PALETTE.light} /> : (<><Mini p={PALETTE.light} /><Mini p={PALETTE.dark} /></>)}
+                {o.id === "system" ? (<><Mini p={PALETTE.light} /><Mini p={PALETTE.dark} /></>) : <Mini p={PALETTE[o.id]} />}
               </div>
               <span className={`flex items-center justify-center gap-1.5 ${active ? "font-medium text-[var(--text)]" : "text-[var(--muted)]"}`}>
                 <Icon name={o.icon} size={14} />
@@ -63,7 +65,9 @@ export default function AppearanceSection() {
         })}
       </div>
       <p className="mt-2 text-xs text-[var(--muted)]">
-        {pref === "system" ? `Follows your device setting (currently ${resolved}).` : `Always ${pref}, whatever your device uses.`}{" "}
+        {pref === "system"
+          ? `Follows your device setting (currently ${resolved}).`
+          : pref === "paper" ? "Warm paper and ink-brown text, whatever your device uses." : `Always ${pref}, whatever your device uses.`}{" "}
         Switch quickly with {isMac() ? "⌘" : "Ctrl+"}K → “dark mode”.
       </p>
     </section>

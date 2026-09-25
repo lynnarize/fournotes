@@ -114,6 +114,7 @@ export interface MonthlySummary {
 export interface DailyBrief {
   date: string; // YYYY-MM-DD
   text: string;
+  basis?: string; // fingerprint of the data it was written from, so it's rewritten when that changes
 }
 
 export interface Settings {

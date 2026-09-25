@@ -82,11 +82,8 @@ export function useNow(everyMs = 60_000) {
   return now;
 }
 
-/** Greeting for the device's local time: 5–11 morning, 12–16 afternoon, 17–23 evening, 0–4 late night. */
+/** Greeting for the device's local time, as the macOS app words it: morning until noon, afternoon until 6. */
 export function greetingFor(d: Date) {
   const h = d.getHours();
-  if (h >= 5 && h < 12) return "Good Morning";
-  if (h >= 12 && h < 17) return "Good Afternoon";
-  if (h >= 17) return "Good Evening";
-  return "Up late?";
+  return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
 }

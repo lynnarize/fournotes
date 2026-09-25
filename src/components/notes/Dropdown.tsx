@@ -8,16 +8,21 @@ import { Icon } from "../ui";
 
 const keep = (e: React.MouseEvent) => e.preventDefault();
 
-export function Dropdown({ label, button, children, width = 240, title }: {
+export function Dropdown({ label, button, children, width = 240, title, className, chevron = true, align = "left" }: {
   label: string;
   button: ReactNode;
   /** Receives `close` so items can dismiss the menu. */
   children: (close: () => void) => ReactNode;
   width?: number;
   title?: string;
+  /** Replaces the default toolbar-button styling (the sidebar uses its own rows). */
+  className?: string;
+  chevron?: boolean;
+  /** "right" lines the menu up with the trigger's right edge. */
+  align?: "left" | "right";
 }) {
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number; maxHeight: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const close = () => setOpen(false);
@@ -26,10 +31,15 @@ export function Dropdown({ label, button, children, width = 240, title }: {
     if (!open || !btnRef.current) return;
     const r = btnRef.current.getBoundingClientRect();
     const w = Math.min(width, window.innerWidth - 16);
-    const left = Math.min(Math.max(8, r.left), window.innerWidth - w - 8);
+    const wanted = align === "right" ? r.right - w : r.left;
+    const left = Math.min(Math.max(8, wanted), window.innerWidth - w - 8);
     const top = r.bottom + 6;
-    setPos({ top, left, maxHeight: Math.max(160, window.innerHeight - top - 12) });
-  }, [open, width]);
+    const below = window.innerHeight - top - 12;
+    const above = r.top - 18;
+    // Near the bottom of the screen (the assistant's composer), open upwards instead.
+    if (below < 220 && above > below) setPos({ bottom: window.innerHeight - r.top + 6, left, maxHeight: above });
+    else setPos({ top, left, maxHeight: Math.max(160, below) });
+  }, [open, width, align]);
 
   useEffect(() => {
     if (!open) return;
@@ -64,10 +74,10 @@ export function Dropdown({ label, button, children, width = 240, title }: {
         aria-expanded={open}
         aria-label={label}
         title={title ?? label}
-        className={`tb-btn gap-1 px-2 ${open ? "bg-[var(--hover)] text-[var(--text)]" : ""}`}
+        className={className ?? `tb-btn gap-1 px-2 ${open ? "bg-[var(--hover)] text-[var(--text)]" : ""}`}
       >
         {button}
-        <Icon name="chevronDown" size={14} className="opacity-60" />
+        {chevron && <Icon name="chevronDown" size={14} className="opacity-60" />}
       </button>
       {open && pos && typeof document !== "undefined" &&
         createPortal(
@@ -77,7 +87,7 @@ export function Dropdown({ label, button, children, width = 240, title }: {
             aria-label={label}
             onMouseDown={keep}
             className="fn-pop scroll-thin fixed z-[80] overflow-y-auto rounded-xl border border-[var(--line)] bg-[var(--bg)] p-1.5 text-sm shadow-[var(--shadow)]"
-            style={{ top: pos.top, left: pos.left, width: Math.min(width, window.innerWidth - 16), maxHeight: pos.maxHeight }}
+            style={{ top: pos.top, bottom: pos.bottom, left: pos.left, width: Math.min(width, window.innerWidth - 16), maxHeight: pos.maxHeight }}
           >
             {children(close)}
           </div>,

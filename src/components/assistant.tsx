@@ -9,6 +9,8 @@ import { markFiled, pulseTabs } from "@/lib/highlight";
 import { openSettings } from "@/lib/nav";
 import { semanticNotes } from "@/lib/search";
 import { activeNoteId } from "@/lib/activeNote";
+import { agrees, answerOnly, groundAmounts, isQuestion, noteQuestion, savesPreviousReply } from "@/lib/intent";
+import { isWorthSaving, noteContentFromReply, offersToSave, replyNoteTitle } from "@/lib/replyNote";
 import { useStore, type ChangeLink } from "@/lib/store";
 import type { AIAction, ChatMessage, Note, NoteSource, Tab } from "@/lib/types";
 import { useToast } from "./ui";
@@ -22,7 +24,21 @@ export type UIMessage = ChatMessage & {
   error?: boolean;
   queued?: boolean;
   splitTxId?: string; // receipt just filed -> offer "split this bill"
+  /** The user message this reply answers: titles the reply when it's saved as a note. */
+  questionId?: string;
+  /** Saved to Notes already, so "Save as note" isn't offered again. */
+  savedAsNote?: boolean;
+  /** A reply about one of the user's notes: offers to look further on the web. */
+  webTopic?: WebTopic;
+  /** The pages a web answer drew on. */
+  sources?: { title: string; url: string }[];
 };
+/** The note a question was about, and what was asked of it. */
+export type WebTopic = { noteId: string; noteTitle: string; question: string };
+
+/** A reply worth keeping: long, and not itself a record of what was filed. */
+export const canSaveAsNote = (m: UIMessage) =>
+  m.role === "assistant" && !m.error && !m.savedAsNote && !m.filed?.length && isWorthSaving(m.content);
 export type VoiceState = "off" | "listening" | "thinking" | "speaking";
 
 type Ctx = {
@@ -38,6 +54,12 @@ type Ctx = {
   stopRecording(): void;
   toggleVoice(): void;
   clear(): void;
+  /** Saves an assistant reply to Notes exactly as it was shown. */
+  saveAsNote(replyId: string): void;
+  /** Recommendations from the web for a note, in the chat, with sources (Claude only). */
+  searchWeb(topic: WebTopic): Promise<void>;
+  /** The note's subject in a new tab's web search. Only those words leave the app. */
+  openWebSearch(topic: WebTopic): void;
 };
 
 const AssistantCtx = createContext<Ctx | null>(null);
@@ -141,12 +163,12 @@ export function AssistantProvider({ children, onFiled }: { children: ReactNode; 
   const push = (m: Omit<UIMessage, "id">) => setMessages((xs) => [...xs, { ...m, id: rid() }]);
 
   const handleResult = useCallback(
-    (reply: string, actions: AIAction[], extra?: { imageDataUrl?: string; source?: NoteSource }) => {
+    (reply: string, actions: AIAction[], extra?: { imageDataUrl?: string; source?: NoteSource; message?: Partial<UIMessage> }) => {
       const { filed, links, transactionIds, created } = storeRef.current.applyActions(actions, extra);
       markFiled(created.map((c) => c.id));
       pulseTabs([...new Set(links.map((l) => (l ? TAB_OF[l.kind] : undefined)).filter((t): t is Tab => Boolean(t)))]);
       const isCapture = extra?.source === "ocr" || extra?.source === "share";
-      push({ role: "assistant", content: reply, filed, links, splitTxId: isCapture ? transactionIds[0] : undefined });
+      push({ role: "assistant", content: reply, filed, links, splitTxId: isCapture ? transactionIds[0] : undefined, ...extra?.message });
       if (filed.length) toast(filed.join("\n"));
       const tab = tabFor(actions);
       if (tab && extra?.source !== "chat") onFiled(tab);
@@ -179,7 +201,18 @@ export function AssistantProvider({ children, onFiled }: { children: ReactNode; 
       return null;
     }
     const userMsg: UIMessage = { id: rid(), role: "user", content: text };
-    const history = [...messagesRef.current.filter((m) => !m.error && !m.queued), userMsg].map(({ role, content }) => ({ role, content }));
+    // "save that" (or "yes" to a reply that offered to save itself): the reply above, saved as shown.
+    // No model rewrites it — one used to save a garbled copy from memory.
+    const previous = [...messagesRef.current].reverse().find((m) => m.role === "assistant" && !m.error);
+    if (previous && canSaveAsNote(previous) && (savesPreviousReply(text) || (agrees(text) && offersToSave(previous.content)))) {
+      setMessages((xs) => [...xs, userMsg]);
+      saveRef.current(previous.id);
+      return null;
+    }
+    // Sent with nothing after the colon, models announced "I've saved your note" and saved nothing.
+    const about = noteQuestion(text);
+    const asked = about && !about.ask ? `About my note “${about.title}”: give me a short summary of it and one or two useful suggestions.` : text;
+    const history = [...messagesRef.current.filter((m) => !m.error && !m.queued), { ...userMsg, content: asked }].map(({ role, content }) => ({ role, content }));
     setMessages((xs) => [...xs, userMsg]);
     setBusy("Thinking…");
     try {
@@ -190,8 +223,14 @@ export function AssistantProvider({ children, onFiled }: { children: ReactNode; 
         ...named,
         ...relevant.filter((r) => r.score > 0.2 && !named.includes(r.note)).map((r) => r.note),
       ].slice(0, 5));
-      const res = await api.chat(history, context);
-      handleResult(res.reply, res.actions, { source: "chat" });
+      // A question or a request for ideas is answered, never filed.
+      const res = await api.chat(history, context, { tools: !answerOnly(text) });
+      // A question about a note is answered, never filed: models used to save the note again.
+      const note = about && storeRef.current.notes.find((n) => !n.deletedAt && (n.title.trim() || "Untitled").toLowerCase() === about.title.toLowerCase());
+      const webTopic = note ? { noteId: note.id, noteTitle: note.title || "Untitled", question: about!.ask } : undefined;
+      // Amounts are checked against the message, whichever model answered ("25k" is not 25).
+      const actions = webTopic && isQuestion(text) ? [] : groundAmounts(res.actions, text);
+      handleResult(res.reply, actions, { source: "chat", message: { questionId: userMsg.id, webTopic } });
       return res.reply;
     } catch (e) {
       fail(e);
@@ -202,6 +241,43 @@ export function AssistantProvider({ children, onFiled }: { children: ReactNode; 
   }, [handleResult, fail, toast]);
   const sendRef = useRef(send);
   sendRef.current = send;
+
+  const saveAsNote = useCallback((replyId: string) => {
+    const xs = messagesRef.current;
+    const at = xs.findIndex((m) => m.id === replyId);
+    const reply = xs[at];
+    if (!reply) return;
+    const question = xs.find((m) => m.id === reply.questionId)?.content
+      ?? [...xs.slice(0, at)].reverse().find((m) => m.role === "user" && !agrees(m.content))?.content;
+    const { filed, links, created } = storeRef.current.applyActions(
+      [{ type: "create_note", title: replyNoteTitle(reply.content, question), content: noteContentFromReply(reply.content) }],
+      { source: "chat" },
+    );
+    markFiled(created.map((c) => c.id));
+    pulseTabs(["notes"]);
+    setMessages((ms) => [
+      ...ms.map((m) => (m.id === replyId ? { ...m, savedAsNote: true } : m)),
+      { id: rid(), role: "assistant", content: "Saved it to Notes, as written.", filed, links },
+    ]);
+  }, []);
+  const saveRef = useRef(saveAsNote);
+  saveRef.current = saveAsNote;
+
+  const searchWeb = useCallback(async (topic: WebTopic) => {
+    const note = storeRef.current.notes.find((n) => n.id === topic.noteId && !n.deletedAt);
+    if (!note) return;
+    push({ role: "user", content: `Ideas from the web for “${topic.noteTitle}”` });
+    setBusy("Searching the web…");
+    try {
+      const res = await api.webIdeas(note.title, note.content, topic.question);
+      push({ role: "assistant", content: res.text, sources: res.sources });
+    } catch (e) { fail(e); } finally { setBusy(null); }
+  }, [fail]);
+
+  const openWebSearch = useCallback((topic: WebTopic) => {
+    const words = topic.question ? `${topic.noteTitle} ${topic.question}` : topic.noteTitle;
+    window.open(`https://www.google.com/search?q=${encodeURIComponent(words)}`, "_blank", "noopener,noreferrer");
+  }, []);
 
   // Offline outbox: flush when the connection comes back (and on startup).
   useEffect(() => {
@@ -393,6 +469,7 @@ export function AssistantProvider({ children, onFiled }: { children: ReactNode; 
         messages, busy, recording, liveTranscript, voice, queued,
         send, scan, startRecording, stopRecording, toggleVoice,
         clear: () => setMessages((xs) => xs.filter((m) => m.queued)),
+        saveAsNote, searchWeb, openWebSearch,
       }}
     >
       {children}

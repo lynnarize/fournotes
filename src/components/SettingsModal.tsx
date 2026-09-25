@@ -1,6 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
-import { useUserKeys } from "@/lib/byok";
+import { activeProvider, useUserKeys } from "@/lib/byok";
 import { downloadFile } from "@/lib/client";
 import { useInstallPrompt } from "@/lib/hooks";
 import { alive, formatMoney, useStore, type ListKind } from "@/lib/store";
@@ -40,6 +40,10 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
   const theme = useTheme();
   const [briefStyle] = useBriefStyle();
   const { keys } = useUserKeys();
+  const ownProvider = activeProvider(keys);
+  const aiKeySummary = ownProvider
+    ? `Using your ${{ anthropic: "Anthropic", opencode: "OpenCode", openrouter: "OpenRouter" }[ownProvider]} key`
+    : "No personal key";
   const toast = useToast();
   const install = useInstallPrompt();
   const [email, setEmail] = useState("");
@@ -227,7 +231,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
           </div>
         </SettingsSection>
 
-        <SettingsSection id="api" icon="key" title="AI & API keys" summary={keys.anthropicKey ? "Using your Anthropic key" : "No personal key"}>
+        <SettingsSection id="api" icon="key" title="AI & API keys" summary={aiKeySummary}>
           <ApiKeysSection />
         </SettingsSection>
 

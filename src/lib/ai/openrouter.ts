@@ -1,8 +1,13 @@
 import "server-only";
 // OpenRouter provider: the app's free default. OpenRouter speaks the OpenAI
 // chat-completions format, so the Claude tool definitions are converted on the way out.
+// OpenCode (Zen's free models, `gateway: "opencode"`, or a Go subscription, "opencode-go")
+// speaks the same format and reuses this class, minus OpenRouter's extras: model
+// fallbacks, provider routing, attribution headers.
+import { createHash, randomUUID } from "node:crypto";
 import type { AIAction, BriefInput, CaptureResult, ChatMessage, ChatResponse, ClientContext, Transaction } from "../types";
 import { ProviderError } from "./errors";
+import { SCOPE_INSTRUCTIONS, SHARED_MAX_TOKENS, type Scope } from "./guard";
 import { localBrief, localMonthly } from "./local";
 import { fallbackChain, isFreeModel, OPENROUTER_AUTO_MODEL, visionModelFor } from "./models";
 import { ANSWER_INSTRUCTION, briefLines, cleanText, extractAnswer, looksLikeThinking } from "./text";
@@ -12,6 +17,18 @@ import { validateActions } from "./validate";
 import { WRITING_SYSTEM, writingPrompt, type WritingTask } from "./writing";
 
 const API = "https://openrouter.ai/api/v1/chat/completions";
+export type Gateway = "openrouter" | "opencode" | "opencode-go";
+const ENDPOINT: Record<Gateway, string> = {
+  openrouter: API,
+  opencode: "https://opencode.ai/zen/v1/chat/completions",
+  "opencode-go": "https://opencode.ai/zen/go/v1/chat/completions",
+};
+/**
+ * OpenCode asks clients to name themselves (not a generic SDK user agent) and to send
+ * a stable x-opencode-session per conversation; Go rejects requests without one.
+ */
+export const OPENCODE_USER_AGENT = "FourNotes/0.1 (+https://app.fournotes.xyz)";
+const GATEWAY_NAME: Record<Gateway, string> = { openrouter: "OpenRouter", opencode: "OpenCode", "opencode-go": "OpenCode Go" };
 
 type ToolCall = { id: string; type?: string; function: { name: string; arguments: string } };
 type ResponseMessage = { content?: string | null; tool_calls?: ToolCall[] };
@@ -110,6 +127,9 @@ const RECEIPT_NUDGE =
   "receipt: {merchant, total (grand total as a number, 'Rp 128.500' = 128500), date, category, items}. " +
   "Put line items in receipt.items, never in todos.";
 const COULD_NOT_ACT = "I couldn't do that with this free model. Try again, or pick another model in Settings → API keys.";
+const COULD_NOT_ANSWER = "I couldn't answer that right now. Try again in a moment.";
+/** Safety classifiers and other non-chat models reachable through the free router ("User Safety: safe"). */
+const CLASSIFIER = /^\s*(user|response|prompt)\s+safety\s*:|^\s*(safe|unsafe)\s*(\n|$)/im;
 const hasImage = (messages: unknown) =>
   Array.isArray(messages) &&
   messages.some((m) => Array.isArray((m as Msg).content) && ((m as Msg).content as Msg[]).some((c) => c.type === "image_url"));
@@ -121,39 +141,59 @@ export class OpenRouterProvider implements LLMProvider {
   private visionModel: string;
   private referer: string;
   private strict: boolean;
+  /** x-opencode-session: one id per conversation (chat) or per job (everything else). */
+  private session: string = randomUUID();
+  private gateway: Gateway;
 
   /** `strict` tests one model exactly as named: no fallbacks (used by the model probe). */
-  constructor(opts: { apiKey?: string; model: string; fastModel: string; visionModel?: string; referer?: string; strict?: boolean }) {
+  constructor(opts: {
+    apiKey?: string; model: string; fastModel: string; visionModel?: string; referer?: string; strict?: boolean; gateway?: Gateway;
+  }) {
     this.apiKey = opts.apiKey ?? "";
     this.model = opts.model;
     this.fastModel = opts.fastModel;
     this.visionModel = opts.visionModel ?? visionModelFor(opts.model);
-    this.referer = opts.referer || "https://four-notes.app";
+    this.referer = opts.referer || "https://app.fournotes.xyz";
     this.strict = Boolean(opts.strict);
+    this.gateway = opts.gateway ?? "openrouter";
+  }
+
+  private get isOpenRouter() {
+    return this.gateway === "openrouter";
   }
 
   private async complete(input: Record<string, unknown>): Promise<Completion> {
     const body: Record<string, unknown> = { ...input };
-    // Tool requests only go to providers that actually support tools.
-    if (body.tools) body.provider = { require_parameters: true };
-    // Free models are busy or withdrawn often: let OpenRouter move down the tested list.
-    if (!this.strict && !body.models && isFreeModel(String(body.model))) {
-      body.models = fallbackChain(String(body.model), { vision: hasImage(body.messages) });
+    const openRouter = this.isOpenRouter;
+    const name = GATEWAY_NAME[this.gateway];
+    if (openRouter) {
+      // Tool requests only go to providers that actually support tools.
+      if (body.tools) body.provider = { require_parameters: true };
+      // Free models are busy or withdrawn often: let OpenRouter move down the tested list.
+      if (!this.strict && !body.models && isFreeModel(String(body.model))) {
+        const chain = fallbackChain(String(body.model), { vision: hasImage(body.messages) });
+        // Without tools nothing limits the free router to chat models (it can land on a
+        // safety classifier), so plain answers stay on the tested list.
+        body.models = body.tools ? chain : chain.filter((id) => id !== OPENROUTER_AUTO_MODEL);
+      }
+    } else {
+      delete body.reasoning; // OpenRouter-only parameter
     }
     let res: Response;
     try {
-      res = await fetch(API, {
+      res = await fetch(ENDPOINT[this.gateway], {
         method: "POST",
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
           "Content-Type": "application/json",
-          "HTTP-Referer": this.referer, // OpenRouter attribution headers
-          "X-Title": "Four Notes",
+          ...(openRouter
+            ? { "HTTP-Referer": this.referer, "X-Title": "Four Notes" } // OpenRouter attribution headers
+            : { "User-Agent": OPENCODE_USER_AGENT, "x-opencode-session": this.session }),
         },
         body: JSON.stringify(body),
       });
     } catch {
-      throw new ProviderError("Couldn't reach OpenRouter. Check your connection and try again.", 502);
+      throw new ProviderError(`Couldn't reach ${name}. Check your connection and try again.`, 502);
     }
     const json = (await res.json().catch(() => ({}))) as Completion;
     if (!res.ok || json.error) {
@@ -163,12 +203,23 @@ export class OpenRouterProvider implements LLMProvider {
       // free router pick one that can, rather than failing the request.
       const modelGone = status === 404 || (status === 400 && /not a valid model|no endpoints found|model.*(not found|does not exist)/i.test(detail));
       // A withdrawn id anywhere in the list fails the whole request, so retry on the router alone.
-      if (modelGone && !this.strict && body.model !== OPENROUTER_AUTO_MODEL) {
+      if (modelGone && openRouter && body.tools && !this.strict && body.model !== OPENROUTER_AUTO_MODEL) {
         console.warn(`[ai:openrouter] model=${body.model} unavailable (${status}); retrying with ${OPENROUTER_AUTO_MODEL}`);
         return this.complete({ ...input, model: OPENROUTER_AUTO_MODEL, models: [OPENROUTER_AUTO_MODEL] });
       }
-      if (status === 401 || status === 403) throw new ProviderError("Your OpenRouter key was rejected. Check it in Settings → API keys.", 401);
-      if (status === 402) throw new ProviderError("That OpenRouter model needs credits. Choose a free model in Settings → API keys.", 402);
+      if (status === 401 || status === 403) throw new ProviderError(`Your ${name} key was rejected. Check it in Settings → API keys.`, 401);
+      if (this.gateway === "opencode-go") {
+        // Go is a subscription: 402/429 mean no active plan, or a 5-hour / weekly / monthly limit reached.
+        if (status === 402) throw new ProviderError("This key has no active OpenCode Go subscription. Subscribe at opencode.ai/go, or switch OpenCode to Free in Settings → API keys.", 402);
+        if (status === 429) throw new ProviderError("You've reached your OpenCode Go usage limit for now. Wait for it to reset, or switch OpenCode to Free in Settings → API keys.", 429);
+      }
+      if (status === 402) throw new ProviderError(`That ${name} model needs credits. Add some, or choose a free model in Settings → API keys.`, 402);
+      if (!openRouter) {
+        if (status === 429) throw new ProviderError(`${name}'s rate limit was hit. Wait a moment, or pick another model in Settings → API keys.`, 429);
+        if (modelGone) throw new ProviderError(`${name} doesn't offer ${body.model} any more. Pick another model in Settings → API keys.`, 404);
+        if (status >= 500) throw new ProviderError(`${name} is busy right now. Try again in a moment.`, 503);
+        throw new ProviderError(detail || `${name} request failed (${status})`, status);
+      }
       // 429 is either this account's limit or the model's shared free pool being full upstream.
       if (status === 429 && /upstream/i.test(`${json.error?.metadata?.limit_source ?? ""} ${json.error?.metadata?.raw ?? ""}`)) {
         throw new ProviderError("This free model is busy right now. Try again in a moment, or pick another model in Settings → API keys.", 503);
@@ -181,7 +232,7 @@ export class OpenRouterProvider implements LLMProvider {
       throw new ProviderError(detail || `OpenRouter request failed (${status})`, status);
     }
     const used = (json as { model?: string }).model ?? body.model;
-    console.info(`[ai:openrouter] model=${used} in=${json.usage?.prompt_tokens ?? "?"} out=${json.usage?.completion_tokens ?? "?"}`);
+    console.info(`[ai:${this.gateway}] model=${used} in=${json.usage?.prompt_tokens ?? "?"} out=${json.usage?.completion_tokens ?? "?"}`);
     return json;
   }
 
@@ -203,34 +254,43 @@ export class OpenRouterProvider implements LLMProvider {
     return local();
   }
 
-  async chat(history: ChatMessage[], ctx: ClientContext, opts?: { tools?: boolean }): Promise<ChatResponse> {
+  async chat(history: ChatMessage[], ctx: ClientContext, opts?: { tools?: boolean; scope?: Scope }): Promise<ChatResponse> {
+    // The same conversation (same key, same opening message) keeps the same session id across turns.
+    const opening = history.find((m) => m.role === "user")?.content ?? "";
+    this.session = createHash("sha256").update(`${this.apiKey}\n${opening}`).digest("hex").slice(0, 32);
+    const restricted = opts?.scope === "shared";
+    const system = `${STATIC_INSTRUCTIONS}\n\n${dynamicContext(ctx)}${opts?.scope ? `\n\n${SCOPE_INSTRUCTIONS[opts.scope]}` : ""}`;
     const base: Msg[] = [
-      { role: "system", content: `${STATIC_INSTRUCTIONS}\n\n${dynamicContext(ctx)}` },
+      { role: "system", content: system },
       ...history.slice(-20).map((m) => ({ role: m.role, content: m.content })),
     ];
     const tools = opts?.tools !== false;
-    let out = await this.chatLoop(base, tools ? "auto" : null);
+    let out = await this.chatLoop(base, tools ? "auto" : null, restricted);
     // Some free models describe the tool call in prose instead of making it: insist once.
     if (tools && !out.raw.length && looksLikePlanning(out.reply)) {
-      out = await this.chatLoop(base, "required").catch(() => out);
+      out = await this.chatLoop(base, "required", restricted).catch(() => out);
     }
     const actions = validateActions(out.raw);
-    // Never show a model's working-out as the answer.
-    const reply = !out.reply || looksLikePlanning(out.reply) || looksLikeThinking(out.reply) ? (actions.length ? describeActions(actions) : out.reply ? COULD_NOT_ACT : "Done!") : out.reply;
+    // Never show a model's working-out (or a classifier's verdict) as the answer, and never
+    // claim "done" when nothing was filed.
+    const unusable = !out.reply || looksLikePlanning(out.reply) || looksLikeThinking(out.reply) || CLASSIFIER.test(out.reply);
+    if (unusable && out.reply) console.warn(`[ai:openrouter] unusable chat reply: ${out.reply.slice(0, 80).replace(/\s+/g, " ")}`);
+    const reply = !unusable ? out.reply : actions.length ? describeActions(actions) : tools && out.reply ? COULD_NOT_ACT : COULD_NOT_ANSWER;
     return { reply, actions };
   }
 
-  /** `firstChoice` null: no tools at all. */
-  private async chatLoop(start: Msg[], firstChoice: "auto" | "required" | null) {
+  /** `firstChoice` null: no tools at all. `restricted` (shared key): fewer turns and a smaller output budget per call. */
+  private async chatLoop(start: Msg[], firstChoice: "auto" | "required" | null, restricted = false) {
     const messages = [...start];
     const raw: unknown[] = [];
     let reply = "";
 
     const seen = new Set<string>();
-    for (let turn = 0; turn < 3; turn++) {
+    for (let turn = 0; turn < (restricted ? 2 : 3); turn++) {
       const res = await this.complete({
         model: this.model,
-        max_tokens: 4096, // reasoning models spend part of this thinking, and tools must still fit
+        // Reasoning models spend part of this thinking, and tools must still fit.
+        max_tokens: restricted ? SHARED_MAX_TOKENS : 4096,
         messages,
         // "required" only on the first turn, or the model could never stop calling tools.
         ...(firstChoice ? { tools: toOpenAiTools(ACTION_TOOLS), tool_choice: turn === 0 ? firstChoice : "auto" } : {}),

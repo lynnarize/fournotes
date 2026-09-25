@@ -28,6 +28,8 @@ export type UIMessage = ChatMessage & {
   questionId?: string;
   /** Saved to Notes already, so "Save as note" isn't offered again. */
   savedAsNote?: boolean;
+  /** A refusal from the server's guard: not offered as a note. */
+  refused?: boolean;
   /** A reply about one of the user's notes: offers to look further on the web. */
   webTopic?: WebTopic;
   /** The pages a web answer drew on. */
@@ -38,7 +40,7 @@ export type WebTopic = { noteId: string; noteTitle: string; question: string };
 
 /** A reply worth keeping: long, and not itself a record of what was filed. */
 export const canSaveAsNote = (m: UIMessage) =>
-  m.role === "assistant" && !m.error && !m.savedAsNote && !m.filed?.length && isWorthSaving(m.content);
+  m.role === "assistant" && !m.error && !m.refused && !m.savedAsNote && !m.filed?.length && isWorthSaving(m.content);
 export type VoiceState = "off" | "listening" | "thinking" | "speaking";
 
 type Ctx = {
@@ -230,7 +232,7 @@ export function AssistantProvider({ children, onFiled }: { children: ReactNode; 
       const webTopic = note ? { noteId: note.id, noteTitle: note.title || "Untitled", question: about!.ask } : undefined;
       // Amounts are checked against the message, whichever model answered ("25k" is not 25).
       const actions = webTopic && isQuestion(text) ? [] : groundAmounts(res.actions, text);
-      handleResult(res.reply, actions, { source: "chat", message: { questionId: userMsg.id, webTopic } });
+      handleResult(res.reply, actions, { source: "chat", message: { questionId: userMsg.id, webTopic, refused: res.refused } });
       return res.reply;
     } catch (e) {
       fail(e);

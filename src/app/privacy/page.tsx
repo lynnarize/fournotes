@@ -14,7 +14,7 @@ export default function PrivacyPage() {
     <LegalPage title="Privacy Policy">
       <p>
         Four Notes (&ldquo;the app&rdquo;, &ldquo;we&rdquo;) is a notes, to-do and personal-finance app with an AI assistant, available at{" "}
-        <a href="https://fournotes.vercel.app">fournotes.vercel.app</a>. This policy explains what information the app handles, where it goes, and the
+        <a href="https://app.fournotes.xyz">app.fournotes.xyz</a>. This policy explains what information the app handles, where it goes, and the
         choices you have. We don&apos;t sell your information, show ads, or track you across sites; the only analytics are the anonymous, cookie-free page and speed
         statistics described in section 4.
       </p>

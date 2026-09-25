@@ -1,6 +1,7 @@
 import "server-only";
 import type { AIAction, BriefInput, CaptureResult, ChatMessage, ChatResponse, ClientContext, Transaction } from "../types";
 import { parseAmount } from "../money";
+import type { Scope } from "./guard";
 import type { ResolvedKeys } from "./keys";
 import type { WritingTask } from "./writing";
 import { validateActions } from "./validate";
@@ -10,8 +11,11 @@ import { validateActions } from "./validate";
 export type WebAnswer = { text: string; sources: { title: string; url: string }[] };
 
 export interface LLMProvider {
-  /** `tools: false` answers only: offered no tools, the model can't claim to have filed anything. */
-  chat(messages: ChatMessage[], ctx: ClientContext, opts?: { tools?: boolean }): Promise<ChatResponse>;
+  /**
+   * `tools: false` answers only: offered no tools, the model can't claim to have filed anything.
+   * `scope`: which rules the prompt adds; "shared" also gets a smaller output budget (see guard.ts).
+   */
+  chat(messages: ChatMessage[], ctx: ClientContext, opts?: { tools?: boolean; scope?: Scope }): Promise<ChatResponse>;
   captureImage(base64: string, mediaType: string, ctx: ClientContext): Promise<CaptureResult>;
   summarizeRecording(transcript: string, ctx: ClientContext): Promise<CaptureResult>;
   monthlySummary(month: string, txs: Pick<Transaction, "merchant" | "amount" | "category" | "date">[], currency: string): Promise<string>;
@@ -25,6 +29,7 @@ export interface LLMProvider {
 /**
  * Picks the provider for this request: the user's own key first, then the
  * server's Anthropic key, then OpenRouter's free models, then demo mode.
+ * OpenCode Zen speaks the same chat-completions format as OpenRouter.
  */
 export async function getProvider(keys: ResolvedKeys): Promise<LLMProvider> {
   if (keys.provider === "anthropic" && keys.anthropic.apiKey) {
@@ -34,6 +39,10 @@ export async function getProvider(keys: ResolvedKeys): Promise<LLMProvider> {
   if (keys.provider === "openrouter" && keys.openrouter.apiKey) {
     const { OpenRouterProvider } = await import("./openrouter");
     return new OpenRouterProvider(keys.openrouter);
+  }
+  if (keys.provider === "opencode" && keys.opencode.apiKey) {
+    const { OpenRouterProvider } = await import("./openrouter");
+    return new OpenRouterProvider({ ...keys.opencode, gateway: keys.opencode.tier === "go" ? "opencode-go" : "opencode" });
   }
   const { DemoProvider } = await import("./demo");
   return new DemoProvider();

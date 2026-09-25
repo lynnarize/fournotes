@@ -178,6 +178,8 @@ export interface ChatResponse {
   reply: string;
   actions: AIAction[];
   demo?: boolean;
+  /** The assistant declined (out of scope, or needs the user's own key): nothing worth saving. */
+  refused?: boolean;
 }
 
 export interface CaptureResult {

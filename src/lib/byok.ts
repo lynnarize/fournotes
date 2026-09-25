@@ -6,19 +6,39 @@
 import { useEffect, useState } from "react";
 
 export type SttProvider = "openai" | "groq";
+export type AiProvider = "openrouter" | "opencode" | "anthropic";
 
 export interface UserKeys {
-  openrouterKey?: string; // free models
-  openrouterModel?: string;
+  openrouterKey?: string; // free models, or paid ones billed to the user's credits
+  openrouterModel?: string; // chosen free model
+  openrouterTier?: "free" | "paid"; // unset = free
+  openrouterPaidModel?: string; // any OpenRouter slug; kept while on free so switching back restores it
+  openrouterPaidTextOnly?: boolean; // the paid model can't read photos
+  opencodeKey?: string; // OpenCode: Zen's free models, or OpenCode Go (subscription)
+  opencodeModel?: string; // chosen free model
+  opencodeTier?: "free" | "paid"; // unset = free; paid = OpenCode Go
+  opencodeGoModel?: string; // kept while on free so switching back restores it
   anthropicKey?: string;
   anthropicModel?: string; // chat, scans, recordings
   anthropicFastModel?: string; // daily brief, monthly review
   voyageKey?: string; // search by meaning
   sttKey?: string; // server-side transcription
   sttProvider?: SttProvider;
+  aiProvider?: AiProvider; // which saved key AI requests use; unset = Claude, then OpenCode, then OpenRouter
 }
 
-export { ANTHROPIC_USER_MODELS as MODEL_OPTIONS, OPENROUTER_FREE_MODELS, OPENROUTER_KEYS_URL } from "./ai/models";
+export {
+  ANTHROPIC_USER_MODELS as MODEL_OPTIONS, OPENCODE_FREE_MODELS, OPENCODE_GO_MODELS, OPENCODE_GO_URL, OPENCODE_KEYS_URL, opencodeLabel,
+  OPENROUTER_CREDITS_URL, OPENROUTER_FREE_MODELS, OPENROUTER_KEYS_URL,
+} from "./ai/models";
+
+const PROVIDER_KEY = { openrouter: "openrouterKey", opencode: "opencodeKey", anthropic: "anthropicKey" } as const;
+
+/** The provider AI requests will use with these keys (mirrors resolveKeys on the server). */
+export function activeProvider(k: UserKeys): AiProvider | null {
+  if (k.aiProvider && k[PROVIDER_KEY[k.aiProvider]]) return k.aiProvider;
+  return k.anthropicKey ? "anthropic" : k.opencodeKey ? "opencode" : k.openrouterKey ? "openrouter" : null;
+}
 
 const STORE = "four-notes:byok";
 const EVT = "four-notes:byok-changed";
@@ -64,8 +84,19 @@ export function keyHeaders(keys: UserKeys = getUserKeys()): Record<string, strin
   }
   if (k.openrouterKey && isValidKey(k.openrouterKey)) {
     h["x-openrouter-key"] = k.openrouterKey;
-    if (k.openrouterModel) h["x-openrouter-model"] = k.openrouterModel;
+    if (k.openrouterTier === "paid" && k.openrouterPaidModel) {
+      h["x-openrouter-model"] = k.openrouterPaidModel;
+      h["x-openrouter-vision"] = k.openrouterPaidTextOnly ? "0" : "1";
+    } else if (k.openrouterModel) h["x-openrouter-model"] = k.openrouterModel;
   }
+  if (k.opencodeKey && isValidKey(k.opencodeKey)) {
+    h["x-opencode-key"] = k.opencodeKey;
+    if (k.opencodeTier === "paid") {
+      h["x-opencode-tier"] = "go";
+      if (k.opencodeGoModel) h["x-opencode-model"] = k.opencodeGoModel;
+    } else if (k.opencodeModel) h["x-opencode-model"] = k.opencodeModel;
+  }
+  if (k.aiProvider) h["x-ai-provider"] = k.aiProvider;
   if (k.voyageKey && isValidKey(k.voyageKey)) h["x-voyage-key"] = k.voyageKey;
   if (k.sttKey && isValidKey(k.sttKey)) {
     h["x-stt-key"] = k.sttKey;

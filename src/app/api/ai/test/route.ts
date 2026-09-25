@@ -1,12 +1,14 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { resolveKeys } from "@/lib/ai/keys";
-import { OPENROUTER_AUTO_MODEL, OPENROUTER_FREE_MODELS } from "@/lib/ai/models";
+import { OPENCODE_USER_AGENT } from "@/lib/ai/openrouter";
+import { isFreeModel, opencodeLabel, OPENROUTER_AUTO_MODEL, OPENROUTER_FREE_MODELS } from "@/lib/ai/models";
 import { rateLimit } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
 
-// POST { service: "anthropic" | "voyage" | "stt" } with the key in headers
+// POST { service: "openrouter" | "opencode" | "anthropic" | "voyage" | "stt" } with the key in headers
 // -> { ok, message }. Tests only keys the user typed; uses no tokens where possible.
 export async function POST(req: Request) {
   const limited = rateLimit(req, "key-test");
@@ -45,6 +47,12 @@ export async function POST(req: Request) {
       const listed = await fetch("https://openrouter.ai/api/v1/models", { signal: AbortSignal.timeout(15_000) })
         .then((r) => (r.ok ? (r.json() as Promise<{ data?: { id: string }[] }>) : null))
         .catch(() => null);
+      if (!isFreeModel(model)) {
+        if (listed?.data && !listed.data.some((m) => m.id === model)) return result(false, `Key works, but OpenRouter has no model called ${model}.`);
+        if (info.data?.is_free_tier) return result(false, `Key works, but this account has no credits yet. Add some to use ${model}.`);
+        if (typeof remaining === "number" && remaining <= 0) return result(false, `Key works, but its credit limit is used up. ${model} needs credits.`);
+        return result(true, `Key works. Using ${model} (paid)${typeof remaining === "number" ? ` · $${remaining.toFixed(2)} left on this key` : ""}.`);
+      }
       if (listed?.data && model !== OPENROUTER_AUTO_MODEL && !listed.data.some((m) => m.id === model)) {
         return result(true, `Key works, but ${free?.label ?? model} is no longer offered. The app will use Auto instead.`);
       }
@@ -52,6 +60,36 @@ export async function POST(req: Request) {
         true,
         `Key works. Using ${free?.label ?? model}.${typeof remaining === "number" ? ` ${remaining} credits left.` : " Free models have daily limits."}`,
       );
+    }
+
+    if (service === "opencode") {
+      if (keys.opencode.source !== "user") return result(false, "Enter an OpenCode key first.");
+      const go = keys.opencode.tier === "go";
+      const label = opencodeLabel(keys.opencode.model, keys.opencode.tier);
+      // Zen and Go have no key-info endpoint (their model lists are public), so send the smallest real request.
+      const res = await fetch(go ? "https://opencode.ai/zen/go/v1/chat/completions" : "https://opencode.ai/zen/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${keys.opencode.apiKey}`, "Content-Type": "application/json",
+          "User-Agent": OPENCODE_USER_AGENT, "x-opencode-session": randomUUID(),
+        },
+        body: JSON.stringify({ model: keys.opencode.model, max_tokens: 16, messages: [{ role: "user", content: "ping" }] }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (res.status === 401 || res.status === 403) return result(false, "OpenCode rejected this key.");
+      if (res.status === 402) {
+        return result(false, go
+          ? "Key works, but it has no active OpenCode Go subscription. Subscribe at opencode.ai/go, or switch to Free."
+          : `Key works, but ${label} needs a balance. Add credits at opencode.ai, or pick a free model.`);
+      }
+      if (go && res.status === 429) return result(true, `Key works. Go usage limit reached for now; ${label} will work again when it resets.`);
+      if (res.status === 404) return result(false, `Key works, but OpenCode doesn't offer ${label} any more. Pick another model.`);
+      if (res.status === 429) return result(true, `Key works (rate limited right now). Using ${label}.`);
+      if (res.ok) return result(true, `Key works. Using ${label}${go ? " on OpenCode Go" : " (free)"}.`);
+      // Say why: a 400 here is about the request (model, parameters), not the key.
+      const detail = await res.json().then((j: { error?: { message?: string } | string }) => (typeof j.error === "string" ? j.error : j.error?.message)).catch(() => undefined);
+      console.warn(`[ai/test] opencode${go ? "-go" : ""} ${res.status} model=${keys.opencode.model}: ${detail ?? "(no detail)"}`);
+      return result(false, `OpenCode returned an error (${res.status})${detail ? `: ${detail.slice(0, 200)}` : ""}.`);
     }
 
     if (service === "voyage") {

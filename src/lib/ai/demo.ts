@@ -5,6 +5,7 @@ import type { AIAction, BriefInput, CaptureResult, ChatMessage, ChatResponse, Cl
 import { EXPENSE_CATEGORIES } from "../types";
 import { localBrief, localMonthly } from "./local";
 import { ProviderError } from "./errors";
+import { OWN_KEY_REQUIRED } from "./guard";
 import type { LLMProvider } from "./provider";
 
 // Rule-based stand-in used when no API key is set, so the UI is testable offline.
@@ -110,6 +111,11 @@ export class DemoProvider implements LLMProvider {
     if (ctx.relevantNotes?.length) {
       const n = ctx.relevantNotes[0];
       return { reply: `The closest match is your note “${n.title}”:\n${n.content.slice(0, 280)}${n.content.length > 280 ? "…" : ""}${DEMO}`, actions, demo: true };
+    }
+
+    // Demo mode only follows rules; anything that reads like a general question needs a real key.
+    if (/\?\s*$|^(what|how|why|who|when|where|which|can|could|should|is|are|do|does|tell me|explain|apa|bagaimana|gimana|kenapa|mengapa|siapa|kapan|dimana|di mana|berapa|jelaskan)\b/i.test(text.trim())) {
+      return { reply: OWN_KEY_REQUIRED, actions, demo: true, refused: true };
     }
 
     const open = ctx.todos.filter((t) => !t.done).length;

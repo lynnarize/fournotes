@@ -54,7 +54,7 @@ const visitorKey = (req: Request) =>
 /** Returns a response to send back when the shared key may not be used. */
 export function guardSharedKey(req: Request, keys: ResolvedKeys): NextResponse | null {
   if (keys.provider === "demo") return null;
-  const source = keys.provider === "anthropic" ? keys.anthropic.source : keys.openrouter.source;
+  const source = keys[keys.provider].source;
   if (source !== "server") return null; // the user brought their own key: no limits from us
 
   const from = hostOf(req.headers.get("origin")) ?? hostOf(req.headers.get("referer"));

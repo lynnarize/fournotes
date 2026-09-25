@@ -2,6 +2,7 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import type { BriefInput, CaptureResult, ChatMessage, ChatResponse, ClientContext, Transaction } from "../types";
 import { ProviderError } from "./errors";
+import { SCOPE_INSTRUCTIONS, type Scope } from "./guard";
 import { captureToActions, dynamicContext, STATIC_INSTRUCTIONS, type LLMProvider, type WebAnswer } from "./provider";
 import { ACTION_TOOLS, FILE_CAPTURE_TOOL } from "./tools";
 import { validateActions } from "./validate";
@@ -12,9 +13,9 @@ type ImageMediaType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 // Prompt caching: the static instructions and tool definitions are identical on
 // every request, so mark them with cache_control. The per-user data goes after
 // the cache breakpoint.
-const system = (ctx: ClientContext): Anthropic.TextBlockParam[] => [
+const system = (ctx: ClientContext, scope?: Scope): Anthropic.TextBlockParam[] => [
   { type: "text", text: STATIC_INSTRUCTIONS, cache_control: { type: "ephemeral" } },
-  { type: "text", text: dynamicContext(ctx) },
+  { type: "text", text: scope ? `${dynamicContext(ctx)}\n\n${SCOPE_INSTRUCTIONS[scope]}` : dynamicContext(ctx) },
 ];
 const CACHED_TOOLS = (ACTION_TOOLS as unknown as Anthropic.Tool[]).map((t, i, xs) =>
   i === xs.length - 1 ? { ...t, cache_control: { type: "ephemeral" as const } } : t,
@@ -35,7 +36,7 @@ export class AnthropicProvider implements LLMProvider {
     this.fastModel = opts.fastModel;
   }
 
-  async chat(history: ChatMessage[], ctx: ClientContext, opts?: { tools?: boolean }): Promise<ChatResponse> {
+  async chat(history: ChatMessage[], ctx: ClientContext, opts?: { tools?: boolean; scope?: Scope }): Promise<ChatResponse> {
     const messages: Anthropic.MessageParam[] = history.slice(-20).map((m) => ({ role: m.role, content: m.content }));
     const raw: unknown[] = [];
     let reply = "";
@@ -46,7 +47,7 @@ export class AnthropicProvider implements LLMProvider {
       const res = await this.client.messages.create({
         model: this.model,
         max_tokens: 1024,
-        system: system(ctx),
+        system: system(ctx, opts?.scope),
         ...(opts?.tools === false ? {} : { tools: CACHED_TOOLS }),
         messages,
       });

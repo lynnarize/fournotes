@@ -2,12 +2,14 @@ import "server-only";
 // Which credentials an AI request uses. A key the user brought (request headers,
 // set in Settings → API keys) wins, then the server's own keys, then demo mode.
 // OpenRouter's free models are the default when no Anthropic key is present.
+// OpenCode (Zen free models, or a Go subscription) works only with the user's own key.
 import {
-  ANTHROPIC_USER_MODELS, DEFAULT_OPENROUTER_FAST_MODEL, DEFAULT_OPENROUTER_MODEL, isFreeModel, OPENROUTER_FREE_MODELS, visionModelFor,
+  ANTHROPIC_USER_MODELS, DEFAULT_OPENCODE_GO_MODEL, DEFAULT_OPENCODE_MODEL, DEFAULT_OPENROUTER_FAST_MODEL, DEFAULT_OPENROUTER_MODEL, DEFAULT_VISION_MODEL,
+  isFreeModel, isModelId, opencodeModels, opencodeVisionFor, OPENROUTER_FREE_MODELS, visionModelFor, type OpenCodeTier,
 } from "./models";
 
 export type KeySource = "user" | "server" | "none";
-export type ProviderName = "anthropic" | "openrouter" | "demo";
+export type ProviderName = "anthropic" | "openrouter" | "opencode" | "demo";
 
 export const USER_MODELS = ANTHROPIC_USER_MODELS.map((m) => m.id);
 export const USER_OPENROUTER_MODELS = OPENROUTER_FREE_MODELS.map((m) => m.id);
@@ -23,6 +25,7 @@ export interface ResolvedKeys {
   provider: ProviderName;
   anthropic: { apiKey?: string; model: string; fastModel: string; source: KeySource };
   openrouter: { apiKey?: string; model: string; fastModel: string; visionModel: string; source: KeySource; referer: string };
+  opencode: { apiKey?: string; tier: OpenCodeTier; model: string; fastModel: string; visionModel: string; source: KeySource };
   voyage: { apiKey?: string; model: string; source: KeySource };
   stt: { apiKey?: string; baseUrl: string; model: string; source: KeySource };
 }
@@ -36,7 +39,7 @@ const allowed = (value: string | undefined, list: string[]) => (value && list.in
 const origin = (req: Request) => {
   const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
   const proto = req.headers.get("x-forwarded-proto")?.split(",")[0] ?? "https";
-  return host ? `${proto}://${host}` : "https://four-notes.app";
+  return host ? `${proto}://${host}` : "https://app.fournotes.xyz";
 };
 
 export function resolveKeys(req: Request): ResolvedKeys {
@@ -49,27 +52,31 @@ export function resolveKeys(req: Request): ResolvedKeys {
 
   const userOpenRouter = header(req, "x-openrouter-key");
   const openRouterKey = userOpenRouter || env.OPENROUTER_API_KEY || undefined;
-  const orModel = (userOpenRouter && allowed(header(req, "x-openrouter-model"), USER_OPENROUTER_MODELS)) || env.OPENROUTER_MODEL || DEFAULT_OPENROUTER_MODEL;
-  const orFastModel = env.OPENROUTER_FAST_MODEL || DEFAULT_OPENROUTER_FAST_MODEL;
+  // A user's own key may pick any paid model (billed to them); free ones must be on the tested list.
+  const requested = header(req, "x-openrouter-model");
+  const userPaid = userOpenRouter && isModelId(requested) && !isFreeModel(requested) ? requested : undefined;
+  const orModel = userPaid || (userOpenRouter && allowed(requested, USER_OPENROUTER_MODELS)) || env.OPENROUTER_MODEL || DEFAULT_OPENROUTER_MODEL;
+  // Paid mode runs the quick jobs on the same model: switching to paid means leaving the free limits behind.
+  const orFastModel = userPaid || env.OPENROUTER_FAST_MODEL || DEFAULT_OPENROUTER_FAST_MODEL;
   // The deployment's own key is shared by every visitor: keep it on free
   // models unless the owner opts in, so it can never spend credits.
   const sharedFreeOnly = !userOpenRouter && env.OPENROUTER_ALLOW_PAID !== "true";
   const safeModel = sharedFreeOnly && !isFreeModel(orModel) ? DEFAULT_OPENROUTER_MODEL : orModel;
   const safeFastModel = sharedFreeOnly && !isFreeModel(orFastModel) ? DEFAULT_OPENROUTER_FAST_MODEL : orFastModel;
 
+  const userOpenCode = header(req, "x-opencode-key");
+  const ocTier: OpenCodeTier = header(req, "x-opencode-tier") === "go" ? "go" : "free";
+  const ocModel = allowed(header(req, "x-opencode-model"), opencodeModels(ocTier).map((m) => m.id)) || (ocTier === "go" ? DEFAULT_OPENCODE_GO_MODEL : DEFAULT_OPENCODE_MODEL);
+
   const userVoyage = header(req, "x-voyage-key");
   const userStt = header(req, "x-stt-key");
   const sttProvider = STT_PROVIDERS[header(req, "x-stt-provider") === "groq" ? "groq" : "openai"];
 
-  const provider: ProviderName = userAnthropic
-    ? "anthropic"
-    : userOpenRouter
-      ? "openrouter"
-      : env.ANTHROPIC_API_KEY
-        ? "anthropic"
-        : env.OPENROUTER_API_KEY
-          ? "openrouter"
-          : "demo";
+  // With several keys saved, the one picked in Settings wins; otherwise Claude, OpenCode, OpenRouter.
+  const userKeys: [ProviderName, string | undefined][] = [["anthropic", userAnthropic], ["opencode", userOpenCode], ["openrouter", userOpenRouter]];
+  const preferred = header(req, "x-ai-provider");
+  const userProvider = (userKeys.find(([name, key]) => key && name === preferred) ?? userKeys.find(([, key]) => key))?.[0];
+  const provider: ProviderName = userProvider ?? (env.ANTHROPIC_API_KEY ? "anthropic" : env.OPENROUTER_API_KEY ? "openrouter" : "demo");
 
   return {
     provider,
@@ -78,9 +85,18 @@ export function resolveKeys(req: Request): ResolvedKeys {
       apiKey: openRouterKey,
       model: safeModel,
       fastModel: safeFastModel,
-      visionModel: visionModelFor(safeModel),
+      // A text-only paid model hands photos to the tested free vision model.
+      visionModel: userPaid && header(req, "x-openrouter-vision") === "0" ? DEFAULT_VISION_MODEL : visionModelFor(safeModel),
       source: userOpenRouter ? "user" : openRouterKey ? "server" : "none",
       referer: origin(req),
+    },
+    opencode: {
+      apiKey: userOpenCode,
+      tier: ocTier,
+      model: ocModel,
+      fastModel: ocModel,
+      visionModel: opencodeVisionFor(ocModel, ocTier),
+      source: userOpenCode ? "user" : "none",
     },
     voyage: {
       apiKey: userVoyage || env.VOYAGE_API_KEY || undefined,
@@ -100,4 +116,4 @@ export function resolveKeys(req: Request): ResolvedKeys {
 
 /** Which key a failure should be blamed on, for error messages. */
 export const activeSource = (keys: ResolvedKeys): KeySource =>
-  keys.provider === "anthropic" ? keys.anthropic.source : keys.provider === "openrouter" ? keys.openrouter.source : "none";
+  keys.provider === "demo" ? "none" : keys[keys.provider].source;

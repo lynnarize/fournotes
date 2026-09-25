@@ -12,7 +12,7 @@ export default function TermsPage() {
     <LegalPage title="Terms of Service">
       <p>
         These terms apply to your use of Four Notes (&ldquo;the app&rdquo;), available at{" "}
-        <a href="https://fournotes.vercel.app">fournotes.vercel.app</a>. By using the app you agree to them. If you don&apos;t agree, please don&apos;t
+        <a href="https://app.fournotes.xyz">app.fournotes.xyz</a>. By using the app you agree to them. If you don&apos;t agree, please don&apos;t
         use the app.
       </p>
 

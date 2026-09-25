@@ -12,6 +12,7 @@ import { CURRENCIES, type Tab } from "@/lib/types";
 import { parseWalletNotification } from "@/lib/wallet";
 import { useAssistant } from "./assistant";
 import BudgetEditor from "./BudgetEditor";
+import CategoryEditor from "./CategoryEditor";
 import CategorySelect from "./CategorySelect";
 import ReportModal from "./ReportModal";
 import SplitEditor from "./SplitEditor";
@@ -41,7 +42,7 @@ export default function FinanceView({ setTab }: { setTab: (t: Tab) => void }) {
   const [form, setForm] = useState({ merchant: "", amount: "", currency: cur, category: "Food & Drink" });
   const [openId, setOpenId] = useState<string | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
-  const [budgetsOpen, setBudgetsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState("");
   /** Narrows the transaction table. */
@@ -55,8 +56,8 @@ export default function FinanceView({ setTab }: { setTab: (t: Tab) => void }) {
     setOpenId(t.id);
     scrollToId(`tx-${t.id}`);
   });
-  // Budgets live in a window (and in Settings); the dashboard doesn't show them.
-  useOpenItem("budget", () => setBudgetsOpen(true));
+  // Budgets live in Finance settings (the gear); the dashboard doesn't show them.
+  useOpenItem("budget", () => setSettingsOpen(true));
 
   const live = useMemo(() => alive(transactions), [transactions]);
   const txs = useMemo(
@@ -122,7 +123,7 @@ export default function FinanceView({ setTab }: { setTab: (t: Tab) => void }) {
     <div>
       {/* Toolbar: search on the left; the month and one menu of actions on the right. */}
       <div className="mb-4 flex flex-wrap items-center gap-2.5">
-        <label className={`${PILL} min-w-0 flex-1 gap-2.5 px-4 sm:max-w-[420px]`}>
+        <label className={`${PILL} min-w-0 flex-1 gap-2.5 px-4 max-sm:basis-full sm:max-w-[420px]`}>
           <Icon name="search" size={17} className="shrink-0 text-[var(--faint)]" />
           <input
             value={query}
@@ -145,15 +146,22 @@ export default function FinanceView({ setTab }: { setTab: (t: Tab) => void }) {
               <Icon name="chevron" size={16} />
             </button>
           </div>
-          <Dropdown label="Actions" title="Report, paste a notification, budgets" width={250} align="right" className={`${PILL} gap-1.5 px-4 text-sm font-medium hover:bg-[var(--hover)]`} button={<>Actions</>}>
+          <Dropdown label="Actions" title="Report, paste a notification" width={250} align="right" className={`${PILL} gap-1.5 px-4 text-sm font-medium hover:bg-[var(--hover)]`} button={<>Actions</>}>
             {(close) => (
               <>
                 <MenuItem icon="download" label="Monthly report…" onSelect={() => { close(); setReportOpen(true); }} />
                 <MenuItem icon="clipboard" label="Paste a payment notification…" onSelect={() => { close(); setPasteOpen(true); }} />
-                <MenuItem icon="target" label="Budgets…" onSelect={() => { close(); setBudgetsOpen(true); }} />
               </>
             )}
           </Dropdown>
+          <button
+            className={`${PILL} w-10 shrink-0 justify-center text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)]`}
+            onClick={() => setSettingsOpen(true)}
+            aria-label="Finance settings"
+            title="Finance settings: budgets and categories"
+          >
+            <Icon name="settings" size={17} />
+          </button>
         </div>
       </div>
 
@@ -164,7 +172,7 @@ export default function FinanceView({ setTab }: { setTab: (t: Tab) => void }) {
         summarizing={loading}
         onSummarize={() => summarize(true)}
         onReport={() => setReportOpen(true)}
-        onBudgets={() => setBudgetsOpen(true)}
+        onBudgets={() => setSettingsOpen(true)}
         onOpenTransactions={() => scrollToId("finance-transactions", "start")}
         onOpenTransaction={(id) => { setOpenId(id); scrollToId(`tx-${id}`); }}
       />
@@ -337,10 +345,17 @@ export default function FinanceView({ setTab }: { setTab: (t: Tab) => void }) {
 
       <ReportModal open={reportOpen} onClose={() => setReportOpen(false)} />
 
-      <Modal open={budgetsOpen} onClose={() => setBudgetsOpen(false)} title="Monthly budgets">
-        <div className="p-4">
-          <BudgetEditor />
-          <button className="mt-4 w-full rounded-md bg-[var(--text)] py-2 text-sm font-medium text-[var(--bg)]" onClick={() => setBudgetsOpen(false)}>Done</button>
+      <Modal open={settingsOpen} onClose={() => setSettingsOpen(false)} title="Finance settings">
+        <div className="space-y-6 p-4 text-sm">
+          <section aria-labelledby="finance-budgets" className="space-y-2">
+            <h3 id="finance-budgets" className="flex items-center gap-2 font-medium"><Icon name="target" size={16} className="text-[var(--muted)]" /> Monthly budgets</h3>
+            <BudgetEditor />
+          </section>
+          <section aria-labelledby="finance-categories" className="space-y-2 border-t border-[var(--line)] pt-5">
+            <h3 id="finance-categories" className="flex items-center gap-2 font-medium"><Icon name="finance" size={16} className="text-[var(--muted)]" /> Categories</h3>
+            <CategoryEditor />
+          </section>
+          <button className="w-full rounded-md bg-[var(--text)] py-2 text-sm font-medium text-[var(--bg)]" onClick={() => setSettingsOpen(false)}>Done</button>
         </div>
       </Modal>
     </div>

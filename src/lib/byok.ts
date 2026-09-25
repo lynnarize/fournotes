@@ -14,10 +14,8 @@ export interface UserKeys {
   openrouterTier?: "free" | "paid"; // unset = free
   openrouterPaidModel?: string; // any OpenRouter slug; kept while on free so switching back restores it
   openrouterPaidTextOnly?: boolean; // the paid model can't read photos
-  opencodeKey?: string; // OpenCode: Zen's free models, or OpenCode Go (subscription)
-  opencodeModel?: string; // chosen free model
-  opencodeTier?: "free" | "paid"; // unset = free; paid = OpenCode Go
-  opencodeGoModel?: string; // kept while on free so switching back restores it
+  opencodeKey?: string; // OpenCode Go subscription (Zen's free tier only works inside OpenCode itself)
+  opencodeGoModel?: string;
   anthropicKey?: string;
   anthropicModel?: string; // chat, scans, recordings
   anthropicFastModel?: string; // daily brief, monthly review
@@ -28,7 +26,7 @@ export interface UserKeys {
 }
 
 export {
-  ANTHROPIC_USER_MODELS as MODEL_OPTIONS, OPENCODE_FREE_MODELS, OPENCODE_GO_MODELS, OPENCODE_GO_URL, OPENCODE_KEYS_URL, opencodeLabel,
+  ANTHROPIC_USER_MODELS as MODEL_OPTIONS, OPENCODE_GO_MODELS, OPENCODE_GO_URL, opencodeLabel,
   OPENROUTER_CREDITS_URL, OPENROUTER_FREE_MODELS, OPENROUTER_KEYS_URL,
 } from "./ai/models";
 
@@ -91,10 +89,7 @@ export function keyHeaders(keys: UserKeys = getUserKeys()): Record<string, strin
   }
   if (k.opencodeKey && isValidKey(k.opencodeKey)) {
     h["x-opencode-key"] = k.opencodeKey;
-    if (k.opencodeTier === "paid") {
-      h["x-opencode-tier"] = "go";
-      if (k.opencodeGoModel) h["x-opencode-model"] = k.opencodeGoModel;
-    } else if (k.opencodeModel) h["x-opencode-model"] = k.opencodeModel;
+    if (k.opencodeGoModel) h["x-opencode-model"] = k.opencodeGoModel;
   }
   if (k.aiProvider) h["x-ai-provider"] = k.aiProvider;
   if (k.voyageKey && isValidKey(k.voyageKey)) h["x-voyage-key"] = k.voyageKey;

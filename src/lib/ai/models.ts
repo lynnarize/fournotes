@@ -72,23 +72,15 @@ export const perMillion = (usdPerToken: number) => {
 };
 
 /**
- * OpenCode models this app can call (chat-completions format only; the others
- * there use the Messages or Responses APIs). OpenCode is a coding agent, so all
- * of them call tools. One OpenCode key, two tiers:
- *   Free — OpenCode Zen's free models. They may log prompts to improve the model.
- *   Paid — OpenCode Go, a $10/month subscription with 5-hour, weekly and monthly
- *          usage limits. List: https://opencode.ai/docs/go/
+ * OpenCode Go models this app can call (chat-completions format only; the others
+ * there use the Messages or Responses APIs). Go is a $10/month subscription with
+ * 5-hour, weekly and monthly usage limits. List: https://opencode.ai/docs/go/
+ *
+ * OpenCode Zen's free models are not offered: OpenCode refuses them outside its own
+ * apps ("FreeTierError: OpenCode's free tier can only be used from within OpenCode").
  */
 export interface OpenCodeModel { id: string; label: string; vision: boolean }
-export type OpenCodeTier = "free" | "go";
 
-export const OPENCODE_FREE_MODELS: OpenCodeModel[] = [
-  { id: "big-pickle", label: "Big Pickle", vision: false },
-  { id: "ling-3.0-flash-fin-free", label: "Ling 3.0 Flash Fin", vision: false },
-  { id: "mimo-v2.6-flash-free", label: "MiMo V2.6 Flash", vision: false },
-  { id: "nemotron-3-ultra-free", label: "Nemotron 3 Ultra", vision: false },
-  { id: "nemotron-3.5-lightning-free", label: "Nemotron 3.5 Lightning", vision: false },
-];
 export const OPENCODE_GO_MODELS: OpenCodeModel[] = [
   { id: "kimi-k3", label: "Kimi K3", vision: false },
   { id: "kimi-k2.6", label: "Kimi K2.6", vision: false },
@@ -101,16 +93,9 @@ export const OPENCODE_GO_MODELS: OpenCodeModel[] = [
   { id: "mimo-v2.6-flash", label: "MiMo V2.6 Flash", vision: false },
   { id: "longcat-2.0", label: "LongCat 2.0", vision: false },
 ];
-export const DEFAULT_OPENCODE_MODEL = "big-pickle";
-export const DEFAULT_OPENCODE_GO_MODEL = "kimi-k3";
-/** Photos need a model that can see: on Go it's part of the plan, on Free it needs a Zen balance. */
+export const DEFAULT_OPENCODE_MODEL = "kimi-k3";
+/** Photos need a model that can see; this one is part of Go. */
 export const OPENCODE_VISION_MODEL = "deepseek-v4-flash-vision-exp";
-export const OPENCODE_KEYS_URL = "https://opencode.ai/auth";
 export const OPENCODE_GO_URL = "https://opencode.ai/go";
-export const opencodeModels = (tier: OpenCodeTier) => (tier === "go" ? OPENCODE_GO_MODELS : OPENCODE_FREE_MODELS);
-export const opencodeLabel = (id: string | undefined, tier: OpenCodeTier) => {
-  const list = opencodeModels(tier);
-  return list.find((m) => m.id === id)?.label ?? list[0].label;
-};
-export const opencodeVisionFor = (id: string, tier: OpenCodeTier) =>
-  (opencodeModels(tier).find((m) => m.id === id)?.vision ? id : OPENCODE_VISION_MODEL);
+export const opencodeLabel = (id?: string) => (OPENCODE_GO_MODELS.find((m) => m.id === id) ?? OPENCODE_GO_MODELS[0]).label;
+export const opencodeVisionFor = (id: string) => (OPENCODE_GO_MODELS.find((m) => m.id === id)?.vision ? id : OPENCODE_VISION_MODEL);

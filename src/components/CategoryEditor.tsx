@@ -1,5 +1,5 @@
 "use client";
-// Settings → Categories: add your own spending categories, remove the ones you added.
+// Finance → settings (gear) → Categories: add your own spending categories, remove the ones you added.
 import { useMemo, useState } from "react";
 import { alive, useStore } from "@/lib/store";
 import { EXPENSE_CATEGORIES } from "@/lib/types";

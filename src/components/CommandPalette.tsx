@@ -101,7 +101,7 @@ export default function CommandPalette({ open, onClose, setTab, onSettings }: {
         ? { key: "theme", group: "Actions", icon: "today", label: "Switch to light mode", hint: "theme", run: () => theme.setPref("light") }
         : { key: "theme", group: "Actions", icon: "moon", label: "Switch to dark mode", hint: "theme", run: () => theme.setPref("dark") },
       { key: "voice", group: "Actions", icon: "wave", label: "Voice assistant", run: toggleVoice },
-      { key: "settings", group: "Actions", icon: "settings", label: "Settings, budgets & sync", run: onSettings },
+      { key: "settings", group: "Actions", icon: "settings", label: "Settings & sync", run: onSettings },
     ];
     const lower = query.toLowerCase();
     out.push(...commands.filter((c) => !query || c.label.toLowerCase().includes(lower) || (c.hint ?? "").toLowerCase().includes(lower)));

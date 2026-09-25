@@ -3,15 +3,13 @@ import { useRef, useState } from "react";
 import { activeProvider, useUserKeys } from "@/lib/byok";
 import { downloadFile } from "@/lib/client";
 import { useInstallPrompt } from "@/lib/hooks";
-import { alive, formatMoney, useStore, type ListKind } from "@/lib/store";
+import { alive, useStore, type ListKind } from "@/lib/store";
 import { useTheme } from "@/lib/theme";
 import { CURRENCIES } from "@/lib/types";
 import ApiKeysSection from "./ApiKeysSection";
 import AppearanceSection from "./AppearanceSection";
 import BriefStyleSection from "./BriefStyleSection";
 import { useBriefStyle } from "@/lib/briefParagraph";
-import BudgetEditor from "./BudgetEditor";
-import CategoryEditor from "./CategoryEditor";
 import { useCloud } from "./cloud";
 import { GoogleSyncPanel, useGoogleSync } from "./googleSync";
 import { RemoveSamplesButton, SampleDataButton } from "./SampleData";
@@ -42,7 +40,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
   const { keys } = useUserKeys();
   const ownProvider = activeProvider(keys);
   const aiKeySummary = ownProvider
-    ? `Using your ${{ anthropic: "Anthropic", opencode: "OpenCode", openrouter: "OpenRouter" }[ownProvider]} key`
+    ? `Using your ${{ anthropic: "Anthropic", opencode: "OpenCode Go", openrouter: "OpenRouter" }[ownProvider]} key`
     : "No personal key";
   const toast = useToast();
   const install = useInstallPrompt();
@@ -54,8 +52,6 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
   const [perm, setPerm] = useState(() => (typeof Notification !== "undefined" ? Notification.permission : "denied"));
 
   const counts = { notes: alive(all.notes).length, tasks: alive(all.todos).length, transactions: alive(all.transactions).length };
-  const budgetValues = Object.values(settings.budgets).filter((v): v is number => !!v && v > 0);
-  const budgetTotal = budgetValues.reduce((s, v) => s + v, 0);
 
   const attempt = async (fn: () => Promise<void>, ok?: string) => {
     setWorking(true);
@@ -150,16 +146,6 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
               )}
             </div>
           </div>
-        </SettingsSection>
-
-        <SettingsSection id="budgets" icon="target" title="Monthly budgets"
-          summary={budgetValues.length ? `${budgetValues.length} set · ${formatMoney(budgetTotal, settings.currency, true)} a month` : "None set"}>
-          <BudgetEditor />
-        </SettingsSection>
-
-        <SettingsSection id="categories" icon="finance" title="Categories"
-          summary={`${store.categories.length} in use${settings.categories?.length ? ` · ${settings.categories.length} of your own` : ""}`}>
-          <CategoryEditor />
         </SettingsSection>
 
         <SettingsSection id="sync" icon="cloud" title="Cloud sync" summary={syncSummary}>
@@ -360,17 +346,6 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
             <Icon name="coffee" size={16} /> Buy me a coffee
           </a>
         </div>
-
-        {/* Legal pages (moved here from the sidebar) */}
-        <nav aria-label="Legal" className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 pt-1 text-sm text-[var(--muted)]">
-          <a href="/privacy" className="inline-flex min-h-10 items-center gap-1.5 hover:text-[var(--text)] hover:underline">
-            <Icon name="shield" size={14} /> Privacy Policy
-          </a>
-          <span aria-hidden className="text-[var(--faint)]">·</span>
-          <a href="/terms" className="inline-flex min-h-10 items-center gap-1.5 hover:text-[var(--text)] hover:underline">
-            <Icon name="note" size={14} /> Terms of Service
-          </a>
-        </nav>
       </div>
     </Modal>
   );

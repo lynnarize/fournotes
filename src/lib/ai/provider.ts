@@ -42,7 +42,7 @@ export async function getProvider(keys: ResolvedKeys): Promise<LLMProvider> {
   }
   if (keys.provider === "opencode" && keys.opencode.apiKey) {
     const { OpenRouterProvider } = await import("./openrouter");
-    return new OpenRouterProvider({ ...keys.opencode, gateway: keys.opencode.tier === "go" ? "opencode-go" : "opencode" });
+    return new OpenRouterProvider({ ...keys.opencode, gateway: "opencode" });
   }
   const { DemoProvider } = await import("./demo");
   return new DemoProvider();

@@ -2,10 +2,10 @@ import "server-only";
 // Which credentials an AI request uses. A key the user brought (request headers,
 // set in Settings → API keys) wins, then the server's own keys, then demo mode.
 // OpenRouter's free models are the default when no Anthropic key is present.
-// OpenCode (Zen free models, or a Go subscription) works only with the user's own key.
+// OpenCode Go (a subscription) works only with the user's own key.
 import {
-  ANTHROPIC_USER_MODELS, DEFAULT_OPENCODE_GO_MODEL, DEFAULT_OPENCODE_MODEL, DEFAULT_OPENROUTER_FAST_MODEL, DEFAULT_OPENROUTER_MODEL, DEFAULT_VISION_MODEL,
-  isFreeModel, isModelId, opencodeModels, opencodeVisionFor, OPENROUTER_FREE_MODELS, visionModelFor, type OpenCodeTier,
+  ANTHROPIC_USER_MODELS, DEFAULT_OPENCODE_MODEL, DEFAULT_OPENROUTER_FAST_MODEL, DEFAULT_OPENROUTER_MODEL, DEFAULT_VISION_MODEL,
+  isFreeModel, isModelId, OPENCODE_GO_MODELS, opencodeVisionFor, OPENROUTER_FREE_MODELS, visionModelFor,
 } from "./models";
 
 export type KeySource = "user" | "server" | "none";
@@ -25,7 +25,7 @@ export interface ResolvedKeys {
   provider: ProviderName;
   anthropic: { apiKey?: string; model: string; fastModel: string; source: KeySource };
   openrouter: { apiKey?: string; model: string; fastModel: string; visionModel: string; source: KeySource; referer: string };
-  opencode: { apiKey?: string; tier: OpenCodeTier; model: string; fastModel: string; visionModel: string; source: KeySource };
+  opencode: { apiKey?: string; model: string; fastModel: string; visionModel: string; source: KeySource };
   voyage: { apiKey?: string; model: string; source: KeySource };
   stt: { apiKey?: string; baseUrl: string; model: string; source: KeySource };
 }
@@ -65,8 +65,7 @@ export function resolveKeys(req: Request): ResolvedKeys {
   const safeFastModel = sharedFreeOnly && !isFreeModel(orFastModel) ? DEFAULT_OPENROUTER_FAST_MODEL : orFastModel;
 
   const userOpenCode = header(req, "x-opencode-key");
-  const ocTier: OpenCodeTier = header(req, "x-opencode-tier") === "go" ? "go" : "free";
-  const ocModel = allowed(header(req, "x-opencode-model"), opencodeModels(ocTier).map((m) => m.id)) || (ocTier === "go" ? DEFAULT_OPENCODE_GO_MODEL : DEFAULT_OPENCODE_MODEL);
+  const ocModel = allowed(header(req, "x-opencode-model"), OPENCODE_GO_MODELS.map((m) => m.id)) || DEFAULT_OPENCODE_MODEL;
 
   const userVoyage = header(req, "x-voyage-key");
   const userStt = header(req, "x-stt-key");
@@ -92,10 +91,9 @@ export function resolveKeys(req: Request): ResolvedKeys {
     },
     opencode: {
       apiKey: userOpenCode,
-      tier: ocTier,
       model: ocModel,
       fastModel: ocModel,
-      visionModel: opencodeVisionFor(ocModel, ocTier),
+      visionModel: opencodeVisionFor(ocModel),
       source: userOpenCode ? "user" : "none",
     },
     voyage: {

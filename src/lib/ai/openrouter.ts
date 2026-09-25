@@ -1,9 +1,8 @@
 import "server-only";
 // OpenRouter provider: the app's free default. OpenRouter speaks the OpenAI
 // chat-completions format, so the Claude tool definitions are converted on the way out.
-// OpenCode (Zen's free models, `gateway: "opencode"`, or a Go subscription, "opencode-go")
-// speaks the same format and reuses this class, minus OpenRouter's extras: model
-// fallbacks, provider routing, attribution headers.
+// OpenCode Go (`gateway: "opencode"`) speaks the same format and reuses this class,
+// minus OpenRouter's extras: model fallbacks, provider routing, attribution headers.
 import { createHash, randomUUID } from "node:crypto";
 import type { AIAction, BriefInput, CaptureResult, ChatMessage, ChatResponse, ClientContext, Transaction } from "../types";
 import { ProviderError } from "./errors";
@@ -17,18 +16,14 @@ import { validateActions } from "./validate";
 import { WRITING_SYSTEM, writingPrompt, type WritingTask } from "./writing";
 
 const API = "https://openrouter.ai/api/v1/chat/completions";
-export type Gateway = "openrouter" | "opencode" | "opencode-go";
-const ENDPOINT: Record<Gateway, string> = {
-  openrouter: API,
-  opencode: "https://opencode.ai/zen/v1/chat/completions",
-  "opencode-go": "https://opencode.ai/zen/go/v1/chat/completions",
-};
+export type Gateway = "openrouter" | "opencode";
+const ENDPOINT: Record<Gateway, string> = { openrouter: API, opencode: "https://opencode.ai/zen/go/v1/chat/completions" };
 /**
  * OpenCode asks clients to name themselves (not a generic SDK user agent) and to send
  * a stable x-opencode-session per conversation; Go rejects requests without one.
  */
 export const OPENCODE_USER_AGENT = "FourNotes/0.1 (+https://app.fournotes.xyz)";
-const GATEWAY_NAME: Record<Gateway, string> = { openrouter: "OpenRouter", opencode: "OpenCode", "opencode-go": "OpenCode Go" };
+const GATEWAY_NAME: Record<Gateway, string> = { openrouter: "OpenRouter", opencode: "OpenCode Go" };
 
 type ToolCall = { id: string; type?: string; function: { name: string; arguments: string } };
 type ResponseMessage = { content?: string | null; tool_calls?: ToolCall[] };
@@ -197,7 +192,8 @@ export class OpenRouterProvider implements LLMProvider {
     }
     const json = (await res.json().catch(() => ({}))) as Completion;
     if (!res.ok || json.error) {
-      const detail = json.error?.message ?? "";
+      const err = json.error as { message?: string; type?: string } | string | undefined;
+      const detail = typeof err === "string" ? err : [err?.type, err?.message].filter(Boolean).join(": ");
       const status = res.status || json.error?.code || 500;
       // Free models get withdrawn, and some can't take tools or photos. Let the
       // free router pick one that can, rather than failing the request.
@@ -207,11 +203,18 @@ export class OpenRouterProvider implements LLMProvider {
         console.warn(`[ai:openrouter] model=${body.model} unavailable (${status}); retrying with ${OPENROUTER_AUTO_MODEL}`);
         return this.complete({ ...input, model: OPENROUTER_AUTO_MODEL, models: [OPENROUTER_AUTO_MODEL] });
       }
-      if (status === 401 || status === 403) throw new ProviderError(`Your ${name} key was rejected. Check it in Settings → API keys.`, 401);
-      if (this.gateway === "opencode-go") {
+      // 403 is also used for policy refusals of one model (OpenCode: "inference_failed"): only blame the key when it says so.
+      if (status === 401 || (status === 403 && (!detail || /api key|invalid key|unauthori[sz]ed|authenticat/i.test(detail)))) {
+        throw new ProviderError(`Your ${name} key was rejected. Check it in Settings → API keys.`, 401);
+      }
+      if (status === 403) {
+        console.warn(`[ai:${this.gateway}] 403 model=${body.model}: ${detail}`);
+        throw new ProviderError(`${name} refused ${body.model}: ${detail.slice(0, 200)} Try another model in Settings → API keys.`, 403);
+      }
+      if (this.gateway === "opencode") {
         // Go is a subscription: 402/429 mean no active plan, or a 5-hour / weekly / monthly limit reached.
-        if (status === 402) throw new ProviderError("This key has no active OpenCode Go subscription. Subscribe at opencode.ai/go, or switch OpenCode to Free in Settings → API keys.", 402);
-        if (status === 429) throw new ProviderError("You've reached your OpenCode Go usage limit for now. Wait for it to reset, or switch OpenCode to Free in Settings → API keys.", 429);
+        if (status === 402) throw new ProviderError("This key has no active OpenCode Go subscription. Subscribe at opencode.ai/go, or use another key in Settings → API keys.", 402);
+        if (status === 429) throw new ProviderError("You've reached your OpenCode Go usage limit for now. Wait for it to reset, or use another key in Settings → API keys.", 429);
       }
       if (status === 402) throw new ProviderError(`That ${name} model needs credits. Add some, or choose a free model in Settings → API keys.`, 402);
       if (!openRouter) {

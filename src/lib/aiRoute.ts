@@ -15,7 +15,7 @@ export function useAiRoute() {
   useEffect(() => { serverStatus().then(setServer); }, []);
   const own = activeProvider(keys);
   if (own === "anthropic") return { label: "Your Anthropic key", canSearchWeb: true };
-  if (own === "opencode") return { label: keys.opencodeTier === "paid" ? "Your OpenCode Go key" : "Your OpenCode key", canSearchWeb: false };
+  if (own === "opencode") return { label: "Your OpenCode Go key", canSearchWeb: false };
   if (own === "openrouter") return { label: "Your OpenRouter key", canSearchWeb: false };
   if (!server) return { label: "", canSearchWeb: false };
   if (server.anthropic) return { label: "Claude", canSearchWeb: true };

@@ -50,7 +50,7 @@ export interface Todo extends BaseItem {
   noteId?: string | null; // link back to the note it came from
 }
 
-/** Built-in categories. Users can add their own (Settings → Categories). */
+/** Built-in categories. Users can add their own (Finance → settings → Categories). */
 export const EXPENSE_CATEGORIES = [
   "Food & Drink",
   "Groceries",

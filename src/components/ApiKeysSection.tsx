@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { isModelId, MODELS_CHECKED_AT, perMillion, type PaidModel } from "@/lib/ai/models";
 import { SETTINGS_FIELD_KEY, useOpenSettings } from "@/lib/nav";
 import {
-  activeProvider, clearUserKeys, isValidKey, keyHeaders, maskKey, MODEL_OPTIONS, OPENCODE_FREE_MODELS, OPENCODE_GO_MODELS, OPENCODE_GO_URL, OPENCODE_KEYS_URL, opencodeLabel, OPENROUTER_CREDITS_URL,
+  activeProvider, clearUserKeys, isValidKey, keyHeaders, maskKey, MODEL_OPTIONS, OPENCODE_GO_MODELS, OPENCODE_GO_URL, opencodeLabel, OPENROUTER_CREDITS_URL,
   OPENROUTER_FREE_MODELS, OPENROUTER_KEYS_URL, saveUserKeys, useUserKeys, type AiProvider, type SttProvider, type UserKeys,
 } from "@/lib/byok";
 import { inputBox, useToast } from "./ui";
@@ -27,7 +27,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "anthropic", label: "Claude" },
   { id: "more", label: "More" },
 ];
-const PROVIDER_NAME: Record<AiProvider, string> = { openrouter: "OpenRouter", opencode: "OpenCode", anthropic: "Claude" };
+const PROVIDER_NAME: Record<AiProvider, string> = { openrouter: "OpenRouter", opencode: "OpenCode Go", anthropic: "Claude" };
 
 const normalized = (k: UserKeys) => JSON.stringify(Object.entries(k).filter(([, v]) => v).sort());
 const modelLabel = (id: string) => OPENROUTER_FREE_MODELS.find((m) => m.id === id)?.label ?? id;
@@ -75,7 +75,6 @@ export default function ApiKeysSection() {
   }, []);
 
   const paid = draft.openrouterTier === "paid";
-  const go = draft.opencodeTier === "paid";
   // The paid list is long and changes often: load it live, only once Paid is picked.
   useEffect(() => {
     if (!paid || paidModels) return;
@@ -91,7 +90,7 @@ export default function ApiKeysSection() {
     setResults((r) => {
       const next = { ...r };
       if ("openrouterKey" in p || "openrouterModel" in p || "openrouterTier" in p || "openrouterPaidModel" in p) delete next.openrouter;
-      if ("opencodeKey" in p || "opencodeModel" in p || "opencodeTier" in p || "opencodeGoModel" in p) delete next.opencode;
+      if ("opencodeKey" in p || "opencodeGoModel" in p) delete next.opencode;
       if ("anthropicKey" in p || "anthropicModel" in p || "anthropicFastModel" in p) delete next.anthropic;
       if ("voyageKey" in p) delete next.voyage;
       if ("sttKey" in p || "sttProvider" in p) delete next.stt;
@@ -125,7 +124,7 @@ export default function ApiKeysSection() {
 
   const save = () => {
     saveUserKeys(draft, keep);
-    const which = draftActive === "openrouter" && paid ? "OpenRouter (paid)" : draftActive === "opencode" && go ? "OpenCode Go" : draftActive ? PROVIDER_NAME[draftActive] : null;
+    const which = draftActive === "openrouter" && paid ? "OpenRouter (paid)" : draftActive === "opencode" ? "OpenCode Go" : draftActive ? PROVIDER_NAME[draftActive] : null;
     toast(which ? `🔑 Key saved. AI requests now use your ${which} key.` : "API key settings saved.");
   };
 
@@ -140,9 +139,7 @@ export default function ApiKeysSection() {
     savedActive === "anthropic"
       ? { label: "Your Claude key", detail: `${maskKey(keys.anthropicKey)} · ${keys.anthropicModel ?? server?.model ?? "default model"}`, tone: "var(--ok)" }
       : savedActive === "opencode"
-        ? keys.opencodeTier === "paid"
-          ? { label: "Your OpenCode Go key", detail: `${maskKey(keys.opencodeKey)} · ${opencodeLabel(keys.opencodeGoModel, "go")}`, tone: "var(--ok)" }
-          : { label: "Your OpenCode key", detail: `${maskKey(keys.opencodeKey)} · ${opencodeLabel(keys.opencodeModel, "free")} · free`, tone: "var(--ok)" }
+        ? { label: "Your OpenCode Go key", detail: `${maskKey(keys.opencodeKey)} · ${opencodeLabel(keys.opencodeGoModel)}`, tone: "var(--ok)" }
         : savedActive === "openrouter"
           ? keys.openrouterTier === "paid" && keys.openrouterPaidModel
             ? { label: "Your OpenRouter key (paid)", detail: `${maskKey(keys.openrouterKey)} · ${keys.openrouterPaidModel}`, tone: "var(--ok)" }
@@ -302,34 +299,23 @@ export default function ApiKeysSection() {
 
     opencode: (
       <>
-        {header(
-          <>{badge(go ? "Go" : "Free", go ? "var(--accent)" : "var(--ok)")} OpenCode key</>,
-          go ? OPENCODE_GO_URL : OPENCODE_KEYS_URL,
-          go ? "Subscribe to Go" : "Get a key",
-        )}
+        {header(<>{badge("Go", "var(--accent)")} OpenCode Go key</>, OPENCODE_GO_URL, "Subscribe to Go")}
         {keyRow("opencode", draft.opencodeKey, (v) => set({ opencodeKey: v }), "sk-…", "OpenCode API key")}
         {resultLine("opencode")}
-        <div className="flex flex-wrap items-center gap-2 pt-1">
-          {tierSwitch("OpenCode models", go ? "paid" : "free", !draft.opencodeKey, (tier) => set({ opencodeTier: tier === "paid" ? "paid" : undefined }))}
-          <select
-            // A model no longer listed (e.g. a Zen paid model saved before Go) shows as the default the server uses.
-            value={(go ? OPENCODE_GO_MODELS : OPENCODE_FREE_MODELS).some((m) => m.id === (go ? draft.opencodeGoModel : draft.opencodeModel))
-              ? (go ? draft.opencodeGoModel : draft.opencodeModel) : ""}
-            disabled={!draft.opencodeKey}
-            onChange={(e) => set(go ? { opencodeGoModel: e.target.value || undefined } : { opencodeModel: e.target.value || undefined })}
-            aria-label={go ? "OpenCode Go model" : "OpenCode free model"}
-            className={`${inputBox} min-w-0 flex-1`}
-          >
-            <option value="">Default ({opencodeLabel(undefined, go ? "go" : "free")})</option>
-            {(go ? OPENCODE_GO_MODELS : OPENCODE_FREE_MODELS).map((m) => (
-              <option key={m.id} value={m.id}>{m.label}{m.vision ? " · reads photos" : ""}</option>
-            ))}
-          </select>
-        </div>
+        <select
+          // A model no longer listed shows as the default the server uses.
+          value={OPENCODE_GO_MODELS.some((m) => m.id === draft.opencodeGoModel) ? draft.opencodeGoModel : ""}
+          disabled={!draft.opencodeKey}
+          onChange={(e) => set({ opencodeGoModel: e.target.value || undefined })}
+          aria-label="OpenCode Go model"
+          className={`${inputBox} mt-1 w-full`}
+        >
+          <option value="">Default ({opencodeLabel()})</option>
+          {OPENCODE_GO_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}{m.vision ? " · reads photos" : ""}</option>)}
+        </select>
         <p className={hint}>
-          {go
-            ? "Uses your OpenCode Go subscription ($10/month) with its 5-hour, weekly and monthly limits. Photos go to DeepSeek V4 Flash Vision, included in Go."
-            : "OpenCode Zen's free models. They may use your prompts to improve the model. Photos go to DeepSeek V4 Flash Vision, which needs a Zen balance."}
+          Uses your OpenCode Go subscription ($10/month) with its 5-hour, weekly and monthly limits. Photos go to DeepSeek V4 Flash Vision,
+          included in Go. OpenCode&apos;s free models only work inside OpenCode itself, so they can&apos;t be used here — for free AI, use an OpenRouter key.
         </p>
         {useForAi("opencode", draft.opencodeKey)}
       </>

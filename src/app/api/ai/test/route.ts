@@ -64,10 +64,9 @@ export async function POST(req: Request) {
 
     if (service === "opencode") {
       if (keys.opencode.source !== "user") return result(false, "Enter an OpenCode key first.");
-      const go = keys.opencode.tier === "go";
-      const label = opencodeLabel(keys.opencode.model, keys.opencode.tier);
-      // Zen and Go have no key-info endpoint (their model lists are public), so send the smallest real request.
-      const res = await fetch(go ? "https://opencode.ai/zen/go/v1/chat/completions" : "https://opencode.ai/zen/v1/chat/completions", {
+      const label = opencodeLabel(keys.opencode.model);
+      // Go has no key-info endpoint (its model list is public), so send the smallest real request.
+      const res = await fetch("https://opencode.ai/zen/go/v1/chat/completions", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${keys.opencode.apiKey}`, "Content-Type": "application/json",
@@ -76,19 +75,20 @@ export async function POST(req: Request) {
         body: JSON.stringify({ model: keys.opencode.model, max_tokens: 16, messages: [{ role: "user", content: "ping" }] }),
         signal: AbortSignal.timeout(20_000),
       });
-      if (res.status === 401 || res.status === 403) return result(false, "OpenCode rejected this key.");
-      if (res.status === 402) {
-        return result(false, go
-          ? "Key works, but it has no active OpenCode Go subscription. Subscribe at opencode.ai/go, or switch to Free."
-          : `Key works, but ${label} needs a balance. Add credits at opencode.ai, or pick a free model.`);
+      // Read the reason first: a 403 is often a policy refusal for this model, not a bad key.
+      const detail = res.ok
+        ? undefined
+        : await res.json().then((j: { error?: { message?: string; type?: string } | string }) =>
+            typeof j.error === "string" ? j.error : [j.error?.type, j.error?.message].filter(Boolean).join(": ")).catch(() => undefined);
+      if (!res.ok) console.warn(`[ai/test] opencode-go ${res.status} model=${keys.opencode.model}: ${detail || "(no detail)"}`);
+      if (res.status === 401 || (res.status === 403 && (!detail || /api key|invalid key|unauthori[sz]ed|authenticat/i.test(detail)))) {
+        return result(false, "OpenCode rejected this key.");
       }
-      if (go && res.status === 429) return result(true, `Key works. Go usage limit reached for now; ${label} will work again when it resets.`);
-      if (res.status === 404) return result(false, `Key works, but OpenCode doesn't offer ${label} any more. Pick another model.`);
-      if (res.status === 429) return result(true, `Key works (rate limited right now). Using ${label}.`);
-      if (res.ok) return result(true, `Key works. Using ${label}${go ? " on OpenCode Go" : " (free)"}.`);
-      // Say why: a 400 here is about the request (model, parameters), not the key.
-      const detail = await res.json().then((j: { error?: { message?: string } | string }) => (typeof j.error === "string" ? j.error : j.error?.message)).catch(() => undefined);
-      console.warn(`[ai/test] opencode${go ? "-go" : ""} ${res.status} model=${keys.opencode.model}: ${detail ?? "(no detail)"}`);
+      if (res.status === 403) return result(false, `Key works, but OpenCode refused ${label}: ${detail!.slice(0, 200)}`);
+      if (res.status === 402) return result(false, "Key works, but it has no active OpenCode Go subscription. Subscribe at opencode.ai/go.");
+      if (res.status === 429) return result(true, `Key works. Go usage limit reached for now; ${label} will work again when it resets.`);
+      if (res.status === 404) return result(false, `Key works, but OpenCode Go doesn't offer ${label} any more. Pick another model.`);
+      if (res.ok) return result(true, `Key works. Using ${label} on OpenCode Go.`);
       return result(false, `OpenCode returned an error (${res.status})${detail ? `: ${detail.slice(0, 200)}` : ""}.`);
     }
 

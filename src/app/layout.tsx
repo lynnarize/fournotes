@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { Newsreader, Open_Sans } from "next/font/google";
 import localFont from "next/font/local";
 import { Analytics } from "@vercel/analytics/next";
@@ -39,12 +40,15 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Per-request nonce from src/middleware.ts: the Content Security Policy only runs scripts carrying it.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     // data-theme is set by the inline script before hydration, so React must not warn about it.
     <html lang="en" className={`${openSans.variable} ${newsreader.variable} ${googleSans.variable}`} suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        {/* Browsers blank the nonce attribute after load, so React would report a mismatch. */}
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: themeInitScript }} suppressHydrationWarning />
       </head>
       <body>
         {children}

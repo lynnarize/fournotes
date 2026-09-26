@@ -13,6 +13,7 @@ import { useTheme, type ThemePref } from "@/lib/theme";
 import { CURRENCIES } from "@/lib/types";
 import { GoogleSyncPanel, useGoogleSync } from "./googleSync";
 import Logo from "./Logo";
+import SecretInput from "./SecretInput";
 import { Icon, useToast } from "./ui";
 
 const KEY = "four-notes:onboarding";
@@ -187,14 +188,11 @@ export default function Onboarding() {
                     <Icon name="check" size={13} className="text-[var(--ok)]" /> The assistant is ready to use
                   </p>
                 )}
-                <input
-                  type="password"
+                <SecretInput
                   value={orKey}
                   onChange={(e) => setOrKey(e.target.value)}
                   placeholder="OpenRouter key (optional) — sk-or-v1-…"
                   aria-label="OpenRouter API key"
-                  autoComplete="off"
-                  spellCheck={false}
                   className="h-[38px] w-full rounded-[9px] border border-[color-mix(in_srgb,var(--text)_8%,transparent)] bg-[color-mix(in_srgb,var(--panel)_85%,transparent)] px-3.5 text-[13.5px] outline-none placeholder:text-[var(--faint)] focus:border-[color-mix(in_srgb,var(--ob-accent)_55%,transparent)]"
                 />
                 <p className="text-xs text-[var(--muted)]">Prefer Claude? <b className="text-[var(--text)]">Settings → AI &amp; API keys</b></p>

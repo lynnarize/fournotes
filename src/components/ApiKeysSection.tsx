@@ -10,6 +10,7 @@ import {
   activeProvider, clearUserKeys, isValidKey, keyHeaders, maskKey, MODEL_OPTIONS, OPENCODE_GO_MODELS, OPENCODE_GO_URL, opencodeLabel, OPENROUTER_CREDITS_URL,
   OPENROUTER_FREE_MODELS, OPENROUTER_KEYS_URL, saveUserKeys, useUserKeys, type AiProvider, type SttProvider, type UserKeys,
 } from "@/lib/byok";
+import SecretInput from "./SecretInput";
 import { inputBox, useToast } from "./ui";
 
 type Service = AiProvider | "voyage" | "stt";
@@ -151,14 +152,12 @@ export default function ApiKeysSection() {
               : { label: "Demo mode", detail: "rule-based replies, no photo reading", tone: "#d9730d" };
 
   const keyInput = (value: string | undefined, onChange: (v: string) => void, placeholder: string, label: string) => (
-    <input
-      type={reveal ? "text" : "password"}
+    <SecretInput
+      reveal={reveal}
       value={value ?? ""}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       aria-label={label}
-      autoComplete="off"
-      spellCheck={false}
       className={`${inputBox} min-w-0 flex-1 font-mono text-xs ${value && !isValidKey(value) ? "border-[var(--danger)]" : ""}`}
     />
   );
@@ -438,7 +437,7 @@ export default function ApiKeysSection() {
           <span className="text-xs text-[var(--muted)]">(off: forgotten when this tab closes)</span>
         </label>
         <p className={hint}>
-          Keys stay in this browser and are sent only with each AI request. Never stored on the server, synced or backed up; usage is
+          Keys stay in this browser, encrypted, and are sent only with each AI request. Never stored on the server, synced or backed up; usage is
           billed to your provider account. Don&apos;t save keys on a shared computer.
         </p>
         <div className="flex flex-wrap items-center gap-2">

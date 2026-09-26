@@ -4,7 +4,7 @@
 // - Meaning-based search: when a Voyage key is available (Settings or VOYAGE_API_KEY), notes are embedded
 //   once (cached in localStorage by updatedAt) and ranked by cosine similarity,
 //   blended with BM25. The Supabase version of this is pgvector (see GUIDE.md).
-import { keyHeaders } from "./byok";
+import { authHeaders } from "./byok";
 import type { Note, Todo, Transaction } from "./types";
 
 export type SearchHit =
@@ -70,7 +70,7 @@ async function embed(texts: string[], inputType: "document" | "query"): Promise<
   try {
     const res = await fetch("/api/embed", {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...keyHeaders() },
+      headers: { "Content-Type": "application/json", ...(await authHeaders()) },
       body: JSON.stringify({ texts, inputType }),
     });
     if (!res.ok) return null;

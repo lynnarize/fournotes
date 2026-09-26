@@ -171,6 +171,10 @@ body {
 input:focus-visible, textarea:focus-visible, select:focus-visible, [contenteditable]:focus-visible { outline-offset: 0; }
 .input-plain:focus-visible, .ProseMirror:focus-visible, .prop-input:focus-visible { outline: none; }
 
+/* API key fields: masked like a password without being one (see SecretInput.tsx). */
+.secret-mask { -webkit-text-security: disc; }
+.secret-mask::placeholder { -webkit-text-security: none; }
+
 .btn-ghost {
   border-radius: 6px;
   padding: 4px 8px;

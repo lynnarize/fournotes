@@ -1,6 +1,6 @@
 "use client";
 // Browser-side helpers: API calls, image resizing, calendar links, file export.
-import { keyHeaders } from "./byok";
+import { authHeaders } from "./byok";
 import type { BriefInput, CaptureResult, ChatMessage, ChatResponse, ClientContext, Todo } from "./types";
 
 async function asJson<T>(res: Response): Promise<T> {
@@ -15,73 +15,73 @@ const offlineGuard = () => {
 
 export const api = {
   /** `tools: false` asks for an answer only: nothing can be filed. */
-  chat: (messages: ChatMessage[], context: ClientContext, opts?: { tools?: boolean }) => {
+  chat: async (messages: ChatMessage[], context: ClientContext, opts?: { tools?: boolean }) => {
     offlineGuard();
     return fetch("/api/chat", {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...keyHeaders() },
+      headers: { "Content-Type": "application/json", ...(await authHeaders()) },
       body: JSON.stringify({ messages, context, tools: opts?.tools !== false }),
     }).then((r) => asJson<ChatResponse>(r));
   },
 
   /** "Ideas from the web" for a note (needs Claude: web search is Anthropic's). */
-  webIdeas: (title: string, content: string, question: string) => {
+  webIdeas: async (title: string, content: string, question: string) => {
     offlineGuard();
     return fetch("/api/ai/web-ideas", {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...keyHeaders() },
+      headers: { "Content-Type": "application/json", ...(await authHeaders()) },
       body: JSON.stringify({ title, content, question }),
     }).then((r) => asJson<{ text: string; sources: { title: string; url: string }[] }>(r));
   },
 
-  captureImage: (file: Blob, context: ClientContext) => {
+  captureImage: async (file: Blob, context: ClientContext) => {
     offlineGuard();
     const fd = new FormData();
     fd.append("file", file, "capture.jpg");
     fd.append("context", JSON.stringify(context));
-    return fetch("/api/ingest/image", { method: "POST", body: fd, headers: keyHeaders() }).then((r) => asJson<CaptureResult>(r));
+    return fetch("/api/ingest/image", { method: "POST", body: fd, headers: await authHeaders() }).then((r) => asJson<CaptureResult>(r));
   },
 
-  captureAudio: (audio: Blob | null, transcript: string, context: ClientContext) => {
+  captureAudio: async (audio: Blob | null, transcript: string, context: ClientContext) => {
     offlineGuard();
     const fd = new FormData();
     if (audio) fd.append("file", audio, "recording.webm");
     fd.append("transcript", transcript);
     fd.append("context", JSON.stringify(context));
-    return fetch("/api/ingest/audio", { method: "POST", body: fd, headers: keyHeaders() }).then((r) =>
+    return fetch("/api/ingest/audio", { method: "POST", body: fd, headers: await authHeaders() }).then((r) =>
       asJson<CaptureResult & { transcript: string }>(r),
     );
   },
 
   /** Notes editor AI menu: summarize / improve / fix / shorter / continue. */
-  write: (task: "summarize" | "improve" | "fix" | "shorter" | "continue", text: string, title: string) => {
+  write: async (task: "summarize" | "improve" | "fix" | "shorter" | "continue", text: string, title: string) => {
     offlineGuard();
     return fetch("/api/ai/write", {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...keyHeaders() },
+      headers: { "Content-Type": "application/json", ...(await authHeaders()) },
       body: JSON.stringify({ task, text, title }),
     }).then((r) => asJson<{ text: string }>(r));
   },
 
-  monthlySummary: (month: string, currency: string, transactions: unknown[]) => {
+  monthlySummary: async (month: string, currency: string, transactions: unknown[]) => {
     offlineGuard();
     return fetch("/api/finance/summary", {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...keyHeaders() },
+      headers: { "Content-Type": "application/json", ...(await authHeaders()) },
       body: JSON.stringify({ month, currency, transactions }),
     }).then((r) => asJson<{ text: string }>(r));
   },
 
-  brief: (input: BriefInput) => {
+  brief: async (input: BriefInput) => {
     offlineGuard();
     return fetch("/api/brief", {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...keyHeaders() },
+      headers: { "Content-Type": "application/json", ...(await authHeaders()) },
       body: JSON.stringify(input),
     }).then((r) => asJson<{ text: string }>(r));
   },
 
-  fx: (from: string, to: string) => {
+  fx: async (from: string, to: string) => {
     offlineGuard();
     return fetch(`/api/fx?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`).then((r) => asJson<{ rate: number }>(r));
   },

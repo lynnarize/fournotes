@@ -1,9 +1,10 @@
 "use client";
-// Bring your own API key. Keys live only in this browser: never in AppData, so
-// they are never synced to Supabase or included in backups. They are sent to
+// Bring your own API key. Keys live only in this browser, encrypted (sealed.ts): never
+// in AppData, so they are never synced to Supabase or included in backups. They are sent to
 // this app's own /api routes as headers on each AI request and used for that
 // request only; the server never stores or logs them.
 import { useEffect, useState } from "react";
+import { isSealed, seal, unseal } from "./sealed";
 
 export type SttProvider = "openai" | "groq";
 export type AiProvider = "openrouter" | "opencode" | "anthropic";
@@ -44,27 +45,88 @@ const EVT = "four-notes:byok-changed";
 const clean = (k: UserKeys): UserKeys =>
   Object.fromEntries(Object.entries(k).map(([key, v]) => [key, typeof v === "string" ? v.trim() : v]).filter(([, v]) => v)) as UserKeys;
 
-function read(): { keys: UserKeys; persist: boolean } {
+// Keys are stored encrypted (see sealed.ts), so reading them is async. They are
+// decrypted once into memory; getUserKeys() and keyHeaders() read that copy, and
+// authHeaders() waits for it so a request made during startup still has the key.
+type State = { keys: UserKeys; persist: boolean };
+let state: State = { keys: {}, persist: true };
+let loading: Promise<void> | null = null;
+let writing: Promise<void> = Promise.resolve();
+let generation = 0; // bumped by every save and reload, so a slower, older load can't overwrite newer keys
+
+const announce = () => window.dispatchEvent(new Event(EVT));
+
+async function write(keys: UserKeys, persist: boolean) {
+  const target = persist ? localStorage : sessionStorage;
+  const other = persist ? sessionStorage : localStorage;
+  if (!Object.keys(keys).length) {
+    target.removeItem(STORE);
+    other.removeItem(STORE);
+    return;
+  }
+  const plain = JSON.stringify(keys);
+  let value: string;
   try {
-    const session = sessionStorage.getItem(STORE);
-    if (session) return { keys: JSON.parse(session), persist: false };
-    const local = localStorage.getItem(STORE);
-    if (local) return { keys: JSON.parse(local), persist: true };
-  } catch { /* storage blocked */ }
-  return { keys: {}, persist: true };
+    value = JSON.stringify(await seal(plain));
+  } catch {
+    // No IndexedDB or WebCrypto here (e.g. some private windows): store as before rather than lose the keys.
+    console.warn("[byok] this browser can't encrypt stored keys; saving them unencrypted");
+    value = plain;
+  }
+  target.setItem(STORE, value);
+  other.removeItem(STORE);
 }
 
-export const getUserKeys = (): UserKeys => (typeof window === "undefined" ? {} : read().keys);
+async function load(): Promise<State> {
+  const session = sessionStorage.getItem(STORE);
+  const raw = session ?? localStorage.getItem(STORE);
+  const persist = session === null;
+  if (!raw) return { keys: {}, persist: true };
+  const parsed: unknown = JSON.parse(raw);
+  if (isSealed(parsed)) {
+    const plain = await unseal(parsed);
+    if (plain === null) {
+      // This browser's lock key is gone (site data partly cleared): the keys can't be recovered.
+      (persist ? localStorage : sessionStorage).removeItem(STORE);
+      return { keys: {}, persist };
+    }
+    return { keys: JSON.parse(plain) as UserKeys, persist };
+  }
+  // Saved before encryption: encrypt it now.
+  const keys = clean(parsed as UserKeys);
+  writing = writing.then(() => write(keys, persist)).catch(() => {});
+  return { keys, persist };
+}
+
+function reload(): Promise<void> {
+  const gen = ++generation;
+  loading = load()
+    .catch(() => ({ keys: {}, persist: true }))
+    .then((s) => {
+      if (gen !== generation) return;
+      state = s;
+      announce();
+    });
+  return loading;
+}
+
+/** Resolves once the stored keys are decrypted. */
+export const keysReady = (): Promise<void> => (typeof window === "undefined" ? Promise.resolve() : (loading ??= reload()));
+
+/** The decrypted keys (empty until keysReady() resolves). */
+export const getUserKeys = (): UserKeys => {
+  void keysReady();
+  return state.keys;
+};
 
 /** persist=true keeps keys on this device; false forgets them when the tab closes. */
 export function saveUserKeys(keys: UserKeys, persist: boolean) {
   const value = clean(keys);
-  try {
-    localStorage.removeItem(STORE);
-    sessionStorage.removeItem(STORE);
-    if (Object.keys(value).length) (persist ? localStorage : sessionStorage).setItem(STORE, JSON.stringify(value));
-  } catch { /* storage blocked */ }
-  window.dispatchEvent(new Event(EVT));
+  generation++;
+  state = { keys: value, persist };
+  loading = Promise.resolve(); // what's in memory is now the truth
+  announce();
+  writing = writing.then(() => write(value, persist)).catch(() => { /* storage blocked */ });
 }
 
 export const clearUserKeys = () => saveUserKeys({}, true);
@@ -100,19 +162,28 @@ export function keyHeaders(keys: UserKeys = getUserKeys()): Record<string, strin
   return h;
 }
 
+/** Headers for an AI request, once the stored keys are decrypted. */
+export async function authHeaders(): Promise<Record<string, string>> {
+  await keysReady();
+  return keyHeaders();
+}
+
 export function useUserKeys() {
-  const [state, setState] = useState<{ keys: UserKeys; persist: boolean }>({ keys: {}, persist: true });
+  const [current, setCurrent] = useState<State>({ keys: {}, persist: true });
   useEffect(() => {
-    const update = () => setState(read());
+    const update = () => setCurrent(state);
+    // Another tab saved keys: decrypt its version.
+    const onStorage = (e: StorageEvent) => { if (e.key === STORE || e.key === null) void reload(); };
     update();
+    void keysReady();
     window.addEventListener(EVT, update);
-    window.addEventListener("storage", update);
+    window.addEventListener("storage", onStorage);
     return () => {
       window.removeEventListener(EVT, update);
-      window.removeEventListener("storage", update);
+      window.removeEventListener("storage", onStorage);
     };
   }, []);
-  return state;
+  return current;
 }
 
 export const maskKey = (k?: string) => (!k ? "" : k.length > 16 ? `${k.slice(0, 7)}…${k.slice(-4)}` : "••••••••");

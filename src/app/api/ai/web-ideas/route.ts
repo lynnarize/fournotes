@@ -3,12 +3,15 @@ import { aiError } from "@/lib/ai/http";
 import { activeSource, resolveKeys } from "@/lib/ai/keys";
 import { getProvider } from "@/lib/ai/provider";
 import { guardSharedKey } from "@/lib/ai/shared";
+import { blockBots } from "@/lib/botid";
 import { rateLimit } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
 
 // POST { title, content, question } -> { text, sources } : "Ideas from the web" for a note.
 export async function POST(req: Request) {
+  const bot = await blockBots();
+  if (bot) return bot;
   const limited = rateLimit(req, "web-ideas");
   if (limited) return limited;
   const keys = resolveKeys(req);

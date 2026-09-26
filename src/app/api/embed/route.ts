@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveKeys } from "@/lib/ai/keys";
+import { blockBots } from "@/lib/botid";
 import { rateLimit } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
@@ -9,6 +10,8 @@ export const runtime = "nodejs";
 // user's key from Settings or VOYAGE_API_KEY. Returns { embeddings: null } when
 // neither is set; the client then falls back to keyword search.
 export async function POST(req: Request) {
+  const bot = await blockBots();
+  if (bot) return bot;
   const { voyage } = resolveKeys(req);
   if (!voyage.apiKey) {
     return NextResponse.json({ embeddings: null, reason: "No Voyage API key" });

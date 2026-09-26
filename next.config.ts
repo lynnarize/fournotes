@@ -1,5 +1,6 @@
 import { execSync } from "node:child_process";
 import type { NextConfig } from "next";
+import { withBotId } from "botid/next/config";
 import pkg from "./package.json";
 
 // Settings → About shows the version and the commit a build came from, so any
@@ -17,4 +18,6 @@ const nextConfig: NextConfig = {
   env: { NEXT_PUBLIC_APP_VERSION: pkg.version, NEXT_PUBLIC_APP_COMMIT: commit },
 };
 
-export default nextConfig;
+// withBotId serves BotID's challenge script from this domain, so ad blockers
+// don't break it.
+export default withBotId(nextConfig);

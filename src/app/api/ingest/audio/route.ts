@@ -3,6 +3,7 @@ import { aiError } from "@/lib/ai/http";
 import { activeSource, resolveKeys, type ResolvedKeys } from "@/lib/ai/keys";
 import { getProvider } from "@/lib/ai/provider";
 import { guardSharedKey } from "@/lib/ai/shared";
+import { blockBots } from "@/lib/botid";
 import { rateLimit } from "@/lib/ratelimit";
 import type { ClientContext } from "@/lib/types";
 
@@ -12,6 +13,8 @@ export const runtime = "nodejs";
 // If a speech-to-text key is available (the user's or the server's) we transcribe
 // the audio on the server; otherwise we use the live transcript the browser produced.
 export async function POST(req: Request) {
+  const bot = await blockBots();
+  if (bot) return bot;
   const limited = rateLimit(req, "ingest");
   if (limited) return limited;
   const keys = resolveKeys(req);

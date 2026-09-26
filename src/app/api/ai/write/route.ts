@@ -4,12 +4,15 @@ import { activeSource, resolveKeys } from "@/lib/ai/keys";
 import { getProvider } from "@/lib/ai/provider";
 import { guardSharedKey } from "@/lib/ai/shared";
 import { isWritingTask, MAX_WRITING_INPUT } from "@/lib/ai/writing";
+import { blockBots } from "@/lib/botid";
 import { rateLimit } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
 
 // POST { task, text, title } -> { text } : the Notes editor's AI menu.
 export async function POST(req: Request) {
+  const bot = await blockBots();
+  if (bot) return bot;
   const limited = rateLimit(req, "write");
   if (limited) return limited;
   const keys = resolveKeys(req);

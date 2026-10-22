@@ -198,8 +198,9 @@ struct PillButton: View {
             }
             .font(FN.font(13, selected ? .medium : .regular))
             .foregroundStyle(selected || hovering ? p.foreground : p.textSecondary)
-            .padding(.leading, icon == nil ? 13 : 11)
-            .padding(.trailing, 13)
+            // The kit's `.pill-sm`: 12pt in from the sides.
+            .padding(.leading, 12)
+            .padding(.trailing, 12)
             .frame(height: 32)
             .background(selected ? p.accentSubtle : (hovering ? p.hover : .clear), in: Capsule())
             .overlay(Capsule().strokeBorder(selected ? p.accent : p.border, lineWidth: 1))

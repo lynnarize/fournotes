@@ -165,7 +165,7 @@ struct TodoView: View {
                     .monospacedDigit()
                     .foregroundStyle(p.textSecondary)
                 Spacer()
-                PrimaryButton(title: "New", icon: "plus") { create(.todo) }
+                PrimaryButton(title: "New task", icon: "plus") { create(.todo) }
             }
             if !live.isEmpty {
                 HStack(spacing: 8) {
@@ -181,12 +181,13 @@ struct TodoView: View {
         .padding(.bottom, 20)
     }
 
+
     /// The three columns share the width, never narrower than COLUMN_MIN;
     /// past that the row scrolls sideways. One layout for both cases: it used
     /// to switch between two (ViewThatFits), and a card could keep the narrow
     /// width it had while the task panel was open, its chips spilling out.
     private var board: some View {
-        let spacing: CGFloat = 12
+        let spacing: CGFloat = 16
         let fits = (boardWidth - spacing * 2) / 3
         let width = max(COLUMN_MIN, fits.isFinite ? fits : COLUMN_MIN)
         let overflows = fits < COLUMN_MIN
@@ -214,7 +215,7 @@ struct TodoView: View {
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Text(col.label)
-                    .font(FN.font(13.5, .medium))
+                    .font(FN.bodyMedium)
                     .foregroundStyle(p.foreground)
                     .lineLimit(1)
                     .fixedSize()
@@ -224,26 +225,26 @@ struct TodoView: View {
                     .fixedSize()
                     .contentTransition(.numericText())
                 Spacer()
-                IconButton("plus", size: 16, box: 30, help: "Add to \(col.label)") { create(col) }
+                IconButton("plus", size: 16, box: 32, help: "Add to \(col.label)") { create(col) }
             }
             .padding(.leading, 12)
-            .padding(.trailing, 2)
+            .padding(.trailing, 4)
             .frame(height: 40)
 
             if shown.isEmpty {
-                VStack(spacing: 4) {
+                VStack(spacing: 6) {
                     Text(filter == .all ? col.empty : "Nothing here")
-                        .font(FN.font(13.5, .medium))
+                        .font(FN.bodyMedium)
                         .foregroundStyle(p.foreground)
                     Text(filter == .all ? col.hint : "No tasks in this column match the filter.")
-                        .font(FN.font(12.5))
+                        .font(FN.font(13))
                         .foregroundStyle(p.textMuted)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 24)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 28)
                 .overlay(RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous)
                     .strokeBorder(p.borderStrong, style: StrokeStyle(lineWidth: 1.5, dash: [5, 4])))
                 .transition(.opacity)
@@ -268,10 +269,13 @@ struct TodoView: View {
                 }
             }
 
-            Button { create(col) } label: {
-                NewTaskRow()
+            // Done has none, as on the web: tasks get there by being done.
+            if col != .done {
+                Button { create(col) } label: {
+                    NewTaskRow()
+                }
+                .buttonStyle(.fn)
             }
-            .buttonStyle(.fn)
         }
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .top)
@@ -393,17 +397,33 @@ private struct TodoCard: View {
         !todo.done && (DateKit.date(todo.dueAt).map { $0 < Date() } ?? false)
     }
 
-    /// Status, said in words: overdue, or due within a day.
-    private var status: (text: String, tone: Color, subtle: Color)? {
-        guard !todo.done, let due = DateKit.date(todo.dueAt) else { return nil }
-        if due < Date() { return ("Overdue", p.danger, p.dangerSubtle) }
-        if due < Date().addingTimeInterval(86_400) { return ("Due soon", p.warning, p.warningSubtle) }
-        return nil
+    /// Overdue, or due within three days: the only times a task takes a status colour.
+    private var status: (text: String, danger: Bool)? {
+        guard !todo.done, let iso = todo.dueAt, let due = DateKit.date(iso) else { return nil }
+        if due < Date() { return ("Overdue", true) }
+        let n = CardDates.dayDiff(due)
+        if n > 3 { return nil }
+        return (n == 0 ? "Due today, \(CardDates.clock(due))" : n == 1 ? "Due tomorrow, \(CardDates.clock(due))" : "Due in \(n) days", false)
     }
 
-    private var hasMeta: Bool {
-        note != nil || todo.rrule != nil || todo.dueAt != nil
-            || (todo.remindAt != nil && !todo.done) || (todo.priority == .high && !todo.done)
+    /// What the card says besides its title, in the order it's read, as on the web.
+    private var meta: [(key: String, icon: String, text: String)] {
+        var out: [(key: String, icon: String, text: String)] = []
+        if todo.done {
+            if let done = DateKit.date(todo.completedAt) { out.append(("done", "check", CardDates.doneWhen(done))) }
+        } else {
+            if let due = DateKit.date(todo.dueAt), status == nil || status?.danger == true {
+                out.append(("due", "calendar", CardDates.when(due)))
+            }
+            if let rule = todo.rrule, let short = CardDates.repeatShort(rule) { out.append(("repeat", "repeat", short)) }
+            if let remind = DateKit.date(todo.remindAt) {
+                let sameDay = DateKit.date(todo.dueAt).map { CardDates.dayDiff($0) == CardDates.dayDiff(remind) } ?? false
+                out.append(("remind", "bell", sameDay ? CardDates.clock(remind) : CardDates.when(remind)))
+            }
+            if todo.priority != .medium { out.append(("priority", "flag", todo.priority == .high ? "High" : "Low")) }
+        }
+        if let note { out.append(("note", "link", note.title.isEmpty ? "Note" : note.title)) }
+        return out
     }
 
     var body: some View {
@@ -413,9 +433,9 @@ private struct TodoCard: View {
                     Circle()
                         .strokeBorder(todo.done ? p.accent : (hovering ? p.textMuted : p.borderStrong), lineWidth: 1.5)
                         .background(Circle().fill(todo.done ? p.accent : .clear))
-                        .frame(width: 18, height: 18)
+                        .frame(width: 20, height: 20)
                     if todo.done {
-                        Icon("check", size: 11, weight: 2.4).foregroundStyle(p.accentForeground)
+                        Icon("check", size: 12, weight: 2.5).foregroundStyle(p.accentForeground)
                             .transition(.scale(scale: 0.4).combined(with: .opacity))
                     }
                 }
@@ -427,10 +447,11 @@ private struct TodoCard: View {
             .accessibilityLabel(todo.done ? "Mark as not done" : "Mark as done")
 
             Button(action: onOpen) {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: todo.done ? 6 : 10) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(todo.title.isEmpty ? "New task" : todo.title)
-                            .font(FN.font(13.5))
+                            .font(FN.body)
+                            .lineSpacing(3)
                             .foregroundStyle(todo.done || todo.title.isEmpty ? p.textMuted : p.foreground)
                             .strikethrough(todo.done)
                             .multilineTextAlignment(.leading)
@@ -438,41 +459,34 @@ private struct TodoCard: View {
                             .fixedSize(horizontal: false, vertical: true)
                         if let bill = todo.bill {
                             Text(Money.format(bill.amount, bill.currency ?? store.settings.currency))
-                                .font(FN.font(12.5))
+                                .font(FN.font(13))
                                 .monospacedDigit()
                                 .foregroundStyle(p.textSecondary)
                         }
                     }
 
-                    if hasMeta || status != nil {
+                    let meta = meta
+                    if !meta.isEmpty || status != nil {
                         FlowLayout(spacing: 6, alignment: .leading) {
                             if let status {
-                                HStack(spacing: 5) {
-                                    Circle().fill(status.tone).frame(width: 6, height: 6)
-                                    Text(status.text)
+                                // The kit's `.badge .badge-dot`, in the status's tone.
+                                StatusPill(text: status.text, tone: status.danger ? .bad : .warn)
+                            }
+                            ForEach(meta, id: \.key) { m in
+                                if m.key == "done" {
+                                    Text(m.text).font(FN.small).foregroundStyle(p.textMuted)
+                                } else {
+                                    chip(m.icon, m.text)
+                                        .frame(maxWidth: m.key == "note" ? 160 + 28 : nil, alignment: .leading)
                                 }
-                                .font(FN.font(11.5, .medium))
-                                .foregroundStyle(status.tone)
-                                .padding(.horizontal, 8)
-                                .frame(height: 20)
-                                .background(status.subtle, in: Capsule())
                             }
-                            if let due = todo.dueAt { meta("calendar", Fmt.due(due)) }
-                            if let remind = todo.remindAt, !todo.done {
-                                meta("bell", todo.dueAt == nil ? Fmt.due(remind) : nil)
-                            }
-                            if let rrule = todo.rrule {
-                                meta("repeat", Recurrence.label(rrule).replacingOccurrences(of: "Every ", with: ""))
-                            }
-                            if let note { meta("link", note.title.isEmpty ? "Note" : note.title).frame(maxWidth: 176, alignment: .leading) }
-                            if todo.priority == .high && !todo.done { meta(nil, "High priority") }
                         }
                         .transition(.opacity.combined(with: .offset(y: -4)))
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
-                .animation(Motion.standard, value: hasMeta)
+                .animation(Motion.standard, value: meta.map(\.key))
             }
             .buttonStyle(.fn)
         }
@@ -490,35 +504,83 @@ private struct TodoCard: View {
         .onHover { hovering = $0 }
     }
 
-    /// One piece of the line under the title: an icon and a few words.
-    private func meta(_ icon: String?, _ text: String?) -> some View {
-        HStack(spacing: 4) {
-            if let icon { Icon(icon, size: 12) }
-            if let text { Text(text).lineLimit(1) }
+    /// A small grey label on a card: date, repeat, reminder, linked note.
+    private func chip(_ icon: String, _ text: String) -> some View {
+        HStack(spacing: 6) {
+            Icon(icon, size: 12)
+            Text(text).lineLimit(1).monospacedDigit()
         }
-        .font(FN.font(12.5))
-        .foregroundStyle(p.textMuted)
-        .frame(height: 20)
+        .font(FN.small)
+        .foregroundStyle(p.textSecondary)
+        .padding(.horizontal, 8)
+        .frame(height: 24)
+        .background(p.surfaceMuted, in: Capsule())
     }
 }
 
-/// "+ New task" at the foot of a column: plain until hovered.
+/// "+ Add a task" at the foot of a column: plain until hovered.
 private struct NewTaskRow: View {
     @Environment(\.palette) private var p
     @State private var hovering = false
 
     var body: some View {
         HStack(spacing: 8) {
-            Icon("plus", size: 15)
-            Text("New task").font(FN.font(13.5)).lineLimit(1)
+            Icon("plus", size: 16)
+            Text("Add a task").font(FN.body).lineLimit(1)
             Spacer(minLength: 0)
         }
         .foregroundStyle(hovering ? p.foreground : p.textMuted)
         .padding(.horizontal, 12)
-        .frame(height: 38)
+        .frame(height: 40)
         .background(hovering ? p.hover : .clear, in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .motion(hovering, Motion.quick)
+    }
+}
+
+/// How a card says when, as on the web: "Today, 6:00 PM", "Yesterday, 6:00 PM",
+/// "Sat, Oct 24, 9:00 AM"; "Done today", "Done Oct 20"; "Monthly", "Every 2 weeks".
+private enum CardDates {
+    static func dayDiff(_ date: Date, now: Date = Date()) -> Int {
+        let cal = Calendar.current
+        return cal.dateComponents([.day], from: cal.startOfDay(for: now), to: cal.startOfDay(for: date)).day ?? 0
+    }
+
+    static func clock(_ date: Date) -> String { Fmt.time(date) }
+
+    static func when(_ date: Date, now: Date = Date()) -> String {
+        let n = dayDiff(date, now: now)
+        let day: String
+        switch n {
+        case 0: day = "Today"
+        case 1: day = "Tomorrow"
+        case -1: day = "Yesterday"
+        default:
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "en_US")
+            let sameYear = Calendar.current.isDate(date, equalTo: now, toGranularity: .year)
+            f.dateFormat = sameYear ? "EEE, MMM d" : "EEE, MMM d, yyyy"
+            day = f.string(from: date)
+        }
+        return "\(day), \(clock(date))"
+    }
+
+    static func doneWhen(_ date: Date, now: Date = Date()) -> String {
+        switch dayDiff(date, now: now) {
+        case 0: return "Done today"
+        case -1: return "Done yesterday"
+        default:
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "en_US")
+            f.dateFormat = "MMM d"
+            return "Done \(f.string(from: date))"
+        }
+    }
+
+    static func repeatShort(_ rrule: String) -> String? {
+        guard let rule = Recurrence.parse(rrule) else { return nil }
+        guard rule.interval == 1 else { return Recurrence.label(rrule) }
+        return ["day": "Daily", "week": "Weekly", "month": "Monthly", "year": "Yearly"][rule.freq.unit] ?? Recurrence.label(rrule)
     }
 }

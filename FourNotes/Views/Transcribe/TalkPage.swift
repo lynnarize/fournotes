@@ -3,9 +3,10 @@ import AVFoundation
 import SwiftUI
 import UniformTypeIdentifiers
 
-// One talk: the recording, who was in it (named by you or the conversation, each with a
-// short profile), the write-up, and the transcript, where a time plays from that moment.
-// As on the web (src/components/talks/TalkPage.tsx).
+// One talk: the recording, then three tabs. Notes: what you wrote, and Enhance's notes
+// written out from it. Summary: who was in it (named by you or the conversation, each
+// with a short profile) and the write-up. Transcript: who said what, where a time plays
+// from that moment. As on the web (src/components/talks/TalkPage.tsx), with the notes.
 
 struct TalkPage: View {
     @Environment(\.palette) private var p
@@ -21,6 +22,16 @@ struct TalkPage: View {
     @State private var renaming: String?
     @State private var newName = ""
     @State private var summarizing = false
+    @State private var tab: Tab?
+    /// The Notes tab shows your own notes rather than Enhance's.
+    @State private var showsYours = false
+    /// A moment to bring into view when the transcript next shows.
+    @State private var jump: Double?
+
+    private enum Tab: String, CaseIterable { case notes = "Notes", summary = "Summary", transcript = "Transcript" }
+
+    /// Notes first when there are any (or there will be); else the summary.
+    private var shownTab: Tab { tab ?? (talk.wantsNotes || talk.enhanced != nil ? .notes : .summary) }
 
     private var note: Note? { talk.noteId.flatMap { id in store.liveNotes.first { $0.id == id } } }
     private var working: String? { recorder.working[talk.id] }
@@ -29,47 +40,12 @@ struct TalkPage: View {
         VStack(spacing: 0) {
             header
             Rectangle().fill(p.borderSubtle).frame(height: 1)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 28) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        CommittedField(placeholder: "Untitled talk", value: talk.title, font: FN.display(36), axis: .vertical) { title in
-                            TalkStore.shared.update(talk.id) { $0.title = title.isEmpty ? TalkText.defaultTitle() : title }
-                        }
-                        .tracking(FN.displayTracking(36))
-                        Text(TalkText.meta(talk)).font(FN.small).monospacedDigit().foregroundStyle(p.textMuted)
-                    }
-
-                    if let working {
-                        HStack(spacing: 8) {
-                            ProgressView().controlSize(.small)
-                            Text(working).font(FN.body).foregroundStyle(p.textSecondary)
-                        }
-                        .accessibilityElement(children: .combine)
-                    }
-                    if let problem = talk.problem, working == nil { problemBox(problem) }
-
-                    if player.ready { playerBar }
-
-                    let people = TalkText.speakers(talk)
-                    if !people.isEmpty { peopleSection(people) }
-
-                    if let summary = talk.summary {
-                        summaryCard(summary)
-                    } else if working == nil, talk.status == .done, !talk.segments.isEmpty {
-                        SecondaryButton(title: summarizing ? "Writing…" : "Write a summary", icon: "sparkle") { writeUp() }
-                            .fixedSize()
-                            .disabled(summarizing)
-                    }
-
-                    transcript
-                }
-                .frame(maxWidth: 680, alignment: .leading)
-                .padding(.horizontal, 40)
-                .padding(.top, 36)
-                .padding(.bottom, 90)
-                .frame(maxWidth: .infinity)
+            top
+            switch shownTab {
+            case .notes: notesTab
+            case .summary: scrolling { summaryTab }
+            case .transcript: transcriptTab
             }
-            .scrollIndicators(.never)
         }
         .background(p.bg)
         .onAppear { player.load(talk.hasAudio ? TalkStore.shared.audio(talk.id) : nil) }
@@ -78,6 +54,135 @@ struct TalkPage: View {
             if now == nil || player.ready == false { player.load(talk.hasAudio ? TalkStore.shared.audio(talk.id) : nil) }
         }
         .onDisappear { player.stop() }
+    }
+
+    /// The title, what's happening, the player and the tabs: above every tab.
+    private var top: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                CommittedField(placeholder: "Untitled talk", value: talk.title, font: FN.display(32), axis: .vertical) { title in
+                    TalkStore.shared.update(talk.id) { $0.title = title.isEmpty ? TalkText.defaultTitle() : title }
+                }
+                .tracking(FN.displayTracking(32))
+                Text(TalkText.meta(talk)).font(FN.small).monospacedDigit().foregroundStyle(p.textMuted)
+            }
+
+            if let working {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text(working).font(FN.body).foregroundStyle(p.textSecondary)
+                }
+                .accessibilityElement(children: .combine)
+            }
+            if let problem = talk.problem, working == nil { problemBox(problem) }
+
+            if player.ready { playerBar }
+
+            HStack(spacing: 8) {
+                ForEach(Tab.allCases, id: \.self) { t in
+                    PillButton(title: t.rawValue, selected: shownTab == t) { tab = t }
+                }
+                Spacer()
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Tabs")
+        }
+        .frame(maxWidth: 680, alignment: .leading)
+        .padding(.horizontal, 40)
+        .padding(.top, 26)
+        .padding(.bottom, 14)
+        .frame(maxWidth: .infinity)
+    }
+
+    /// A tab's content in the page's column, scrolling under the top.
+    private func scrolling<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        ScrollView {
+            content()
+                .frame(maxWidth: 680, alignment: .leading)
+                .padding(.horizontal, 40)
+                .padding(.top, 14)
+                .padding(.bottom, 90)
+                .frame(maxWidth: .infinity)
+        }
+        .scrollIndicators(.never)
+    }
+
+    // MARK: - Notes
+
+    private var notesTab: some View {
+        VStack(spacing: 0) {
+            notesBar
+                .frame(maxWidth: 680, alignment: .leading)
+                .padding(.horizontal, 40)
+                .padding(.top, 4)
+                .frame(maxWidth: .infinity)
+            if let enhanced = talk.enhanced, !enhanced.sections.isEmpty, !showsYours {
+                scrolling {
+                    EnhancedNotesView(talk: talk, notes: enhanced,
+                                      onPlay: player.ready ? { player.play(from: $0) } : nil,
+                                      onShowInTranscript: { jump = $0; tab = .transcript })
+                }
+            } else {
+                TalkNotesEditor(talkId: talk.id,
+                                placeholder: talk.segments.isEmpty
+                                    ? "Nothing written during it. Notes you add here stay with the talk."
+                                    : "Nothing written during it. Add notes here, or use Enhance to write notes from the conversation.",
+                                header: Color.clear.frame(height: 12))
+            }
+        }
+    }
+
+    /// Enhanced or yours; the kind of meeting; Enhance. A line when the notes are out of date.
+    private var notesBar: some View {
+        let enhanced = talk.enhanced.flatMap { $0.sections.isEmpty ? nil : $0 }
+        let stale = enhanced.flatMap { e -> String? in
+            if e.basedOn.trimmingCharacters(in: .whitespacesAndNewlines) != (talk.notes ?? "").trimmingCharacters(in: .whitespacesAndNewlines) {
+                return "Your notes have changed since these were written. Enhance again to include them."
+            }
+            if let picked = talk.template, picked != e.template {
+                return "Enhance again to write them as \(TalkTemplate.of(picked).label) notes."
+            }
+            return nil
+        }
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                if enhanced != nil {
+                    PillButton(icon: "sparkle", title: "Enhanced", selected: !showsYours) { showsYours = false }
+                    PillButton(title: "Your notes", selected: showsYours) { showsYours = true }
+                } else {
+                    Text("Your notes").font(FN.bodyMedium).foregroundStyle(p.foreground)
+                }
+                Spacer(minLength: 8)
+                TalkTemplateMenu(talkId: talk.id, template: talk.template ?? enhanced?.template)
+                KitButton(kind: enhanced == nil ? .primary : .secondary, title: enhanced == nil ? "Enhance" : "Enhance again",
+                          icon: "sparkle", small: true, disabled: talk.segments.isEmpty || working != nil) { enhance() }
+                    .help(talk.segments.isEmpty ? "Enhance needs a transcript" : "Write your notes out in full from the conversation")
+            }
+            if let stale, !showsYours {
+                Text(stale).font(FN.small).foregroundStyle(p.textMuted)
+            }
+        }
+        .padding(.bottom, 6)
+    }
+
+    // MARK: - Summary tab
+
+    @ViewBuilder
+    private var summaryTab: some View {
+        VStack(alignment: .leading, spacing: 28) {
+            let people = TalkText.speakers(talk)
+            if !people.isEmpty { peopleSection(people) }
+
+            if let summary = talk.summary {
+                summaryCard(summary)
+            } else if working == nil, talk.status == .done, !talk.segments.isEmpty {
+                SecondaryButton(title: summarizing ? "Writing…" : "Write a summary", icon: "sparkle") { writeUp() }
+                    .fixedSize()
+                    .disabled(summarizing)
+            } else if talk.segments.isEmpty {
+                Text("Nothing to sum up yet.").font(FN.body).foregroundStyle(p.textMuted)
+            }
+        }
     }
 
     // MARK: - Header
@@ -96,8 +201,12 @@ struct TalkPage: View {
             IconMenu("more", size: 20, help: "More actions", align: .trailing) {
                 var entries: [MenuEntry] = []
                 if note != nil { entries.append(.item("Update the note") { saveToNotes() }) }
+                if talk.enhanced != nil || talk.wantsNotes {
+                    entries.append(.item("Copy notes") { copyNotes() })
+                }
                 entries += [
                     .item("Copy transcript") { copyTranscript() },
+                    .item("Export notes…") { exportNotes() },
                     .item("Export transcript…") { exportTranscript() },
                     .item(talk.summary == nil ? "Write a summary" : "Write the summary again", enabled: !talk.segments.isEmpty && working == nil) { writeUp() },
                 ]
@@ -274,7 +383,7 @@ struct TalkPage: View {
 
     // MARK: - Transcript
 
-    private var transcript: some View {
+    private var transcriptTab: some View {
         let lines = TalkText.turns(talk)
         let by: String
         switch talk.engine {
@@ -282,15 +391,35 @@ struct TalkPage: View {
         case .apple: by = " · Transcribed on this Mac by Apple's speech model"
         case nil: by = ""
         }
-        return VStack(alignment: .leading, spacing: 12) {
-            SectionTitle("Transcript" + (talk.status == .done ? by : ""))
-            if lines.isEmpty {
-                Text(talk.status == .done ? "Nothing was transcribed." : "Nothing yet.")
-                    .font(FN.body).foregroundStyle(p.textMuted)
+        // The turn a jump lands on: the one it's in, or the last to start before it.
+        let landing = jump.flatMap { at in lines.lastIndex { $0.start <= at + 1 } ?? 0 }
+        return ScrollViewReader { scroller in
+            scrolling {
+                VStack(alignment: .leading, spacing: 12) {
+                    SectionTitle("Transcript" + (talk.status == .done ? by : ""))
+                    if lines.isEmpty {
+                        Text(talk.status == .done ? "Nothing was transcribed." : "Nothing yet.")
+                            .font(FN.body).foregroundStyle(p.textMuted)
+                    }
+                    ForEach(Array(lines.enumerated()), id: \.offset) { i, line in
+                        TranscriptLine(time: line.start, name: line.name, text: line.text,
+                                       onPlay: player.ready ? { player.play(from: line.start) } : nil)
+                            .padding(.vertical, 4)
+                            .padding(.horizontal, 8)
+                            .background(i == landing ? p.accentSubtle : .clear,
+                                        in: RoundedRectangle(cornerRadius: FN.radius, style: .continuous))
+                            .padding(.horizontal, -8)
+                            .id(i)
+                    }
+                }
             }
-            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                TranscriptLine(time: line.start, name: line.name, text: line.text,
-                               onPlay: player.ready ? { player.play(from: line.start) } : nil)
+            .onAppear {
+                guard let landing else { return }
+                Task { @MainActor in scroller.scrollTo(landing, anchor: .center) }
+            }
+            .onChange(of: jump) { _, _ in
+                guard let landing else { return }
+                withAnimation(Motion.standard) { scroller.scrollTo(landing, anchor: .center) }
             }
         }
     }
@@ -349,6 +478,43 @@ struct TalkPage: View {
         }
     }
 
+    private func enhance() {
+        showsYours = false
+        Task {
+            do { try await recorder.enhance(talk.id) } catch {
+                toasts.push(AIEngine.reason(error), tone: .error)
+            }
+        }
+    }
+
+    /// Enhance's notes as Markdown, else yours as written.
+    private var notesMarkdown: String {
+        if let e = talk.enhanced, !e.sections.isEmpty { return e.markdown }
+        return talk.notes ?? ""
+    }
+
+    private func copyNotes() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(notesMarkdown, forType: .string)
+        toasts.push("Notes copied")
+    }
+
+    /// Everything as one Markdown file: the notes, the summary, the transcript.
+    private func exportNotes() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
+        panel.nameFieldStringValue = fileName + ".md"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do { try ("# \(talk.title)\n\n" + TalkText.note(talk) + "\n").write(to: url, atomically: true, encoding: .utf8) } catch {
+            toasts.push("Couldn't save it: \(error.localizedDescription)", tone: .error)
+        }
+    }
+
+    private var fileName: String {
+        let safe = talk.title.replacingOccurrences(of: #"[^\w\- ]+"#, with: "", options: .regularExpression).trimmingCharacters(in: .whitespaces)
+        return safe.isEmpty ? "Talk" : safe
+    }
+
     private func copyTranscript() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(TalkText.transcript(talk), forType: .string)
@@ -358,8 +524,7 @@ struct TalkPage: View {
     private func exportTranscript() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.plainText]
-        let safe = talk.title.replacingOccurrences(of: #"[^\w\- ]+"#, with: "", options: .regularExpression).trimmingCharacters(in: .whitespaces)
-        panel.nameFieldStringValue = (safe.isEmpty ? "Talk" : safe) + ".txt"
+        panel.nameFieldStringValue = fileName + ".txt"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         let text = "\(talk.title)\n\(TalkText.meta(talk))\n\n\(TalkText.transcript(talk))\n"
         do { try text.write(to: url, atomically: true, encoding: .utf8) } catch {

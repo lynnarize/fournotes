@@ -191,9 +191,9 @@ struct AnthropicClient {
                        prompt: Prompts.writing(task, text: body, title: title))
     }
 
-    func talkWriteUp(_ input: TalkWriteUp.Input) async throws -> String {
-        try await text(model: model, maxTokens: 2000, system: TalkWriteUp.system,
-                       prompt: TalkWriteUp.prompt(input) + "\n\n" + TalkWriteUp.jsonShape)
+    /// A job on a recorded talk: its write-up, its notes, or notes on a piece of a long one.
+    func talk(_ prompt: String, system: String) async throws -> String {
+        try await text(model: model, maxTokens: 4000, system: system, prompt: prompt)
     }
 
     private func text(model: String, maxTokens: Int, system: String? = nil,

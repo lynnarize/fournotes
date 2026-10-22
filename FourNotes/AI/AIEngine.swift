@@ -118,6 +118,8 @@ final class AIEngine: ObservableObject {
         /// A cloud or local-server model: slower than on-device, but a slow
         /// free model must still never lock chat, scan and record for minutes.
         static let remote: Double = 150
+        /// A long talk read in pieces: several answers in a row, a few minutes on this Mac.
+        static let long: Double = 600
     }
 
     init() {
@@ -475,8 +477,9 @@ final class AIEngine: ObservableObject {
 
     // MARK: - Short text jobs
 
-    /// Asks each model in turn; the first answer wins.
-    func firstAnswer(_ job: String,
+    /// Asks each model in turn; the first answer wins. A `long` job (a long talk, read in
+    /// pieces) gets more time.
+    func firstAnswer(_ job: String, long: Bool = false,
                              anthropic: @escaping @MainActor (AnthropicClient) async throws -> String,
                              provider: @escaping @MainActor (OpenAICompatibleClient) async throws -> String,
                              apple: @escaping @Sendable () async throws -> String) async throws -> String {
@@ -485,10 +488,10 @@ final class AIEngine: ObservableObject {
             do {
                 switch answerer {
                 case .anthropic(let client):
-                    return try await withMainActorDeadline(seconds: Deadline.remote) { try await anthropic(client) }
+                    return try await withMainActorDeadline(seconds: long ? Deadline.long : Deadline.remote) { try await anthropic(client) }
                 case .provider(let client):
-                    return try await withMainActorDeadline(seconds: Deadline.remote) { try await provider(client) }
-                case .apple: return try await withDeadline(seconds: Deadline.summary, apple)
+                    return try await withMainActorDeadline(seconds: long ? Deadline.long : Deadline.remote) { try await provider(client) }
+                case .apple: return try await withDeadline(seconds: long ? Deadline.long : Deadline.summary, apple)
                 }
             } catch { failure = error }
         }

@@ -273,8 +273,9 @@ struct OpenAICompatibleClient {
         return out
     }
 
-    func talkWriteUp(_ input: TalkWriteUp.Input) async throws -> String {
-        try await text(TalkWriteUp.system + "\n\n" + TalkWriteUp.prompt(input) + "\n\n" + TalkWriteUp.jsonShape, model: model)
+    /// A job on a recorded talk: its write-up, its notes, or notes on a piece of a long one.
+    func talk(_ prompt: String, system: String) async throws -> String {
+        try await text(system + "\n\n" + prompt, model: model)
     }
 
     /// Plain text. Thinking models get room to think, but only the <answer> is kept.

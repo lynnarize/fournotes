@@ -273,6 +273,10 @@ final class TalkRecorder: ObservableObject {
         if writesUp, store.talk(id)?.segments.isEmpty == false {
             working[id] = "Writing it up…"
             try? await writeUp(id)
+            if store.talk(id)?.wantsNotes == true {
+                working[id] = "Writing your notes…"
+                try? await enhance(id)
+            }
         }
     }
 
@@ -284,6 +288,10 @@ final class TalkRecorder: ObservableObject {
         if writesUp {
             working[id] = "Writing it up…"
             try? await writeUp(id)
+            if let talk = store.talk(id), talk.wantsNotes || talk.enhanced != nil {
+                working[id] = "Writing your notes…"
+                try? await enhance(id)
+            }
         }
         working[id] = nil
     }
@@ -294,8 +302,7 @@ final class TalkRecorder: ObservableObject {
         let alreadyWorking = working[id] != nil
         if !alreadyWorking { working[id] = "Writing it up…" }
         defer { if !alreadyWorking { working[id] = nil } }
-        var ids: [String] = []
-        for s in talk.segments where !ids.contains(s.speaker) { ids.append(s.speaker) }
+        let ids = Self.speakerIds(talk)
         let input = TalkWriteUp.Input(
             title: talk.title, when: TalkText.meta(talk), app: talk.app,
             speakers: ids.map { ($0, TalkText.name(talk, $0)) }, transcript: TalkText.transcript(talk))
@@ -309,6 +316,31 @@ final class TalkRecorder: ObservableObject {
             }
             if TalkText.isDefaultTitle(t.title), !w.title.isEmpty { t.title = String(w.title.prefix(120)) }
         }
+    }
+
+    /// Your notes written out in full from the transcript, in the sections of the talk's
+    /// template (Enhance). With no notes, notes from the conversation alone.
+    func enhance(_ id: String) async throws {
+        guard let talk = store.talk(id), !talk.segments.isEmpty else { return }
+        let alreadyWorking = working[id] != nil
+        if !alreadyWorking { working[id] = "Writing your notes…" }
+        defer { if !alreadyWorking { working[id] = nil } }
+        let template = TalkTemplate.of(talk.template)
+        let input = TalkEnhance.Input(
+            title: talk.title, when: TalkText.meta(talk), app: talk.app,
+            speakers: Self.speakerIds(talk).map { ($0, TalkText.name(talk, $0)) },
+            template: template, notes: TalkText.noteLines(talk), transcript: TalkText.transcript(talk))
+        let sections = try await AppModel.shared.engine.talkEnhance(input)
+        let notes = TalkNotes(sections: TalkNotes.reconciled(sections, yours: input.notes, duration: talk.duration),
+                              template: template.rawValue, basedOn: talk.notes ?? "", createdAt: DateKit.nowIso())
+        store.update(id) { $0.enhanced = notes }
+    }
+
+    /// The speakers' ids in the order they first speak.
+    private static func speakerIds(_ talk: Talk) -> [String] {
+        var ids: [String] = []
+        for s in talk.segments where !ids.contains(s.speaker) { ids.append(s.speaker) }
+        return ids
     }
 
     /// A file of a conversation (a voice memo, a meeting's recording, a video) as a talk.

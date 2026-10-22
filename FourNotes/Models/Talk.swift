@@ -80,6 +80,13 @@ struct Talk: Codable, Equatable, Identifiable {
     var notes: String?
     /// The calendar event it was recorded for, as it was then.
     var event: TalkEvent?
+    /// When each line of `notes` was written, in seconds into the talk, by the line's words
+    /// (`NoteTimes.key`). Lines written after the talk have none.
+    var noteTimes: [String: Double]?
+    /// The kind of meeting the notes are written for (a `TalkTemplate`); nil until one is picked.
+    var template: String?
+    /// Your notes written out in full from the transcript (Enhance).
+    var enhanced: TalkNotes?
 
     init(id: String = UUID().uuidString.lowercased(), createdAt: Date = Date(), title: String, mode: Mode,
          app: String? = nil, lang: String, spaceId: String? = nil) {
@@ -99,6 +106,12 @@ struct Talk: Codable, Equatable, Identifiable {
     }
 
     var isAlive: Bool { deletedAt == nil }
+
+    /// Enhance writes the notes once it's transcribed: when you wrote some, or picked the
+    /// kind of meeting it was.
+    var wantsNotes: Bool {
+        !(notes ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || template != nil
+    }
 }
 
 // MARK: - Who's who
@@ -173,9 +186,28 @@ enum TalkText {
         return h > 0 ? String(format: "%d:%02d:%02d", h, m, sec) : String(format: "%d:%02d", m, sec)
     }
 
+    /// "1:15" → 75, "[1:02:05]" → 3725; nil for anything else. How a model gives a time back.
+    static func seconds(_ clock: String) -> Double? {
+        let parts = clock.trimmingCharacters(in: CharacterSet(charactersIn: "[] ")).split(separator: ":")
+        let values = parts.compactMap { Int($0) }
+        guard (2...3).contains(parts.count), values.count == parts.count,
+              values.dropFirst().allSatisfy({ (0..<60).contains($0) }) else { return nil }
+        return Double(values.reduce(0) { $0 * 60 + $1 })
+    }
+
     /// "[1:15] Andi: …" lines: for the assistant, a note, a copy.
     static func transcript(_ talk: Talk) -> String {
         turns(talk).map { "[\(clock($0.start))] \($0.name): \($0.text)" }.joined(separator: "\n")
+    }
+
+    /// Your notes, a line each, with when it was written while the talk ran.
+    static func noteLines(_ talk: Talk) -> [(text: String, at: Double?)] {
+        let times = talk.noteTimes ?? [:]
+        return (talk.notes ?? "").components(separatedBy: .newlines).compactMap { line in
+            let text = line.trimmingCharacters(in: .whitespaces)
+            guard !NoteTimes.key(text).isEmpty else { return nil }
+            return (text, times[NoteTimes.key(text)])
+        }
     }
 
     static func defaultTitle(_ date: Date = Date()) -> String {
@@ -223,8 +255,8 @@ enum TalkText {
     static func matches(_ talk: Talk, _ query: String) -> Bool {
         let q = query.trimmingCharacters(in: .whitespaces).lowercased()
         guard !q.isEmpty else { return true }
-        let hay = ([talk.title, talk.app ?? "", talk.summary?.text ?? ""] + Array(talk.names.values)
-                   + talk.segments.map(\.text)).joined(separator: " ").lowercased()
+        let hay = ([talk.title, talk.app ?? "", talk.summary?.text ?? "", talk.notes ?? "", talk.enhanced?.markdown ?? ""]
+                   + Array(talk.names.values) + talk.segments.map(\.text)).joined(separator: " ").lowercased()
         return q.split(whereSeparator: \.isWhitespace).allSatisfy { hay.contains($0) }
     }
 
@@ -246,6 +278,13 @@ enum TalkText {
             let about = ([t.title, t.app ?? ""] + Array(t.names.values)).joined(separator: " ")
             if let s = t.summary {
                 let text = "Summary: \(s.text)\nKey points: \(s.keyPoints.joined(separator: "; "))\nAction items: \(s.actionItems.joined(separator: "; "))"
+                all.append((t, text, 0, Set(words(about + " " + text))))
+            }
+            if let notes = t.enhanced, !notes.sections.isEmpty {
+                let text = "Meeting notes:\n" + notes.markdown
+                all.append((t, text, 0, Set(words(about + " " + text))))
+            } else if let notes = t.notes, !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let text = "Notes written during it:\n" + notes
                 all.append((t, text, 0, Set(words(about + " " + text))))
             }
             let ts = turns(t)
@@ -273,11 +312,17 @@ enum TalkText {
 
     // MARK: Notes
 
-    /// The note "Save to Notes" writes: the summary, each person's profile, then the transcript.
+    /// The note "Save to Notes" writes: the notes (Enhance's, else yours), the summary,
+    /// each person's profile, then the transcript.
     static func note(_ talk: Talk) -> String {
         let when = DateKit.date(talk.createdAt).map { noteStamp.string(from: $0) } ?? ""
         let kind = talk.mode == .call ? "Call" : talk.mode == .upload ? "Recording" : "Talk"
         var parts = ["\(kind), \(when), \(clock(talk.duration))\(talk.app.map { ", \($0)" } ?? "")"]
+        if let enhanced = talk.enhanced, !enhanced.sections.isEmpty {
+            parts.append(enhanced.markdown)
+        } else if let notes = talk.notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
+            parts.append("## Your notes\n\(notes)")
+        }
         if let s = talk.summary {
             if !s.text.isEmpty { parts.append("## Summary\n\(s.text)") }
             if !s.keyPoints.isEmpty { parts.append("## Key points\n" + s.keyPoints.map { "- \($0)" }.joined(separator: "\n")) }

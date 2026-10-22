@@ -33,6 +33,28 @@ default, and useful with no account, no key and no network.
   action items for To-Do and a short profile of each person, plays back from any
   line, saves to Notes, and the assistant answers questions about it. Talks stay
   on this Mac. ⌥⌘R starts one.
+- **Meeting notes** — while a talk records, write a few words beside the live
+  transcript. When it ends, **Enhance** writes them out in full from the
+  conversation: your lines stay as you typed them, what it added is lighter, and
+  each line plays from the moment it came from. Templates for a 1:1, a standup,
+  a customer call, a user interview, a hiring interview and planning. Long
+  meetings are read in pieces, so Apple's on-device model covers all of an hour,
+  not just its first ten minutes.
+- **Meetings** — today's and tomorrow's meetings from the Mac's calendars
+  (iCloud, Google, Outlook — no sign-in), with a Now line, on the Transcribe
+  page. One click records a meeting with its name and who's invited, or joins
+  its Zoom, Meet or Teams link and records. A notification a couple of minutes
+  before starts it, and when Zoom, Teams, Meet, Slack or WhatsApp starts using
+  the microphone with nothing on the calendar, Four Notes offers to transcribe
+  that call and to stop when it ends. It only sees which app has the
+  microphone, never what's said.
+- **Library** — add files (PDF, Word, RTF, text, Markdown, HTML, images), a
+  folder that's read again when it changes (Google Drive for desktop's folder
+  works), or a web page. Everything is read and kept on this Mac, and searched
+  by meaning as well as by words with Apple's on-device language model. The
+  assistant answers from your notes, talks and library, and shows the sources
+  it used: a click opens the note, the moment in the talk, or the page of the
+  PDF.
 - **Speech models** — download Whisper large-v3 turbo (about 630 MB, 99
   languages, Indonesian included) and a speaker model (33 MB) from Hugging Face
   inside the app, in Settings → AI & API keys → Speech models: size, speed and
@@ -86,7 +108,13 @@ Four Notes server in between.
   you add yourself, the app only goes online to look up exchange rates
   (currency codes only), once a day (or when you ask) to check GitHub for a
   newer release — Settings → About turns the daily check off —
-  and, if you turn it on, to sync with Google Drive.
+  to read a web page you add to the Library, and, if you turn it on, to sync
+  with Google Drive.
+- Talks, their notes and the Library are kept beside that file, in the app's
+  own folder, and are never synced. Your calendar is only read, to list
+  meetings and remind you of them; noticing calls only looks at which app has
+  the microphone. Settings → Meetings picks which calendars count and turns
+  reminders and noticing calls off.
 - **Sync** (optional, Settings → Sync): sign in with Google and your notes,
   to-dos, spending and sticky notes are kept in step with the web app at
   [app.fournotes.xyz](https://app.fournotes.xyz), through one file in a
@@ -204,7 +232,7 @@ TEST_RUNNER_FOURNOTES_EVAL_LOCALSERVER=1 ./scripts/run-tests.sh         # LM Stu
 |---|---|
 | ⌘N / ⇧⌘N / ⌥⌘N | New note / task / transaction |
 | ⌘K | Search or quick add |
-| ⌘1 – ⌘4 | Today, Notes, To-Do, Finance |
+| ⌘1 – ⌘6 | Today, Notes, To-Do, Finance, Transcribe, Library |
 | ⇧⌘I | Scan a receipt or note |
 | ⇧⌘R | Record a voice note |
 | ⇧⌘. | Open the edge dock |

@@ -1,6 +1,6 @@
 "use client";
 // The sidebar, after Arc (Main.dc.html): the space switcher with the mark, a search field
-// that opens ⌘K, the four places with their counts, then capture (Scan, Record), the voice
+// that opens ⌘K, the places with their counts, then capture (Scan, Record), the voice
 // assistant and Settings, and a last line saying where the data lives.
 // On phones the same sidebar is a drawer behind the header's mark.
 import { useEffect, useState } from "react";
@@ -21,12 +21,14 @@ import Logo from "./Logo";
 import TypeToConfirm from "./TypeToConfirm";
 import { Icon, useToast } from "./ui";
 
+// Meetings comes right after Today: where a meeting's notes and to-dos go follows it. Its id
+// stays "transcribe", the page's old name, as it's kept in storage and links.
 export const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "today", label: "Today", icon: "today" },
+  { id: "transcribe", label: "Meetings", icon: "wave" },
   { id: "notes", label: "Notes", icon: "note" },
   { id: "todo", label: "To-Do", icon: "todo" },
   { id: "finance", label: "Finance", icon: "finance" },
-  { id: "transcribe", label: "Transcribe", icon: "wave" },
 ];
 
 const STATUS_LABEL = { off: "", "signed-out": "Not synced", syncing: "Syncing…", synced: "Synced", offline: "Offline", error: "Sync error" } as const;
@@ -185,7 +187,7 @@ export default function Sidebar({ tab, setTab, onClose, onSearch, onSettings }: 
         <kbd className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-xs text-[var(--text-secondary)]">{mac ? "⌘K" : "Ctrl K"}</kbd>
       </button>
 
-      {/* The four places. The count gives way to a menu of quick actions while a row is in use. */}
+      {/* The places. The count gives way to a menu of quick actions while a row is in use. */}
       <ul className="flex flex-col gap-0.5">
         {TABS.map((t, i) => {
           const selected = tab === t.id;

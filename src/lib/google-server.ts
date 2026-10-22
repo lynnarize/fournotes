@@ -9,13 +9,23 @@ export const TOKEN_COOKIE = "fn_google";
 export const STATE_COOKIE = "fn_google_state";
 export const COOKIE_PATH = "/api/google";
 // "profile" gives the account's name, used to fill in "Your name" when it's empty.
-export const SCOPES = ["openid", "email", "profile", "https://www.googleapis.com/auth/drive.appdata"];
+export const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.appdata";
+export const SCOPES = ["openid", "email", "profile", DRIVE_SCOPE];
+/** Reading events, nothing else: asked for only when "Connect calendar" is tapped. */
+export const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events.readonly";
+export const CALENDAR_SCOPES = ["openid", "email", "profile", CALENDAR_SCOPE];
+
+/** What a sign-in is for: Drive sync, or the calendar. Carried through Google in `state`. */
+export type GooglePurpose = "sync" | "calendar";
+export const purposeOf = (state?: string | null): GooglePurpose => (state?.endsWith(".calendar") ? "calendar" : "sync");
 
 export interface GoogleSession {
   refreshToken: string;
   email: string | null;
   /** First name (or full name) from the Google account, when the profile scope was granted. */
   name?: string | null;
+  /** The calendar was connected ("Connect calendar") and not turned off since. */
+  calendar?: boolean;
 }
 
 export const googleConfigured = () => Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);

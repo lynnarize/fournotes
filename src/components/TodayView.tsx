@@ -1,26 +1,32 @@
 "use client";
 // Today: the date and a greeting, the brief (one short paragraph written from your data,
 // or the written brief point by point, see Settings → Today), and the assistant under it.
-// Beside them, at a glance: what's due (tick it off right here), quick notes, and what
-// you've spent today. Phones stack it all, with the assistant docked above the tab bar.
+// Beside them, at a glance: the next meeting (record it in one click), what's due (tick it
+// off right here), quick notes, and what you've spent today. Phones stack it all, with the
+// assistant docked above the tab bar.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { looksLikeThinking } from "@/lib/ai/text";
 import { BRIEF_STYLES, composeBrief, useBriefStyle, type BriefItem, type BriefTarget } from "@/lib/briefParagraph";
+import { connectCalendar, useCalendar } from "@/lib/calendar";
 import { api, localIso } from "@/lib/client";
 import { fingerprint } from "@/lib/fingerprint";
 import { useFiledFlash } from "@/lib/highlight";
 import { greetingFor, useNow, useOnline } from "@/lib/hooks";
 import { budgetStatus, detectSubscriptions, myShare, owedToMe } from "@/lib/insights";
+import { clockTime, meetingDetail, talkFor, timeRange, type CalendarMeeting } from "@/lib/meetings";
 import { openItem } from "@/lib/nav";
 import { isQuick, quickNote } from "@/lib/quickNote";
 import { alive, formatMoney, localDate, localMonth, useStore } from "@/lib/store";
+import { useTalks } from "@/lib/talks/db";
+import { useRecorder } from "@/lib/talks/recorder";
 import type { BriefInput, Note, Tab, Todo } from "@/lib/types";
 import { useAssistant } from "./assistant";
 import { Glyph } from "./assistant/icons";
 import ChatDock from "./ChatDock";
+import { useRecordMeeting, useStoredFlag } from "./meetings";
 import { Dropdown, MenuItem } from "./notes/Dropdown";
 import { SampleDataButton } from "./SampleData";
-import { useToast } from "./ui";
+import { Icon, useToast } from "./ui";
 
 const LINK = "text-[var(--foreground)] underline decoration-[var(--border-strong)] decoration-1 underline-offset-4 transition-colors hover:decoration-[var(--foreground)]";
 const QUIET = "flex h-8 items-center gap-1.5 rounded-full px-3 text-[13px] text-[var(--text-muted)] transition-colors hover:bg-[var(--hover)] hover:text-[var(--foreground)] disabled:opacity-40";
@@ -249,6 +255,7 @@ export default function TodayView({ setTab }: { setTab: (t: Tab) => void }) {
       </div>
 
       <aside aria-label="At a glance" className="flex min-w-0 flex-[1_1_340px] flex-col gap-4">
+        <NextMeeting onAll={() => setTab("transcribe")} />
         <DueToday tasks={tasks} upcoming={upcoming} focus={focus} onDone={complete} onAll={() => setTab("todo")} />
         <SpentToday onOpen={() => setTab("finance")} yTotal={yTotal} />
         <QuickNotes quick={quick} onMore={() => setTab("notes")} />
@@ -268,6 +275,134 @@ function Row({ glyph, children }: { glyph: ReactNode; children: ReactNode }) {
 
 const CARD_HEAD = "flex items-center gap-2 px-3 pb-2 pt-3";
 const CARD_TITLE = "min-w-0 flex-1 text-[15px] font-medium md:text-[16px]";
+
+// ---- Next meeting ------------------------------------------------------------------------
+// From Google Calendar, as the Mac app's card is from the Mac's calendars: the meeting on now,
+// else the next one in the coming 12 hours, recorded in one click.
+
+const WITHIN_MS = 12 * 3600_000;
+
+/** Which meeting the card shows, what its first line says, and what comes after it. */
+export function nextMeeting(meetings: CalendarMeeting[], now: Date): { meeting: CalendarMeeting; when: string; then: CalendarMeeting | null } | null {
+  const t = now.getTime();
+  const ahead = meetings
+    .filter((m) => Date.parse(m.end) > t && Date.parse(m.start) <= t + WITHIN_MS)
+    .sort((a, b) => a.start.localeCompare(b.start));
+  // Of those under way, the one that began last: the meeting, not the afternoon's focus block.
+  const meeting = ahead.filter((m) => Date.parse(m.start) <= t).pop() ?? ahead[0];
+  if (!meeting) return null;
+  const then = ahead.find((m) => m !== meeting && Date.parse(m.start) > Math.max(t, Date.parse(meeting.start))) ?? null;
+  return { meeting, when: whenLine(meeting, now), then };
+}
+
+/** "Now · started 5 min ago", "In 12 min", "At 3:30 PM", "Tomorrow at 9:00 AM". */
+export function whenLine(m: CalendarMeeting, now: Date) {
+  const start = new Date(m.start);
+  const diff = start.getTime() - now.getTime();
+  if (diff <= 0) {
+    const ago = Math.floor(-diff / 60_000);
+    return ago < 1 ? "Now · just started" : ago < 60 ? `Now · started ${ago} min ago` : `Now · until ${clockTime(new Date(m.end))}`;
+  }
+  if (diff < 60 * 60_000) return `In ${Math.max(1, Math.round(diff / 60_000))} min`;
+  return `${dayWord(start, now)} ${clockTime(start)}`;
+}
+
+/** "At", "Tomorrow at", "Friday at". */
+function dayWord(d: Date, now: Date) {
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  if (d.toDateString() === now.toDateString()) return "At";
+  if (d.toDateString() === tomorrow.toDateString()) return "Tomorrow at";
+  return `${d.toLocaleDateString("en-US", { weekday: "long" })} at`;
+}
+
+function NextMeeting({ onAll }: { onAll: () => void }) {
+  const cal = useCalendar();
+  const talks = useTalks();
+  const rec = useRecorder();
+  // The minute's tick draws it again; the time is read as it's drawn, so "started 5 min ago" isn't a minute behind.
+  useNow(60_000);
+  const now = new Date();
+  const { record, busy } = useRecordMeeting();
+  const [hidden, hide] = useStoredFlag("four-notes:next-meeting-dismissed");
+
+  if (cal.status === "unavailable" || cal.status === "checking") return null;
+  if (cal.status === "disconnected") {
+    if (hidden) return null;
+    return (
+      <section aria-labelledby="today-meeting" className="card p-1.5 md:p-2">
+        <div className={CARD_HEAD}>
+          <h2 id="today-meeting" className={CARD_TITLE}>Next meeting</h2>
+          <button type="button" className="btn btn-plain btn-sm btn-icon" aria-label="Not now" title="Not now" onClick={hide}>
+            <Icon name="x" size={14} />
+          </button>
+        </div>
+        <div className="flex flex-col items-start gap-3 px-3 pb-3 pt-1">
+          <p className="text-[14px] text-[var(--text-secondary)]">See your next meeting here, and record it in one click.</p>
+          <button type="button" className="btn btn-secondary btn-sm max-md:h-11" onClick={connectCalendar}><Icon name="calendar" size={14} /> Connect calendar</button>
+          {cal.error && <p className="text-[13px] text-[var(--danger)]" role="alert">{cal.error}</p>}
+        </div>
+      </section>
+    );
+  }
+
+  const view = nextMeeting(cal.meetings, now);
+  const m = view?.meeting;
+  const talk = m ? talkFor(m, talks) : undefined;
+  const recording = Boolean(talk && rec.talkId === talk.id && rec.status !== "idle");
+  const blocked = rec.status !== "idle";
+  const detail = m ? meetingDetail(m) : "";
+  return (
+    <section aria-labelledby="today-meeting" className="card p-1.5 md:p-2">
+      <div className={CARD_HEAD}>
+        <h2 id="today-meeting" className={CARD_TITLE}>Next meeting</h2>
+        <button type="button" className={HEAD_LINK} onClick={onAll}>All meetings</button>
+      </div>
+      {!view || !m ? (
+        <p className="px-3 pb-3 pt-1 text-[14px] text-[var(--text-secondary)]">No more meetings today.</p>
+      ) : (
+        <div className="flex flex-col gap-1 px-3 pb-3 pt-1">
+          <p className="fn-num text-[12px] text-[var(--text-muted)]">{view.when}</p>
+          <p className="line-clamp-2 text-[15px] font-medium leading-snug">{m.title}</p>
+          <p className="fn-num truncate text-[13px] text-[var(--text-secondary)]">{timeRange(m)}{detail ? ` · ${detail}` : ""}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {recording && talk ? (
+              <>
+                <span className="badge badge-danger badge-dot">Recording</span>
+                <button type="button" className="btn btn-secondary btn-sm max-md:h-11" onClick={() => openItem("talk", talk.id)}>Open</button>
+              </>
+            ) : talk ? (
+              <button type="button" className="btn btn-secondary btn-sm max-md:h-11" onClick={() => openItem("talk", talk.id)}>Open notes</button>
+            ) : (
+              <>
+                {m.link && (
+                  <button type="button" className="btn btn-primary btn-sm max-md:h-11" disabled={blocked} title={blocked ? "A recording is already running." : undefined} onClick={() => void record(m, true)}>
+                    <Icon name="arrowUpRight" size={14} /> Join and record
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className={`btn btn-sm max-md:h-11 ${m.link ? "btn-secondary" : "btn-primary"}`}
+                  disabled={blocked || busy === m.id}
+                  title={blocked ? "A recording is already running." : undefined}
+                  onClick={() => void record(m, false)}
+                >
+                  <Icon name="mic" size={14} /> Record
+                </button>
+              </>
+            )}
+          </div>
+          {view.then && (
+            <p className="mt-2 truncate text-[12px] text-[var(--text-muted)]">
+              Then {new Date(view.then.start).toDateString() === now.toDateString() ? "" : "tomorrow "}
+              {clockTime(new Date(view.then.start))} · {view.then.title}
+            </p>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
 
 function DueToday({ tasks, upcoming, focus, onDone, onAll }: {
   tasks: Todo[]; upcoming: Todo[]; focus: Todo[]; onDone: (t: Todo) => void; onAll: () => void;

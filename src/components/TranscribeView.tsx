@@ -1,14 +1,18 @@
 "use client";
-// Transcribe: conversations you record, in person or on a call (Google Meet, Zoom, a
-// WhatsApp call), transcribed with who said what, written up, and searchable by the
-// assistant. A list of talks beside the open one, as Notes has it; on phones the list
-// comes first. Recording carries on while you use the rest of the app.
+// Meetings (the "transcribe" tab): conversations you record, in person or on a call (Google
+// Meet, Zoom, a WhatsApp call), transcribed with who said what, written up, and searchable
+// by the assistant. Today's meetings from your calendar, then a list of talks beside the
+// open one, as Notes has it; on phones the list comes first. Recording carries on while you
+// use the rest of the app.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useBackDismiss } from "@/lib/backstack";
+import { useMeetingSetup, type MeetingSetup } from "@/lib/calendar";
 import { useNow } from "@/lib/hooks";
+import { eventOf } from "@/lib/meetings";
 import { openSettings, useOpenItem } from "@/lib/nav";
 import { useStore } from "@/lib/store";
 import { updateTalk, useTalks } from "@/lib/talks/db";
+import { canRecordCalls, defaultLang, LANGS, PREFS, readPrefs } from "@/lib/talks/prefs";
 import {
   hasCaptions, installLocalSpeech, localSpeech, RecorderError, resume, serverEngine, startRecording, stopRecording,
   transcribeFile, useRecorder, type Engine, type RecordMode,
@@ -16,19 +20,9 @@ import {
 import { clock, matchesTalk, speakersOf, transcriptOf, turns } from "@/lib/talks/transcript";
 import type { Talk } from "@/lib/types";
 import { useAssistant } from "./assistant";
+import { TodaysMeetings } from "./meetings";
 import TalkPage from "./talks/TalkPage";
 import { Icon, useToast } from "./ui";
-
-export const LANGS: [string, string][] = [
-  ["en-US", "English"], ["id-ID", "Bahasa Indonesia"], ["ms-MY", "Bahasa Melayu"], ["ja-JP", "日本語"], ["ko-KR", "한국어"],
-  ["zh-CN", "中文"], ["es-ES", "Español"], ["fr-FR", "Français"], ["de-DE", "Deutsch"], ["pt-BR", "Português"], ["ar-SA", "العربية"],
-];
-const PREFS = "four-notes:transcribe";
-const readPrefs = (): { mode?: RecordMode; lang?: string } => { try { return JSON.parse(localStorage.getItem(PREFS) ?? "{}"); } catch { return {}; } };
-const defaultLang = () => {
-  const nav = typeof navigator === "undefined" ? "en" : navigator.language.toLowerCase();
-  return LANGS.find(([code]) => nav.startsWith(code.slice(0, 2)))?.[0] ?? "en-US";
-};
 
 const live = (talks: Talk[], space: string | null) => talks.filter((t) => !t.deletedAt && (t.spaceId ?? null) === space);
 
@@ -45,6 +39,8 @@ export default function TranscribeView() {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [setup, setSetup] = useState(false);
+  /** A meeting from the calendar, filled in on the new-recording form. */
+  const [preset, setPreset] = useState<MeetingSetup | null>(null);
   const [mobile, setMobile] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { send } = useAssistant();
@@ -68,8 +64,9 @@ export default function TranscribeView() {
   useOpenItem("talk", (f) => { setQuery(""); setSetup(false); setSelectedId(f.id); setMobileOpen(true); });
   useBackDismiss(mobile && mobileOpen, () => { setMobileOpen(false); setSetup(false); });
 
-  const open = (id: string) => { setSetup(false); setSelectedId(id); setMobileOpen(true); };
-  const newRecording = () => { setSetup(true); setSelectedId(null); setMobileOpen(true); };
+  const open = (id: string) => { setSetup(false); setPreset(null); setSelectedId(id); setMobileOpen(true); };
+  const newRecording = () => { setSetup(true); setPreset(null); setSelectedId(null); setMobileOpen(true); };
+  useMeetingSetup((s) => { setQuery(""); setPreset(s); setSetup(true); setSelectedId(null); setMobileOpen(true); });
   const ask = () => {
     const q = query.trim();
     if (!q) return;
@@ -86,7 +83,7 @@ export default function TranscribeView() {
         <aside className="fn-aside flex min-h-0 w-full shrink-0 flex-col md:w-[331px] md:border-r md:border-[var(--border)]">
           <div className="flex min-h-0 w-full flex-1 flex-col px-3 md:w-[330px]">
             <div className="flex items-center gap-1 pb-3 pl-2 pr-1 pt-5 md:pt-6">
-              <h2 className="fn-display min-w-0 flex-1 text-[28px]">Transcribe</h2>
+              <h2 className="fn-display min-w-0 flex-1 text-[28px]">Meetings</h2>
               {rec.status === "idle" ? (
                 <button onClick={newRecording} className="btn btn-primary pl-2.5 pr-3.5 max-md:h-11">
                   <Icon name="mic" size={16} /> Record
@@ -121,6 +118,7 @@ export default function TranscribeView() {
               )}
             </div>
             <div className="scroll-thin -mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-24 max-md:pb-[calc(var(--tabbar-space)+64px)]">
+              {!query.trim() && <TodaysMeetings onOpen={open} />}
               <ul className="flex flex-col gap-1">
                 {list.map((t) => <TalkRow key={t.id} talk={t} selected={!mobile && !setup && selected?.id === t.id} onOpen={() => open(t.id)} />)}
               </ul>
@@ -139,8 +137,10 @@ export default function TranscribeView() {
       {(mobile ? mobileOpen : true) && (
         setup && rec.status === "idle" ? (
           <NewRecording
-            onBack={mobile ? () => { setSetup(false); setMobileOpen(false); } : () => setSetup(false)}
-            onStarted={(id) => { setSetup(false); setSelectedId(id); }}
+            key={preset?.meeting.id ?? "new"}
+            preset={preset}
+            onBack={mobile ? () => { setSetup(false); setPreset(null); setMobileOpen(false); } : () => { setSetup(false); setPreset(null); }}
+            onStarted={(id) => { setSetup(false); setPreset(null); setSelectedId(id); }}
           />
         ) : selected && selected.id === rec.talkId && rec.status !== "idle" ? (
           <LiveRecording talk={selected} onBack={mobile ? () => setMobileOpen(false) : undefined} />
@@ -198,16 +198,17 @@ function TalkRow({ talk, selected, onOpen }: { talk: Talk; selected: boolean; on
 }
 
 // ---- Starting a recording -----------------------------------------------------------------
-function NewRecording({ onBack, onStarted }: { onBack?: () => void; onStarted: (id: string) => void }) {
+function NewRecording({ preset, onBack, onStarted }: { preset?: MeetingSetup | null; onBack?: () => void; onStarted: (id: string) => void }) {
   const toast = useToast();
-  const [mode, setMode] = useState<RecordMode>(() => readPrefs().mode ?? "room");
+  const meeting = preset?.meeting;
+  const [mode, setMode] = useState<RecordMode>(() => (meeting ? (meeting.link && canRecordCalls() ? "call" : "room") : readPrefs().mode ?? "room"));
   const [lang, setLang] = useState(() => readPrefs().lang ?? defaultLang());
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(meeting?.title ?? "");
   const [engine, setEngine] = useState<Engine | "checking">("checking");
   const [speech, setSpeech] = useState("unavailable");
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const canCall = typeof navigator !== "undefined" && Boolean(navigator.mediaDevices?.getDisplayMedia) && !/Android|iPhone|iPad/i.test(navigator.userAgent);
+  const canCall = canRecordCalls();
 
   useEffect(() => { void serverEngine().then(setEngine); }, []);
   // Chrome's model: transcribing here ("here": it's the one answering), or ready to take over ("fallback").
@@ -223,7 +224,7 @@ function NewRecording({ onBack, onStarted }: { onBack?: () => void; onStarted: (
   const start = async () => {
     setBusy(true);
     try {
-      onStarted(await startRecording({ mode, lang, title }));
+      onStarted(await startRecording({ mode, lang, title, event: meeting ? eventOf(meeting) : null }));
     } catch (e) {
       toast(e instanceof RecorderError || e instanceof Error ? e.message : "Couldn't start recording.", "error");
     } finally {
@@ -279,6 +280,14 @@ function NewRecording({ onBack, onStarted }: { onBack?: () => void; onStarted: (
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-[clamp(16px,4vw,40px)] pb-12 pt-8 max-md:pb-[calc(var(--tabbar-space)+64px)]">
         <div className="fn-note-in mx-auto flex w-full max-w-[640px] flex-col gap-6">
           <h1 className="fn-display text-[30px]">New recording</h1>
+          {preset?.joined && meeting?.link && (
+            <p className="flex items-start gap-2 rounded-[var(--radius-control)] bg-[var(--accent-subtle)] px-4 py-3 text-[13px] text-[var(--text-secondary)]">
+              <Icon name="arrowUpRight" size={15} className="mt-0.5 shrink-0 text-[var(--accent)]" />
+              <span>
+                {meeting.link.service} opened in a new tab. Once you&apos;re in, {mode === "call" ? <>choose that tab here and keep <b>Share tab audio</b> on.</> : "start recording here with the call on speaker."}
+              </span>
+            </p>
+          )}
 
           <div role="radiogroup" aria-label="What are you recording?" className="flex flex-wrap gap-3">
             {option("room", "users", "In person", "A meeting in a room, an interview, a chat. Put your phone or laptop between you.")}

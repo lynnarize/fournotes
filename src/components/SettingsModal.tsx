@@ -17,6 +17,7 @@ import AppearanceSection from "./AppearanceSection";
 import BriefStyleSection from "./BriefStyleSection";
 import { useCloud } from "./cloud";
 import { GoogleSyncPanel, useGoogleSync } from "./googleSync";
+import { CalendarPanel } from "./meetings";
 import { RemoveSamplesButton, SampleDataButton } from "./SampleData";
 import { startOnboarding } from "./Onboarding";
 import SettingsSection, { SettingsBlock, SettingsGroup, SettingsRow, Switch, takeRevealedSection } from "./SettingsSection";
@@ -245,6 +246,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
         {google.enabled && (
           <SettingsGroup>
             <SettingsBlock><GoogleSyncPanel /></SettingsBlock>
+            <SettingsBlock><CalendarPanel /></SettingsBlock>
           </SettingsGroup>
         )}
 

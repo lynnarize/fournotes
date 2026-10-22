@@ -18,15 +18,16 @@ import SampleBanner from "@/components/SampleData";
 import TodayView from "@/components/TodayView";
 import TodoView from "@/components/TodoView";
 import TranscribeView from "@/components/TranscribeView";
-import { Icon, ToastProvider } from "@/components/ui";
+import { Icon, ToastProvider, useToast } from "@/components/ui";
 import { useBackDismiss, useTabHistory } from "@/lib/backstack";
+import { useCalendarReturn } from "@/lib/calendar";
 import { usePulsingTabs } from "@/lib/highlight";
 import { usePresence } from "@/lib/hooks";
 import { scrollToId, useOpenItem, useOpenSettings, useOpenTab } from "@/lib/nav";
 import { StoreProvider, useStore } from "@/lib/store";
 import type { Tab } from "@/lib/types";
 
-const TITLES: Record<Tab, string> = { today: "Today", notes: "Notes", todo: "To-Do", finance: "Finance", transcribe: "Transcribe" };
+const TITLES: Record<Tab, string> = { today: "Today", transcribe: "Meetings", notes: "Notes", todo: "To-Do", finance: "Finance" };
 
 export default function Page() {
   return (
@@ -69,6 +70,8 @@ function Shell() {
 
   // "Open on Today" from the assistant's panel, and anything else that names a place.
   useOpenTab(setTab);
+  // Back from Google after "Connect calendar".
+  useCalendarReturn(useToast());
 
   // Stickies only show on Today.
   useOpenItem("any", (f) => {

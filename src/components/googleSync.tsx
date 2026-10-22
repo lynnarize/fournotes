@@ -5,6 +5,7 @@ import {
   deleteCloudFile, disconnectGoogle, fetchAccessToken, googleEnabled, NotConnectedError, runDriveSync,
   startGoogleConnect, type SyncCursor,
 } from "@/lib/gdrive";
+import { refreshCalendar } from "@/lib/calendar";
 import { useStore } from "@/lib/store";
 import TypeToConfirm from "./TypeToConfirm";
 import { Icon, useToast } from "./ui";
@@ -211,6 +212,8 @@ export function GoogleSyncProvider({ children }: { children: ReactNode }) {
       }
     }
     await disconnectGoogle();
+    // Signing out of Google here ends the calendar's access too.
+    void refreshCalendar(true);
     tokenRef.current = null;
     setSaved(null);
     setStatus("disconnected");

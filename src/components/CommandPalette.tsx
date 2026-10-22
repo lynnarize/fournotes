@@ -135,6 +135,7 @@ export default function CommandPalette({ open, onClose, setTab, onSettings }: {
 
     const commands: Item[] = [
       { key: "go-today", group: "Go to", icon: "today", label: "Today", run: () => setTab("today") },
+      { key: "go-meetings", group: "Go to", icon: "wave", label: "Meetings", run: () => setTab("transcribe") },
       { key: "go-notes", group: "Go to", icon: "note", label: "Notes", run: () => setTab("notes") },
       { key: "go-todo", group: "Go to", icon: "todo", label: "To-Do", run: () => setTab("todo") },
       { key: "go-finance", group: "Go to", icon: "finance", label: "Finance", run: () => setTab("finance") },

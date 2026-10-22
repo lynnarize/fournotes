@@ -15,9 +15,12 @@ struct TranscribeView: View {
     @EnvironmentObject private var assistant: Assistant
     @ObservedObject private var talks = TalkStore.shared
     @ObservedObject private var recorder = TalkRecorder.shared
+    @ObservedObject private var calendar = MeetingCalendar.shared
 
     @State private var query = ""
     @FocusState private var searchFocused: Bool
+    /// The meeting the new-recording page was opened for, from the list.
+    @State private var pickedMeeting: String?
 
     private var mine: [Talk] { talks.live(in: store.currentSpaceId) }
     private var list: [Talk] { mine.filter { TalkText.matches($0, query) } }
@@ -46,8 +49,10 @@ struct TranscribeView: View {
             Group {
                 switch detail {
                 case .new:
-                    NewRecordingView(onStarted: { nav.selectedTalkId = $0 },
+                    NewRecordingView(meetingId: pickedMeeting,
+                                     onStarted: { nav.selectedTalkId = $0 },
                                      onCancel: { nav.selectedTalkId = nil })
+                        .id(pickedMeeting ?? "")
                 case .live(let id):
                     if let talk = talks.talk(id) { LiveRecordingView(talk: talk) }
                 case .talk(let id):
@@ -99,7 +104,7 @@ struct TranscribeView: View {
                     .buttonStyle(.fn)
                     .help("Go to the recording")
                 } else {
-                    PrimaryButton(title: "Record", icon: "mic") { nav.selectedTalkId = Self.newRecording }
+                    PrimaryButton(title: "Record", icon: "mic") { newRecording() }
                         .help("Record a conversation")
                 }
             }
@@ -137,6 +142,24 @@ struct TranscribeView: View {
             ScrollView {
                 let rows = list
                 LazyVStack(spacing: 4) {
+                    // The calendar's meetings, above the talks, unless the talks are being searched.
+                    if query.isEmpty {
+                        MeetingsSection(selectedTalkId: nav.selectedTalkId,
+                                        onOpen: { nav.selectedTalkId = $0 },
+                                        onPick: { meeting in
+                                            pickedMeeting = meeting.id
+                                            nav.selectedTalkId = Self.newRecording
+                                        })
+                        if calendar.access == .allowed, !mine.isEmpty {
+                            Text("Talks")
+                                .font(FN.small)
+                                .foregroundStyle(p.textMuted)
+                                .padding(.horizontal, 8)
+                                .padding(.top, 12)
+                                .padding(.bottom, 2)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
                     ForEach(rows) { talk in
                         TalkRow(talk: talk, isSelected: selected == .talk(talk.id) || selected == .live(talk.id),
                                 working: recorder.working[talk.id] != nil || talk.id == recorder.talkId) {
@@ -212,7 +235,7 @@ struct TranscribeView: View {
                 .font(FN.body).foregroundStyle(p.textMuted)
                 .multilineTextAlignment(.center)
                 .padding(.top, 4)
-            PrimaryButton(title: "Record", icon: "mic") { nav.selectedTalkId = Self.newRecording }
+            PrimaryButton(title: "Record", icon: "mic") { newRecording() }
                 .padding(.top, 16)
         }
         .frame(maxWidth: 384)
@@ -221,6 +244,11 @@ struct TranscribeView: View {
     }
 
     // MARK: - Actions
+
+    private func newRecording() {
+        pickedMeeting = nil
+        nav.selectedTalkId = Self.newRecording
+    }
 
     /// Sending opens the assistant's panel, with the answer coming in.
     private func askAssistant(_ q: String) {

@@ -34,6 +34,13 @@ struct ScreenSnapshotTests {
         }
     }
 
+    @Test("First-run setup, each step", arguments: 0...9)
+    func onboarding(step: Int) throws {
+        for dark in [false, true] {
+            try render(OnboardingView(step: step), name: "onboarding-\(step)", dark: dark, size: CGSize(width: 1280, height: 820))
+        }
+    }
+
     @Test("Finance, the whole page")
     func financePage() throws {
         for dark in [false, true] {

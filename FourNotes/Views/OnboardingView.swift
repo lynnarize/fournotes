@@ -2,46 +2,61 @@ import AppKit
 import SwiftUI
 import UserNotifications
 
-// First-run setup, over the whole window: a calm, paper-and-light welcome
-// that shows what the app does, then asks only what it needs — how it should
-// look, the assistant, the currency — and ends on a small celebration.
-// Skippable at every step. Each step blurs into the next.
+// First-run setup, over the whole window, as on the web (src/components/Onboarding.tsx):
+// a welcome that shows what the app does, then asks only what it needs: how the day
+// reads, the edge dock, how it looks, the assistant, a backup, the currency. It ends on
+// a small celebration. Skippable at every step. Each step blurs into the next.
 
 struct OnboardingView: View {
+    @Environment(\.palette) private var p
     @Environment(\.colorScheme) private var scheme
     @EnvironmentObject private var store: Store
     @EnvironmentObject private var toasts: ToastCenter
     @EnvironmentObject private var engine: AIEngine
     @EnvironmentObject private var nav: Navigation
     @ObservedObject private var dock = EdgeDock.shared
+    @ObservedObject private var sync = AppModel.shared.sync
 
     @AppStorage("fournotes.theme") private var themeRaw = ThemeChoice.system.rawValue
-    @AppStorage(BriefStyle.storageKey) private var briefStyleRaw = BriefStyle.paragraph.rawValue
 
     @State private var step = 0
     /// Which way the last move went, so the steps slide the right way.
     @State private var forward = true
     @State private var keyDraft = ""
-    @State private var keySaved = false
     @State private var remindersOn = false
+    @State private var remindersBlocked = false
 
-    /// The steps, in order; each has a dash in the progress bar. The
-    /// celebration comes after the last.
-    private enum Page: Int, CaseIterable {
-        case welcome, oneView, brief, nothingSlips, edgeDock, look, assistant, money
+    /// `step` opens it part of the way through, to look at a page.
+    init(step: Int = 0) {
+        _step = State(initialValue: step)
     }
-    private static let stepCount = Page.allCases.count
-    private var page: Page? { Page(rawValue: step) }
 
+    /// The steps, in order. The celebration comes after the last.
+    private enum Page: CaseIterable {
+        case welcome, oneView, brief, nothingSlips, edgeDock, look, assistant, backup, money
+    }
+
+    /// The numbered stepper groups the steps into the stages people recognise.
+    private static let stages: [(label: String, pages: [Page])] = [
+        ("Welcome", [.welcome, .oneView, .brief, .nothingSlips, .edgeDock]),
+        ("Look", [.look]),
+        ("Assistant", [.assistant]),
+        ("Backup", [.backup]),
+        ("Money", [.money]),
+    ]
+
+    /// Backup only where this build can sync.
+    private var pages: [Page] { Page.allCases.filter { $0 != .backup || sync.isAvailable } }
+    private var page: Page? { pages.indices.contains(step) ? pages[step] : nil }
+    private var celebrating: Bool { step == pages.count }
+    private var stages: [(label: String, pages: [Page])] { Self.stages.filter { $0.pages.contains(where: pages.contains) } }
+    private var stage: Int { page.flatMap { page in stages.firstIndex { $0.pages.contains(page) } } ?? stages.count }
     private var theme: ThemeChoice { ThemeChoice(rawValue: themeRaw) ?? .system }
-    private var s: OnboardingStyle { OnboardingStyle(scheme: scheme, theme: theme) }
-    private var celebrating: Bool { step == Self.stepCount }
 
     var body: some View {
-        ZStack {
-            OnboardingBackground(style: s, glow: celebrating ? 1 : 0.55 + Double(step) * 0.04)
-
-            ZStack {
+        VStack(spacing: 0) {
+            header
+            ScrollView {
                 content
                     .id(step)
                     .transition(.asymmetric(
@@ -49,75 +64,85 @@ struct OnboardingView: View {
                                              identity: BlurStep(amount: 0, shift: 0)),
                         removal: .modifier(active: BlurStep(amount: 1, shift: forward ? -18 : 18),
                                            identity: BlurStep(amount: 0, shift: 0))))
+                    .frame(maxWidth: 1280)
+                    .padding(.horizontal, 40)
+                    .padding(.vertical, 24)
+                    .frame(maxWidth: .infinity)
+                    .containerRelativeFrame(.vertical, alignment: .center) { height, _ in height }
             }
-            .frame(maxWidth: 900, maxHeight: .infinity)
-            .padding(.horizontal, 56)
-            .padding(.top, 48)
-            .padding(.bottom, 84)
-
-            VStack {
-                topBar
-                Spacer()
-                bottomBar
-            }
-            .padding(.horizontal, 28)
-            .padding(.vertical, 20)
+            .scrollBounceBehavior(.basedOnSize)
+            if page != .welcome { footer }
         }
-        .environment(\.onboarding, s)
+        .background(p.background)
+        .environment(\.onboarding, OnboardingStyle(scheme: scheme, theme: theme))
         .animation(Motion.reduce ? Motion.instant : .spring(response: 0.55, dampingFraction: 0.9), value: step)
         .task { await refreshReminders() }
     }
 
     // MARK: - Chrome
 
-    private var topBar: some View {
-        HStack {
-            Spacer()
-            if step > 0 && !celebrating {
-                Button(page == .assistant ? "Not now" : "Skip") { page == .assistant ? go(1) : finish() }
-                    .buttonStyle(.fn)
-                    .font(FN.font(12.5, .medium))
-                    .foregroundStyle(s.muted)
-                    .help(page == .assistant ? "Set up the assistant later in Settings" : "Skip setup")
+    private var header: some View {
+        HStack(spacing: 12) {
+            Logo(size: 34)
+            Text("Four Notes").font(FN.font(16, .medium)).foregroundStyle(p.foreground)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if !celebrating {
+                KitButton(kind: .plain, title: page == .assistant ? "Not now" : "Skip setup") {
+                    page == .assistant ? go(1) : finish(message: "You can set this up any time in Settings.")
+                }
+                .help(page == .assistant ? "Set up the assistant later in Settings" : "")
             }
         }
-        .frame(height: 20)
+        .padding(.horizontal, 40)
+        .padding(.top, 20)
+        .padding(.bottom, 8)
     }
 
-    private var bottomBar: some View {
-        ZStack {
-            if !celebrating {
-                ProgressDashes(count: Self.stepCount, current: step)
-            }
+    private var footer: some View {
+        HStack(spacing: 12) {
             HStack {
                 if celebrating {
                     remindersButton
-                } else if step > 0 {
-                    Button { go(-1) } label: {
-                        HStack(spacing: 5) {
-                            Icon("chevronLeft", size: 12, weight: 2)
-                            Text("Back")
-                        }
-                        .font(FN.font(13, .medium))
-                        .foregroundStyle(s.muted)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.fn)
-                    // ⌘[ as in a browser: ⌘← belongs to text fields (line start).
-                    .keyboardShortcut("[", modifiers: .command)
+                } else {
+                    KitButton(kind: .plain, title: "Back", icon: "chevronLeft") { go(-1) }
+                        // ⌘[ as in a browser: ⌘← belongs to text fields (line start).
+                        .keyboardShortcut("[", modifiers: .command)
                 }
-                Spacer()
-                OnboardingPrimary(title: primaryTitle, action: primary)
+                Spacer(minLength: 0)
             }
+            .frame(maxWidth: .infinity)
+            if !celebrating { Stepper(stages: stages.map(\.label), current: stage) }
+            HStack {
+                Spacer(minLength: 0)
+                // `.btn-primary .btn-lg`, with the Return key's mark.
+                Button(action: primary) {
+                    HStack(spacing: 8) {
+                        Text(primaryTitle)
+                        Text("↵").font(FN.small).opacity(0.6)
+                    }
+                    .font(FN.font(15, .medium))
+                    .foregroundStyle(p.accentForeground)
+                    .padding(.horizontal, 20)
+                    .frame(height: 44)
+                    .background(p.accent, in: Capsule())
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(.fn)
+                .keyboardShortcut(.defaultAction)
+            }
+            .frame(maxWidth: .infinity)
         }
-        .frame(height: 36)
+        .padding(.horizontal, 40)
+        .padding(.top, 16)
+        .padding(.bottom, 16)
+        .overlay(alignment: .top) { Rectangle().fill(p.borderSubtle).frame(height: 1) }
     }
 
     private var primaryTitle: String {
         switch page {
         case .welcome: return "Get started"
         case .look: return "Looks good"
-        case .assistant: return keyDraft.isEmpty ? "Continue" : "Save and continue"
+        case .assistant: return keyDraft.trimmingCharacters(in: .whitespaces).isEmpty ? "Continue" : "Save and continue"
         case .money: return "I'm ready"
         case nil: return "Open Four Notes"
         default: return "Continue"
@@ -128,23 +153,30 @@ struct OnboardingView: View {
         if page == .assistant, !keyDraft.trimmingCharacters(in: .whitespaces).isEmpty {
             Keychain.write(.anthropicKey, keyDraft.trimmingCharacters(in: .whitespaces))
             engine.refresh()
-            keySaved = true
+            toasts.push("🔑 Key saved. The assistant is ready.")
         }
         if celebrating { finish() } else { go(1) }
     }
 
     private func go(_ delta: Int) {
         forward = delta > 0
-        step = min(Self.stepCount, max(0, step + delta))
+        step = min(pages.count, max(0, step + delta))
     }
 
-    private func finish() {
+    private func finish(message: String? = nil) {
         // Persist completion even when setup was skipped without changing any
         // setting; otherwise the empty install is treated as a new install on
         // every launch and the wizard reopens.
         store.flush()
         store.needsOnboarding = false
         withAnimation(Motion.screen) { nav.sheet = nil }
+        if let message { toasts.push(message) }
+    }
+
+    /// "Explore with sample data": fill the app with examples and look around now.
+    private func explore() {
+        if !store.hasSamples { store.loadSamples() }
+        finish(message: "Sample data loaded. Remove it any time from the banner at the top or in Settings.")
     }
 
     // MARK: - Steps
@@ -153,256 +185,257 @@ struct OnboardingView: View {
     private var content: some View {
         switch page {
         case .welcome: welcome
-        case .oneView: oneView
-        case .brief: briefPage
-        case .nothingSlips: nothingSlips
+        case .oneView:
+            Centered(title: "Your day, on one calm page",
+                     lead: "What's due, what you spent and what you jotted down, sorted by what needs you now.") {
+                TodayMock()
+            }
+        case .brief:
+            Centered(title: "How should your day read?",
+                     lead: "A few sentences with the details a click away, or everything point by point. Change it any time in Settings.") {
+                BriefTiles()
+            }
+        case .nothingSlips:
+            SideBySide(pictureFirst: true) {
+                Title("Nothing slips\nthrough")
+                Lead("Say “remind me to pay rent Friday” and Four Notes reminds you on Friday. A receipt photo becomes spending; a voice memo becomes a note with its to-dos.")
+            } picture: {
+                RemindMock()
+            }
         case .edgeDock: edgeDockPage
-        case .look: look
+        case .look:
+            Centered(title: "Make it yours",
+                     lead: "Follow your Mac, or pick a look and keep it. Change it any time in Settings.") {
+                VStack(spacing: 24) {
+                    ThemeCards()
+                        .frame(maxWidth: 640)
+                    VStack(spacing: 8) {
+                        Text("Accent, for what's selected or active").font(FN.font(13)).foregroundStyle(p.textSecondary)
+                        AccentSwatches()
+                    }
+                }
+            }
         case .assistant: assistant
+        case .backup: backup
         case .money: money
         case nil: celebration
         }
     }
 
     private var welcome: some View {
-        HStack(alignment: .center, spacing: 40) {
-            VStack(alignment: .leading, spacing: 14) {
-                SerifTitle("Four notebooks.\nOne calm place.", size: 40)
-                Text("Notes, to-dos, spending and an assistant that files things for you — together in one fast Mac app.")
-                    .font(FN.font(15)).foregroundStyle(s.muted).lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: 360, alignment: .leading)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            WelcomeCards()
-                .frame(width: 360, height: 330)
-        }
-    }
-
-    private var oneView: some View {
-        VStack(spacing: 10) {
-            SerifTitle("Your day, on one calm page", size: 34, centered: true)
-            Text("What's due, what you spent and what you jotted down — sorted by what needs you now.")
-                .font(FN.font(14.5)).foregroundStyle(s.muted).multilineTextAlignment(.center)
-            TodayMock()
-                .frame(width: 560, height: 280)
-                .padding(.top, 22)
-        }
-    }
-
-    private var briefPage: some View {
-        VStack(spacing: 10) {
-            SerifTitle("How should your day read?", size: 34, centered: true)
-            Text("A few sentences with the details a click away, or everything point by point. Change it any time in Settings.")
-                .font(FN.font(14.5)).foregroundStyle(s.muted).multilineTextAlignment(.center)
-                .frame(maxWidth: 540)
-            HStack(alignment: .top, spacing: 40) {
-                ForEach(Array(BriefStyle.allCases.enumerated()), id: \.element) { index, style in
-                    BriefStyleTile(style: style, selected: briefStyleRaw == style.rawValue) {
-                        withAnimation(Motion.standard) { briefStyleRaw = style.rawValue }
-                    }
-                    .arrive(0.08 + Double(index) * 0.1)
-                }
-            }
-            .padding(.top, 26)
-        }
-    }
-
-    private var nothingSlips: some View {
         HStack(alignment: .center, spacing: 48) {
-            RemindMock()
-                .frame(width: 380, height: 250)
-            VStack(alignment: .leading, spacing: 14) {
-                SerifTitle("Nothing slips\nthrough", size: 38)
-                Text("Say “remind me to pay rent Friday” and Four Notes reminds you on Friday. A receipt photo becomes spending; a voice memo becomes a note with its to-dos.")
-                    .font(FN.font(14.5)).foregroundStyle(s.muted).lineSpacing(3)
+            VStack(alignment: .leading, spacing: 28) {
+                DisplayLines("Four notebooks.\nOne calm place.", size: 64)
+                Text("Notes, to-dos, spending and an assistant that files things for you, together in one fast app.")
+                    .font(FN.font(18))
+                    .lineSpacing(7)
+                    .foregroundStyle(p.textSecondary)
+                    .frame(maxWidth: 460, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: 340, alignment: .leading)
+                HStack(spacing: 12) {
+                    Button(action: primary) {
+                        HStack(spacing: 8) {
+                            Text("Get started")
+                            Icon("arrowRight", size: 18)
+                        }
+                        .font(FN.font(16, .medium))
+                        .foregroundStyle(p.accentForeground)
+                        .padding(.horizontal, 24)
+                        .frame(height: 50)
+                        .background(p.accent, in: Capsule())
+                        .contentShape(Capsule())
+                    }
+                    .buttonStyle(.fn)
+                    .keyboardShortcut(.defaultAction)
+                    Button(action: explore) {
+                        Text("Explore with sample data")
+                            .font(FN.font(16))
+                            .foregroundStyle(p.foreground)
+                            .padding(.horizontal, 22)
+                            .frame(height: 50)
+                            .background(p.surface, in: Capsule())
+                            .overlay(Capsule().strokeBorder(p.borderStrong, lineWidth: 1))
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.fn)
+                }
+                Text("About a minute. Every step can be skipped and changed later in Settings.")
+                    .font(FN.font(13))
+                    .foregroundStyle(p.textMuted)
+                Stepper(stages: stages.map(\.label), current: 0)
+                    .padding(.top, 12)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minWidth: 420, maxWidth: .infinity, alignment: .leading)
+            WelcomePicture()
+                .frame(minWidth: 480, maxWidth: .infinity)
         }
     }
 
     private var edgeDockPage: some View {
-        HStack(alignment: .center, spacing: 44) {
-            VStack(alignment: .leading, spacing: 14) {
-                SerifTitle("Always at the\nedge of your screen", size: 38)
-                Text("A small handle waits on the side of whatever you're working in. Click it for a quick note, today's tasks, dictation, a spend or a question — then get back to what you were doing.")
-                    .font(FN.font(14.5)).foregroundStyle(s.muted).lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: 330, alignment: .leading)
-
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 8) {
-                        Keycap("⇧"); Keycap("⌘"); Keycap(".")
-                        Text("opens it from Four Notes").font(FN.font(12.5)).foregroundStyle(s.muted)
-                    }
-                    Text("Drag the handle up or down, or drag a card's title to rearrange the drawer.")
-                        .font(FN.font(12.5)).foregroundStyle(s.faint)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: 330, alignment: .leading)
-                }
-                .padding(.top, 4)
-
-                Toggle(isOn: Binding(get: { dock.isEnabled }, set: { if $0 != dock.isEnabled { dock.setEnabled($0) } })) {
-                    Text("Show the edge dock").font(FN.font(13, .medium)).foregroundStyle(s.ink)
-                }
-                .toggleStyle(.fnCheckbox)
-                .padding(.top, 6)
+        SideBySide {
+            Title("Always at the\nedge of your screen")
+            Lead("A small handle waits on the side of whatever you're working in. Click it for a quick note, today's tasks, dictation, a spend or a question, then get back to what you were doing.")
+            HStack(spacing: 6) {
+                KeyCap("⇧"); KeyCap("⌘"); KeyCap(".")
+                Text("opens it from Four Notes").font(FN.font(13)).foregroundStyle(p.textSecondary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
+            HStack(spacing: 12) {
+                Text("Show the edge dock").font(FN.body).foregroundStyle(p.foreground)
+                Toggle("Show the edge dock", isOn: Binding(get: { dock.isEnabled },
+                                                           set: { if $0 != dock.isEnabled { dock.setEnabled($0) } }))
+                    .toggleStyle(.fnSwitch)
+            }
+        } picture: {
             EdgeDockDemo(style: DockStyle.style(for: theme, scheme: scheme))
                 .frame(width: 440, height: 300)
-        }
-    }
-
-    private var look: some View {
-        VStack(spacing: 10) {
-            SerifTitle("Make it yours", size: 34, centered: true)
-            Text("Follow the system, or pick a look and keep it. Change it any time in Settings.")
-                .font(FN.font(14.5)).foregroundStyle(s.muted).multilineTextAlignment(.center)
-            HStack(spacing: 14) {
-                ForEach(ThemeChoice.allCases, id: \.self) { choice in
-                    ThemeTile(choice: choice, selected: theme == choice, systemScheme: scheme) {
-                        withAnimation(Motion.standard) { themeRaw = choice.rawValue }
-                    }
-                }
-            }
-            .padding(.top, 24)
-
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(p.border, lineWidth: 1))
         }
     }
 
     private var assistant: some View {
-        VStack(spacing: 10) {
-            SerifTitle("Meet your assistant", size: 34, centered: true)
-            Text(OnDevice.languageModelAvailable
-                 ? "It already works on this Mac with Apple Intelligence — offline and free. A key makes it sharper."
-                 : "Scanning and voice notes already work on this Mac. Chat needs a model: add a key, or set one up later.")
-                .font(FN.font(14.5)).foregroundStyle(s.muted).multilineTextAlignment(.center)
-                .frame(maxWidth: 520)
-
-            VStack(spacing: 10) {
-                if OnDevice.languageModelAvailable {
-                    HStack(spacing: 8) {
-                        Icon("check", size: 13, weight: 2.4).foregroundStyle(s.ok)
-                        Text("Apple Intelligence is ready on this Mac").font(FN.font(13, .medium)).foregroundStyle(s.ink)
+        Centered(title: "Meet your assistant",
+                 lead: OnDevice.languageModelAvailable
+                    ? "It already works on this Mac with Apple Intelligence, offline and free. A key makes it sharper."
+                    : "Scanning and voice notes already work on this Mac. Chat needs a model: add a key, or set one up later.") {
+            VStack(spacing: 24) {
+                VStack(spacing: 12) {
+                    if OnDevice.languageModelAvailable {
+                        HStack(spacing: 6) {
+                            Icon("check", size: 14)
+                            Text("Apple Intelligence is ready on this Mac")
+                        }
+                        .font(FN.font(13, .medium))
+                        .foregroundStyle(p.success)
+                        .padding(.horizontal, 12)
+                        .frame(height: 32)
+                        .background(p.successSubtle, in: Capsule())
                     }
-                    .padding(.horizontal, 14)
-                    .frame(height: 34)
-                    .background(s.ok.opacity(0.1), in: Capsule())
+                    // `.field .field-lg`
+                    SecureField("", text: $keyDraft, prompt: Text("Anthropic key (optional), sk-ant-…").foregroundStyle(p.textMuted))
+                        .textFieldStyle(.plain)
+                        .font(FN.body)
+                        .foregroundStyle(p.foreground)
+                        .padding(.horizontal, 16)
+                        .frame(height: 44)
+                        .background(p.surface, in: Capsule())
+                        .overlay(Capsule().strokeBorder(p.border, lineWidth: 1))
+                        .onSubmit(primary)
+                    Text("Prefer OpenRouter, OpenAI or a model on this Mac? Add it in \(Text("Settings, AI and keys").font(FN.font(13, .medium)).foregroundStyle(p.foreground)).")
+                        .font(FN.font(13))
+                        .foregroundStyle(p.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    ExternalLink(title: "Get an Anthropic key", address: "https://console.anthropic.com/settings/keys")
+                        .frame(minHeight: 44)
                 }
-                SecureField("", text: $keyDraft, prompt: Text("Anthropic key (optional) — sk-ant-…").foregroundStyle(s.faint))
-                    .textFieldStyle(.plain)
-                    .font(FN.font(13.5))
-                    .foregroundStyle(s.ink)
-                    .padding(.horizontal, 14)
-                    .frame(height: 38)
-                    .background(s.field, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(s.fieldEdge, lineWidth: 1))
-                    .onSubmit(primary)
-                HStack(spacing: 4) {
-                    Text("Prefer OpenRouter, OpenAI or a model on this Mac?").foregroundStyle(s.muted)
-                    Text("Settings → AI & API keys").fontWeight(.semibold).foregroundStyle(s.ink)
+                .frame(maxWidth: 380)
+                HStack(spacing: 24) {
+                    Trust(icon: "key", text: "Keys stay in your Keychain")
+                    Trust(icon: "monitor", text: "On this Mac when it can be")
+                    Trust(icon: "trash", text: "Delete any time")
                 }
-                .font(FN.font(12))
-                Button("Get an Anthropic key") {
-                    if let url = URL(string: "https://console.anthropic.com/settings/keys") { NSWorkspace.shared.open(url) }
-                }
-                .buttonStyle(.fn)
-                .font(FN.font(12, .semibold))
-                .foregroundStyle(s.accent)
             }
-            .frame(width: 340)
-            .padding(.top, 20)
+        }
+    }
 
-            HStack(spacing: 22) {
-                TrustBadge(icon: "key", text: "Keys stay in your Keychain")
-                TrustBadge(icon: "monitor", text: "On this Mac when it can be")
-                TrustBadge(icon: "trash", text: "Delete any time")
+    private var backup: some View {
+        Centered(title: "Keep a copy safe",
+                 lead: "Everything is saved on this Mac. Back it up to your own Google Drive and it stays in step with the web app.") {
+            VStack(alignment: .leading, spacing: 12) {
+                if let account = sync.account {
+                    HStack(spacing: 10) {
+                        GoogleG()
+                        Text(account.email ?? "Google Drive").font(FN.bodyMedium).foregroundStyle(p.foreground).lineLimit(1)
+                        StatusPill(text: sync.status == .syncing ? "Syncing…" : sync.status == .error ? "Sync error" : "Synced",
+                                   tone: sync.status == .error ? .bad : sync.status == .syncing ? .muted : .good)
+                    }
+                    Text("Syncing to a private app folder in your Google Drive. Changes sync automatically a few seconds after you edit.")
+                        .font(FN.font(13)).lineSpacing(5).foregroundStyle(p.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Sync with your Google account").font(FN.bodyMedium).foregroundStyle(p.foreground)
+                        Text("Keep notes, tasks and spending in step with the web app. Everything is saved in a private app folder in your own Google Drive that only Four Notes can open.")
+                            .font(FN.font(13)).lineSpacing(5).foregroundStyle(p.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    GoogleButton(label: sync.connecting ? "Waiting for Google…" : "Continue with Google",
+                                 disabled: sync.connecting) {
+                        Task { await sync.connect() }
+                    }
+                    if let message = sync.message {
+                        Text(message).font(FN.font(13)).foregroundStyle(p.danger)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
             }
-            .padding(.top, 26)
+            .padding(20)
+            .frame(maxWidth: 480, alignment: .leading)
+            .background(p.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(p.border, lineWidth: 1))
         }
     }
 
     private var money: some View {
-        HStack(alignment: .center, spacing: 40) {
-            VStack(alignment: .leading, spacing: 14) {
-                SerifTitle("Bring your\nmoney in", size: 38)
-                Text("Pick the currency you count in. Budgets and categories can wait.")
-                    .font(FN.font(14.5)).foregroundStyle(s.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: 340, alignment: .leading)
-
-                HStack(spacing: 10) {
-                    Text("Currency").font(FN.font(13)).foregroundStyle(s.muted)
-                    SelectMenu(options: CURRENCIES.map { ($0, $0) },
-                               selection: Binding(
-                        get: { store.settings.currency },
-                        set: { c in store.updateSettings { $0.currency = c } }),
-                               width: 110)
-                }
-                .padding(.top, 6)
-
-                HStack(spacing: 6) {
-                    Text("“").font(.system(size: 18, design: .serif)).foregroundStyle(s.accent)
-                    Button(store.hasSamples ? "Sample data is loaded — remove it any time in Settings"
-                           : "Load a few samples to look around first") {
-                        guard !store.hasSamples else { return }
-                        store.loadSamples()
-                        toasts.push("Sample data loaded. Remove it any time in Settings → Data & privacy.")
-                    }
-                    .buttonStyle(.fn)
-                    .font(.system(size: 13, design: .serif))
-                    .foregroundStyle(store.hasSamples ? s.muted : s.accent)
-                }
+        SideBySide {
+            Title("Bring your\nmoney in")
+            Lead("Pick the currency you count in. Budgets and categories can wait.")
+            HStack(spacing: 12) {
+                Text("Currency").font(FN.body).foregroundStyle(p.textSecondary)
+                SelectMenu(options: CURRENCIES.map { ($0, $0) },
+                           selection: Binding(
+                    get: { store.settings.currency },
+                    set: { c in store.updateSettings { $0.currency = c } }))
+                    .fixedSize()
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
+            if store.hasSamples {
+                Text("Sample data is loaded. Remove it any time in Settings.")
+                    .font(FN.font(13)).foregroundStyle(p.textMuted)
+            } else {
+                Button {
+                    store.loadSamples()
+                    toasts.push("Sample data loaded. Remove it any time in Settings, Data and privacy.")
+                } label: {
+                    Text("Load a few samples to look around first")
+                        .font(FN.font(13))
+                        .foregroundStyle(p.foreground)
+                        .underline(color: p.borderStrong)
+                        .frame(minHeight: 44)
+                }
+                .buttonStyle(.fn)
+            }
+        } picture: {
             FeatureOrbit()
-                .frame(width: 340, height: 320)
         }
     }
 
     private var celebration: some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 0)
+        VStack(spacing: 36) {
             CelebrationRow()
-            HStack(spacing: 8) {
-                Text("“").font(.system(size: 18, design: .serif)).foregroundStyle(s.accent)
-                Text("Your notebook is ready. The edge dock waits on the side of your screen — ⇧⌘. opens it.")
-                    .font(.system(size: 14, design: .serif))
-                    .foregroundStyle(s.muted)
-            }
-            .padding(.top, 34)
-            Spacer(minLength: 0)
+            Text("Your notebook is ready. The edge dock waits on the side of your screen; ⇧⌘. opens it.")
+                .font(FN.body)
+                .foregroundStyle(p.textSecondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 420)
         }
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Reminders
 
     private var remindersButton: some View {
-        Button {
+        SecondaryButton(title: remindersOn ? "Reminders on" : remindersBlocked ? "Reminders blocked in System Settings" : "Turn on reminders",
+                        icon: remindersOn ? "check" : "bell") {
             Task { await turnOnReminders() }
-        } label: {
-            HStack(spacing: 6) {
-                Icon(remindersOn ? "check" : "bell", size: 13, weight: 2)
-                Text(remindersOn ? "Reminders on" : "Turn on reminders")
-            }
-            .font(FN.font(13, .medium))
-            .foregroundStyle(remindersOn ? s.muted : s.ink)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.fn)
         .disabled(remindersOn)
         .animation(Motion.standard, value: remindersOn)
     }
 
     private func refreshReminders() async {
-        let settings = await UNUserNotificationCenter.current().notificationSettings()
-        remindersOn = settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional
+        let status = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+        remindersOn = status == .authorized || status == .provisional
+        remindersBlocked = status == .denied
     }
 
     private func turnOnReminders() async {
@@ -420,7 +453,648 @@ struct OnboardingView: View {
     }
 }
 
-// MARK: - Style
+// MARK: - Layout pieces
+
+/// The stages, numbered: done ones ticked on the accent wash, the current one in the accent.
+private struct Stepper: View {
+    @Environment(\.palette) private var p
+    let stages: [String]
+    let current: Int
+
+    var body: some View {
+        HStack(spacing: 20) {
+            ForEach(Array(stages.enumerated()), id: \.offset) { i, label in
+                let done = i < current
+                let now = i == current
+                HStack(spacing: 8) {
+                    ZStack {
+                        if now {
+                            Circle().fill(p.accent)
+                        } else if done {
+                            Circle().fill(p.accentSubtle)
+                        } else {
+                            Circle().strokeBorder(p.borderStrong, lineWidth: 1)
+                        }
+                        if done {
+                            Icon("check", size: 12).foregroundStyle(p.foreground)
+                        } else {
+                            Text("\(i + 1)").font(FN.small).monospacedDigit()
+                                .foregroundStyle(now ? p.accentForeground : p.textMuted)
+                        }
+                    }
+                    .frame(width: 22, height: 22)
+                    Text(label)
+                        .font(FN.font(13, now ? .medium : .regular))
+                        .foregroundStyle(now ? p.foreground : p.textMuted)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityValue(now ? "Current step" : done ? "Done" : "")
+            }
+        }
+        .fixedSize()
+        .animation(Motion.standard, value: current)
+    }
+}
+
+private struct Title: View {
+    @Environment(\.palette) private var p
+    let text: String
+    var centered = false
+    init(_ text: String, centered: Bool = false) {
+        self.text = text
+        self.centered = centered
+    }
+
+    var body: some View {
+        DisplayLines(text, size: 44, centered: centered)
+    }
+}
+
+/// Display type on the web's tight line (1.1): each line its own row, as a line height
+/// under the font's own can't be set.
+private struct DisplayLines: View {
+    @Environment(\.palette) private var p
+    let lines: [String]
+    let size: CGFloat
+    var centered = false
+
+    init(_ text: String, size: CGFloat, centered: Bool = false) {
+        lines = text.components(separatedBy: "\n")
+        self.size = size
+        self.centered = centered
+    }
+
+    var body: some View {
+        VStack(alignment: centered ? .center : .leading, spacing: 0) {
+            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                Text(line)
+                    .font(FN.display(size))
+                    .tracking(FN.displayTracking(size))
+                    .foregroundStyle(p.foreground)
+                    .multilineTextAlignment(centered ? .center : .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(1)
+                    .frame(height: (size * 1.1).rounded())
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+    }
+}
+
+private struct Lead: View {
+    @Environment(\.palette) private var p
+    let text: String
+    var width: CGFloat = 420
+    var centered = false
+    init(_ text: String, width: CGFloat = 420, centered: Bool = false) {
+        self.text = text
+        self.width = width
+        self.centered = centered
+    }
+
+    var body: some View {
+        Text(text)
+            .font(FN.font(18))
+            .lineSpacing(7)
+            .foregroundStyle(p.textSecondary)
+            .multilineTextAlignment(centered ? .center : .leading)
+            .frame(maxWidth: width, alignment: centered ? .center : .leading)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// Words on one side, a picture on the other.
+private struct SideBySide<Words: View, Picture: View>: View {
+    var pictureFirst = false
+    @ViewBuilder var words: () -> Words
+    @ViewBuilder var picture: () -> Picture
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 48) {
+            if pictureFirst { pictureView }
+            VStack(alignment: .leading, spacing: 20) { words() }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if !pictureFirst { pictureView }
+        }
+        .frame(maxWidth: 1000)
+    }
+
+    private var pictureView: some View {
+        picture().frame(maxWidth: .infinity)
+    }
+}
+
+private struct Centered<Content: View>: View {
+    let title: String
+    let lead: String
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Title(title, centered: true)
+            Lead(lead, width: 560, centered: true)
+                .padding(.top, 16)
+            content()
+                .frame(maxWidth: .infinity)
+                .padding(.top, 32)
+        }
+        .frame(maxWidth: 1000)
+    }
+}
+
+/// Steps arrive out of a soft blur and leave into one.
+private struct BlurStep: ViewModifier {
+    let amount: Double
+    let shift: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .blur(radius: 14 * amount)
+            .opacity(1 - amount)
+            .offset(x: shift * amount)
+    }
+}
+
+/// Comes in once, a beat after the one before it.
+private struct Arrive: ViewModifier {
+    let delay: Double
+    @State private var shown = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(shown ? 1 : 0)
+            .blur(radius: shown ? 0 : 6)
+            .offset(y: shown ? 0 : 10)
+            .onAppear {
+                guard !shown else { return }
+                if reduceMotion { shown = true; return }
+                withAnimation(.spring(response: 0.6, dampingFraction: 0.85).delay(delay)) { shown = true }
+            }
+    }
+}
+
+extension View {
+    fileprivate func arrive(_ delay: Double) -> some View { modifier(Arrive(delay: delay)) }
+}
+
+/// A card resting on its border, the building block of every picture.
+private struct PictureCard<Content: View>: View {
+    @Environment(\.palette) private var p
+    var radius: CGFloat = 22
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        content()
+            .background(p.surface, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(p.border, lineWidth: 1))
+    }
+}
+
+/// The app's mark on a rounded tile.
+private struct MarkTile: View {
+    @Environment(\.palette) private var p
+    var size: CGFloat = 56
+
+    var body: some View {
+        Logo(size: (size * 0.62).rounded())
+            .frame(width: size, height: size)
+            .background(p.surface, in: RoundedRectangle(cornerRadius: (size * 0.3).rounded(), style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: (size * 0.3).rounded(), style: .continuous).strokeBorder(p.border, lineWidth: 1))
+    }
+}
+
+/// An item's kind, as a quiet tile.
+private struct Glyph: View {
+    @Environment(\.palette) private var p
+    let icon: String
+    var size: CGFloat = 40
+    var accent = false
+
+    var body: some View {
+        Icon(icon, size: (size * 0.5).rounded())
+            .foregroundStyle(accent ? p.accent : p.textSecondary)
+            .frame(width: size, height: size)
+            .background(p.surfaceMuted, in: RoundedRectangle(cornerRadius: (size * 0.35).rounded(), style: .continuous))
+            .accessibilityHidden(true)
+    }
+}
+
+private struct Trust: View {
+    @Environment(\.palette) private var p
+    let icon: String
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Icon(icon, size: 14).foregroundStyle(p.textMuted)
+            Text(text).font(FN.font(13)).foregroundStyle(p.textSecondary)
+        }
+    }
+}
+
+// MARK: - Pictures
+
+/// One message in, and the things the assistant filed from it, on a very soft wash.
+private struct WelcomePicture: View {
+    @Environment(\.palette) private var p
+    @Environment(\.colorScheme) private var scheme
+    @AppStorage("fournotes.theme") private var themeRaw = ThemeChoice.system.rawValue
+
+    private var wash: [Color] {
+        if scheme == .dark { return [.hex(0x211D27), .hex(0x271F17)] }
+        if themeRaw == ThemeChoice.paper.rawValue { return [.hex(0xFDEDE0), .hex(0xF6F4E5)] }
+        return [.hex(0xF6F2FF), .hex(0xFFF5E8)]
+    }
+
+    var body: some View {
+        let rows: [(icon: String, title: String, detail: String, trailing: String, faded: Bool)] = [
+            ("finance", "Kopi Kenangan", "Finance, food and drink", Money.format(25_000, "IDR"), false),
+            ("todo", "Pay the electricity bill", "To-Do, reminder set", "Tomorrow, 9:00", false),
+            ("note", "Singapore trip", "Notes, flights on the 12th, hotel near Bugis", "Yesterday", true),
+        ]
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Kopi Kenangan 25k, and pay the electricity bill tomorrow at 9")
+                .font(FN.font(15))
+                .lineSpacing(3)
+                .foregroundStyle(p.accentForeground)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(p.accent, in: UnevenRoundedRectangle(topLeadingRadius: 22, bottomLeadingRadius: 22,
+                                                                 bottomTrailingRadius: 6, topTrailingRadius: 22,
+                                                                 style: .continuous))
+                .frame(maxWidth: 380, alignment: .trailing)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .fixedSize(horizontal: false, vertical: true)
+                .arrive(0.1)
+            HStack(spacing: 8) {
+                Icon("sparkle", size: 16).foregroundStyle(p.accent)
+                Text("Filed 2 things")
+            }
+            .font(FN.font(13))
+            .foregroundStyle(p.textSecondary)
+            .padding(.horizontal, 4)
+            .padding(.top, 4)
+            .arrive(0.35)
+            ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
+                PictureCard {
+                    HStack(spacing: 14) {
+                        Glyph(icon: row.icon)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(row.title).font(FN.bodyMedium).foregroundStyle(p.foreground)
+                            Text(row.detail).font(FN.font(13)).foregroundStyle(p.textMuted).lineLimit(1)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        Text(row.trailing)
+                            .font(i == 0 ? FN.bodyMedium : FN.font(13))
+                            .monospacedDigit()
+                            .foregroundStyle(i == 0 ? p.foreground : i == 1 ? p.textSecondary : p.textMuted)
+                    }
+                    .padding(16)
+                }
+                .opacity(row.faded ? 0.72 : 1)
+                .arrive(0.45 + Double(i) * 0.12)
+            }
+        }
+        .padding(40)
+        .background(LinearGradient(colors: wash, startPoint: .topLeading, endPoint: .bottomTrailing),
+                    in: RoundedRectangle(cornerRadius: FN.radiusSurface, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("How the assistant files things")
+    }
+}
+
+/// A small Today page: the sidebar, what's due, and the assistant's note.
+private struct TodayMock: View {
+    @Environment(\.palette) private var p
+
+    private func line(_ icon: String, _ title: String, _ detail: String, _ tag: String, accent: Bool = false) -> some View {
+        HStack(spacing: 8) {
+            Glyph(icon: icon, size: 22)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(title).font(FN.font(11, .medium)).foregroundStyle(p.foreground)
+                Text(detail).font(FN.font(10)).foregroundStyle(p.textMuted)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Text(tag).font(FN.font(10, accent ? .medium : .regular)).monospacedDigit()
+                .foregroundStyle(accent ? p.accent : p.textMuted)
+        }
+    }
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            PictureCard {
+                HStack(spacing: 0) {
+                    VStack(spacing: 14) {
+                        Logo(size: 16)
+                        ForEach(["today", "note", "todo", "finance"], id: \.self) { icon in
+                            Icon(icon, size: 13).foregroundStyle(icon == "today" ? p.accent : p.textMuted)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.top, 12)
+                    .frame(width: 42)
+                    .frame(maxHeight: .infinity)
+                    .background(p.sidebar)
+                    .overlay(alignment: .trailing) { Rectangle().fill(p.border).frame(width: 1) }
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Today").font(FN.font(13, .medium)).foregroundStyle(p.foreground)
+                            Spacer()
+                            Icon("search", size: 11).foregroundStyle(p.textMuted)
+                        }
+                        Text("Due today \(Text("2").font(FN.font(10.5)).foregroundStyle(p.textMuted))")
+                            .font(FN.font(10.5, .medium)).foregroundStyle(p.foreground)
+                            .padding(.top, 2)
+                        line("todo", "Pay the electricity bill", "9:00, Bills", "Due", accent: true)
+                        line("todo", "Send the Q3 deck to Maya", "Before 5 PM", "2h")
+                        Text("Spent yesterday").font(FN.font(10.5, .medium)).foregroundStyle(p.foreground)
+                            .padding(.top, 2)
+                        line("coffee", "Kopi Kenangan", "Food and drink", Money.format(25_000, "IDR"))
+                        line("cart", "Indomaret", "Groceries", Money.format(128_500, "IDR"))
+                        Spacer(minLength: 0)
+                    }
+                    .padding(14)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            }
+            .frame(width: 440, height: 250)
+            .arrive(0.05)
+
+            PictureCard {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        MarkTile(size: 26)
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text("Assistant").font(FN.font(12.5, .medium)).foregroundStyle(p.foreground)
+                            Text("One message, three things").font(FN.font(10.5)).foregroundStyle(p.textMuted)
+                        }
+                    }
+                    ForEach(["A task for Friday", "Rp 45,000 at Warteg", "A note: “gift ideas”"], id: \.self) { item in
+                        HStack(spacing: 6) {
+                            Icon("check", size: 10).foregroundStyle(p.success)
+                            Text(item).font(FN.font(11.5)).foregroundStyle(p.foreground)
+                        }
+                    }
+                }
+                .padding(12)
+                .frame(width: 200, alignment: .leading)
+            }
+            .offset(x: 540 - 200, y: 270 - 128)
+            .arrive(0.3)
+        }
+        .frame(width: 540, height: 270, alignment: .topLeading)
+    }
+}
+
+/// "Remind me…" and the task it becomes, typed out as it happens.
+private struct RemindMock: View {
+    @Environment(\.palette) private var p
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private let message = "Remind me to pay rent on Friday"
+    @State private var typed = 0
+    @State private var filed = false
+
+    var body: some View {
+        PictureCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    MarkTile(size: 30)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("Four Notes").font(FN.font(13, .medium)).foregroundStyle(p.foreground)
+                        Text("Assistant").font(FN.font(11)).foregroundStyle(p.textMuted)
+                    }
+                }
+                Rectangle().fill(p.borderSubtle).frame(height: 1)
+                Text(String(message.prefix(typed)) + (typed < message.count ? "▍" : ""))
+                    .font(FN.font(13))
+                    .foregroundStyle(p.accentForeground)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(p.accent, in: UnevenRoundedRectangle(topLeadingRadius: 18, bottomLeadingRadius: 18,
+                                                                     bottomTrailingRadius: 6, topTrailingRadius: 18,
+                                                                     style: .continuous))
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.leading, 40)
+                if filed {
+                    HStack(spacing: 10) {
+                        Glyph(icon: "bell", size: 30, accent: true)
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text("Pay rent").font(FN.font(13, .medium)).foregroundStyle(p.foreground)
+                            Text("Friday, 9:00. I'll remind you").font(FN.font(11.5)).foregroundStyle(p.textMuted)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        Icon("check", size: 13).foregroundStyle(p.success)
+                    }
+                    .padding(10)
+                    .background(p.surfaceMuted, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .transition(.opacity.combined(with: .offset(y: 8)))
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(16)
+            .frame(width: 360, height: 230, alignment: .topLeading)
+        }
+        .arrive(0.05)
+        .task {
+            if reduceMotion { typed = message.count; filed = true; return }
+            try? await Task.sleep(for: .milliseconds(450))
+            while typed < message.count, !Task.isCancelled {
+                typed += 1
+                try? await Task.sleep(for: .milliseconds(34))
+            }
+            try? await Task.sleep(for: .milliseconds(350))
+            withAnimation(Motion.standard) { filed = true }
+        }
+    }
+}
+
+/// Each way the brief can read, shown as a small live Today; a link or row lights up in turn.
+private struct BriefTiles: View {
+    @Environment(\.palette) private var p
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(BriefStyle.storageKey) private var briefStyleRaw = BriefStyle.paragraph.rawValue
+    @State private var beat = 0
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 40) {
+            tile(.paragraph).arrive(0.08)
+            tile(.points).arrive(0.18)
+        }
+        .task {
+            guard !reduceMotion else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(1100))
+                withAnimation(Motion.standard) { beat += 1 }
+            }
+        }
+    }
+
+    private func tile(_ style: BriefStyle) -> some View {
+        let selected = briefStyleRaw == style.rawValue
+        return Button { withAnimation(Motion.standard) { briefStyleRaw = style.rawValue } } label: {
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Good morning.").font(FN.font(17, .medium)).foregroundStyle(p.foreground)
+                    if style == .paragraph { paragraph.padding(.top, 8) } else { points.padding(.top, 10) }
+                    Spacer(minLength: 0)
+                }
+                .padding(16)
+                .frame(width: 280, height: 164, alignment: .topLeading)
+                .background(p.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .strokeBorder(selected ? p.accent : p.border, lineWidth: 1))
+                .background(RoundedRectangle(cornerRadius: 25, style: .continuous)
+                    .fill(selected ? p.accentSubtle : .clear).padding(-3))
+                HStack(spacing: 6) {
+                    Icon(style.icon, size: 15)
+                    Text(style.label)
+                    if style == .paragraph {
+                        Text("Compact")
+                            .font(FN.font(11, .medium))
+                            .foregroundStyle(p.accent)
+                            .padding(.horizontal, 8)
+                            .frame(height: 20)
+                            .background(p.accentSubtle, in: Capsule())
+                    }
+                    Spacer(minLength: 0)
+                    Circle()
+                        .strokeBorder(selected ? p.accent : p.borderStrong, lineWidth: 1.5)
+                        .overlay { if selected { Circle().fill(p.accent).frame(width: 8, height: 8) } }
+                        .frame(width: 18, height: 18)
+                }
+                .font(FN.font(14, selected ? .medium : .regular))
+                .foregroundStyle(selected ? p.foreground : p.textSecondary)
+                .padding(.top, 12)
+                Text(style.detail)
+                    .font(FN.font(13))
+                    .foregroundStyle(p.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 4)
+            }
+            .frame(width: 280, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.fn)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private var paragraph: some View {
+        let parts: [(String, Bool)] = [("You have ", false), ("3 things due", true), (" today, starting with ", false),
+                                       ("Call Budi", true), (" at 2:30 PM. Yesterday you spent ", false),
+                                       ("Rp 120rb", true), (", mostly on food.", false)]
+        var out = AttributedString()
+        var link = 0
+        for (text, isLink) in parts {
+            var run = AttributedString(text)
+            if isLink {
+                let lit = link == beat % 3
+                run.foregroundColor = lit ? p.accent : p.foreground
+                run.underlineStyle = Text.LineStyle(pattern: .solid, color: lit ? p.accent : p.borderStrong)
+                link += 1
+            }
+            out += run
+        }
+        return Text(out)
+            .font(FN.font(12.5))
+            .lineSpacing(6.5)
+            .foregroundStyle(p.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var points: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            ForEach(Array([("✳︎", 150.0), ("○", 120.0), ("○", 170.0), ("⚠︎", 110.0)].enumerated()), id: \.offset) { i, row in
+                let lit = beat % 4 == i
+                HStack(spacing: 9) {
+                    Text(row.0).font(FN.font(10)).foregroundStyle(lit ? p.accent : p.textMuted).frame(width: 12)
+                    Capsule().fill(lit ? p.accent : p.controlTrack).frame(width: row.1, height: 5)
+                }
+                .offset(x: lit ? 3 : 0)
+            }
+        }
+    }
+}
+
+/// Everything the app does, around its mark.
+private struct FeatureOrbit: View {
+    @Environment(\.palette) private var p
+    private let items = [("note", "Notes"), ("todo", "To-Do"), ("finance", "Finance"), ("scan", "Scan"), ("mic", "Voice"), ("search", "Search")]
+    private let r: CGFloat = 124
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .strokeBorder(p.borderStrong, style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                .frame(width: r * 2, height: r * 2)
+            MarkTile(size: 70).arrive(0.05)
+            ForEach(Array(items.enumerated()), id: \.offset) { i, item in
+                let a = -Double.pi / 2 + Double(i) * 2 * .pi / Double(items.count)
+                VStack(spacing: 5) {
+                    Icon(item.0, size: 17)
+                        .foregroundStyle(p.textSecondary)
+                        .frame(width: 42, height: 42)
+                        .background(p.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(p.border, lineWidth: 1))
+                    Text(item.1).font(FN.font(11)).foregroundStyle(p.textMuted)
+                }
+                .offset(x: cos(a) * r, y: sin(a) * r + 8)
+                .arrive(0.12 + Double(i) * 0.07)
+            }
+        }
+        .frame(width: 320, height: 320)
+    }
+}
+
+/// The last page: what you just set up, in a row, with the mark raised.
+private struct CelebrationRow: View {
+    @Environment(\.palette) private var p
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var raised = false
+
+    private func tile(_ icon: String) -> some View {
+        Icon(icon, size: 20)
+            .foregroundStyle(p.textSecondary)
+            .frame(width: 50, height: 50)
+            .background(p.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(p.border, lineWidth: 1))
+    }
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Text("I've just set up my Four Notes 🎉")
+                .font(FN.display(32))
+                .tracking(FN.displayTracking(32))
+                .foregroundStyle(p.foreground)
+                .padding(.horizontal, 22)
+                .frame(minHeight: 50)
+                .background(p.surface, in: Capsule())
+                .overlay(Capsule().strokeBorder(p.border, lineWidth: 1))
+                .arrive(0.35)
+            HStack(spacing: 12) {
+                ForEach(["note", "todo", "today"], id: \.self) { tile($0) }
+                MarkTile(size: 74)
+                    .scaleEffect(raised ? 1 : 0.73)
+                    .offset(y: raised ? -14 : 0)
+                ForEach(["finance", "mic", "scan"], id: \.self) { tile($0) }
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 76)
+            .background(p.surfaceMuted, in: RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous).strokeBorder(p.border, lineWidth: 1))
+            .arrive(0.05)
+        }
+        .onAppear {
+            if reduceMotion { raised = true; return }
+            withAnimation(.spring(response: 0.7, dampingFraction: 0.6).delay(0.25)) { raised = true }
+        }
+    }
+}
+
+// MARK: - The edge dock's demo
+
+/// Colours for the edge dock's demo, which draws a small screen of its own.
 
 /// Colours for the setup: warm light over white, or the same light at night.
 struct OnboardingStyle {
@@ -459,688 +1133,6 @@ extension EnvironmentValues {
     fileprivate var onboarding: OnboardingStyle {
         get { self[OnboardingStyleKey.self] }
         set { self[OnboardingStyleKey.self] = newValue }
-    }
-}
-
-// MARK: - Pieces
-
-/// The shared calm wash, drifting — brighter at the end.
-private struct OnboardingBackground: View {
-    let style: OnboardingStyle
-    let glow: Double
-
-    var body: some View {
-        CalmBackground(base: style.base, warm: style.peach, cool: style.sky,
-                       glow: glow, dark: style.dark, animated: true)
-    }
-}
-
-/// Steps arrive out of a soft blur and leave into one.
-private struct BlurStep: ViewModifier {
-    let amount: Double
-    let shift: CGFloat
-
-    func body(content: Content) -> some View {
-        content
-            .blur(radius: 14 * amount)
-            .opacity(1 - amount)
-            .offset(x: shift * amount)
-    }
-}
-
-private struct SerifTitle: View {
-    @Environment(\.onboarding) private var s
-    let text: String
-    let size: CGFloat
-    var centered = false
-
-    init(_ text: String, size: CGFloat, centered: Bool = false) {
-        self.text = text
-        self.size = size
-        self.centered = centered
-    }
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: size, weight: .regular, design: .serif))
-            .tracking(-0.6)
-            .lineSpacing(0)
-            .foregroundStyle(s.ink)
-            .multilineTextAlignment(centered ? .center : .leading)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-}
-
-private struct OnboardingPrimary: View {
-    @Environment(\.onboarding) private var s
-    @State private var hovering = false
-    let title: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Text(title).lineLimit(1)
-                Image(systemName: "return").font(.system(size: 10, weight: .semibold)).opacity(0.6)
-            }
-            .font(FN.font(13, .semibold))
-            .foregroundStyle(s.buttonText)
-            .padding(.horizontal, 14)
-            .frame(height: 32)
-            .background(s.buttonFill.opacity(hovering ? 0.86 : 1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .fixedSize()
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.fn)
-        .keyboardShortcut(.defaultAction)
-        .onHover { hovering = $0 }
-        .animation(Motion.quick, value: title)
-    }
-}
-
-private struct ProgressDashes: View {
-    @Environment(\.onboarding) private var s
-    let count: Int
-    let current: Int
-
-    var body: some View {
-        HStack(spacing: 5) {
-            ForEach(0..<count, id: \.self) { index in
-                Capsule()
-                    .fill(index == current ? s.accent : s.faint.opacity(index < current ? 0.55 : 0.28))
-                    .frame(width: index == current ? 24 : 16, height: 3)
-            }
-        }
-        .animation(Motion.standard, value: current)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Step \(current + 1) of \(count)")
-    }
-}
-
-/// A white card with a soft shadow, the building block of every picture.
-private struct PaperCard<Content: View>: View {
-    @Environment(\.onboarding) private var s
-    var radius: CGFloat = 14
-    @ViewBuilder var content: () -> Content
-
-    var body: some View {
-        content()
-            .background(s.card, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).stroke(s.cardEdge, lineWidth: 1))
-            .shadow(color: .black.opacity(s.dark ? 0.35 : 0.07), radius: 14, y: 6)
-    }
-}
-
-/// Comes in once, a beat after the one before it.
-private struct Arrive: ViewModifier {
-    let delay: Double
-    @State private var shown = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    func body(content: Content) -> some View {
-        content
-            .opacity(shown ? 1 : 0)
-            .blur(radius: shown ? 0 : 6)
-            .offset(y: shown ? 0 : 10)
-            .onAppear {
-                guard !shown else { return }
-                if reduceMotion { shown = true; return }
-                withAnimation(.spring(response: 0.6, dampingFraction: 0.85).delay(delay)) { shown = true }
-            }
-    }
-}
-
-extension View {
-    fileprivate func arrive(_ delay: Double) -> some View { modifier(Arrive(delay: delay)) }
-}
-
-/// The app's mark on a rounded tile, like an app icon.
-private struct MarkTile: View {
-    @Environment(\.onboarding) private var s
-    var size: CGFloat = 56
-
-    var body: some View {
-        Logo(size: size * 0.62)
-            .frame(width: size, height: size)
-            .background(s.card, in: RoundedRectangle(cornerRadius: size * 0.26, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: size * 0.26, style: .continuous).stroke(s.cardEdge, lineWidth: 1))
-            .shadow(color: .black.opacity(s.dark ? 0.4 : 0.09), radius: 12, y: 5)
-    }
-}
-
-private struct Glyph: View {
-    let icon: String
-    let tone: Color
-    var size: CGFloat = 30
-
-    var body: some View {
-        Icon(icon, size: size * 0.5, weight: 1.9)
-            .foregroundStyle(.white)
-            .frame(width: size, height: size)
-            .background(tone, in: Circle())
-    }
-}
-
-// MARK: - Pictures
-
-/// Four things the app keeps, floating in a loose stack.
-private struct WelcomeCards: View {
-    @Environment(\.onboarding) private var s
-
-    var body: some View {
-        ZStack(alignment: .topLeading) {
-            MarkTile(size: 54)
-                .rotationEffect(.degrees(-6))
-                .offset(x: -18, y: -14)
-                .arrive(0.05)
-                .zIndex(1)
-
-            VStack(alignment: .leading, spacing: 12) {
-                row(icon: "note", tone: .hex(0x7D6FF6), title: "Singapore trip",
-                    detail: "Flights on the 12th, hotel near Bugis…", trailing: "Note", x: 26)
-                    .arrive(0.15)
-                row(icon: "todo", tone: .hex(0x3BA5F1), title: "Pay the electricity bill",
-                    detail: "Tomorrow, 9:00", trailing: "Due", trailingTone: s.accent, x: 6)
-                    .arrive(0.27)
-                row(icon: "coffee", tone: .hex(0xF0A23B), title: "Kopi Kenangan",
-                    detail: "Food & Drink", trailing: "Rp 25.000", x: 30)
-                    .arrive(0.39)
-                row(icon: "sparkle", tone: .hex(0x3CC6A3), title: "Receipt filed",
-                    detail: "Rp 128.500 at Indomaret · Groceries", trailing: "now", x: 12)
-                    .arrive(0.51)
-            }
-            .padding(.top, 34)
-        }
-    }
-
-    private func row(icon: String, tone: Color, title: String, detail: String, trailing: String,
-                     trailingTone: Color? = nil, x: CGFloat) -> some View {
-        PaperCard {
-            HStack(spacing: 10) {
-                Glyph(icon: icon, tone: tone)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(FN.font(13, .semibold)).foregroundStyle(s.ink)
-                    Text(detail).font(FN.font(11.5)).foregroundStyle(s.muted).lineLimit(1)
-                }
-                Spacer(minLength: 6)
-                Text(trailing).font(FN.font(11, .medium)).foregroundStyle(trailingTone ?? s.faint)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .frame(width: 300)
-        }
-        .offset(x: x)
-    }
-}
-
-/// A small Today page: the sidebar, what's due, and the assistant's note.
-private struct TodayMock: View {
-    @Environment(\.onboarding) private var s
-
-    var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            PaperCard(radius: 12) {
-                HStack(spacing: 0) {
-                    VStack(spacing: 14) {
-                        Logo(size: 16).padding(.top, 12)
-                        ForEach(["today", "note", "todo", "finance"], id: \.self) { icon in
-                            Icon(icon, size: 13).foregroundStyle(icon == "today" ? s.accent : s.faint)
-                        }
-                        Spacer()
-                    }
-                    .frame(width: 42)
-                    .background(s.field.opacity(0.7))
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Today").font(FN.font(13, .semibold)).foregroundStyle(s.ink)
-                            Spacer()
-                            Icon("search", size: 11).foregroundStyle(s.faint)
-                        }
-                        section("Due today", "2")
-                        line(icon: "todo", tone: .hex(0x3BA5F1), title: "Pay the electricity bill", detail: "9:00 · Bills", tag: "Due", tagTone: s.accent)
-                        line(icon: "todo", tone: .hex(0x7D6FF6), title: "Send the Q3 deck to Maya", detail: "Before 5 PM", tag: "2h", tagTone: s.faint)
-                        section("Spent yesterday", "")
-                        line(icon: "coffee", tone: .hex(0xF0A23B), title: "Kopi Kenangan", detail: "Food & Drink", tag: "Rp 25.000", tagTone: s.muted)
-                        line(icon: "cart", tone: .hex(0x3CC6A3), title: "Indomaret", detail: "Groceries", tag: "Rp 128.500", tagTone: s.muted)
-                    }
-                    .padding(14)
-                }
-                .frame(width: 440, height: 250)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .arrive(0.05)
-
-            PaperCard {
-                VStack(alignment: .leading, spacing: 7) {
-                    HStack(spacing: 8) {
-                        MarkTile(size: 26)
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text("Assistant").font(FN.font(12.5, .semibold)).foregroundStyle(s.ink)
-                            Text("One message, three things").font(FN.font(10.5)).foregroundStyle(s.muted)
-                        }
-                    }
-                    filed("A task for Friday")
-                    filed("Rp 45.000 at Warteg")
-                    filed("A note: “gift ideas”")
-                }
-                .padding(12)
-                .frame(width: 200, alignment: .leading)
-            }
-            .rotationEffect(.degrees(2.5))
-            .offset(x: 10, y: 14)
-            .arrive(0.3)
-        }
-    }
-
-    private func section(_ title: String, _ count: String) -> some View {
-        HStack(spacing: 5) {
-            Text(title).font(FN.font(10.5, .semibold)).foregroundStyle(s.ink)
-            Text(count).font(FN.font(10.5)).foregroundStyle(s.faint)
-        }
-        .padding(.top, 2)
-    }
-
-    private func line(icon: String, tone: Color, title: String, detail: String, tag: String, tagTone: Color) -> some View {
-        HStack(spacing: 8) {
-            Glyph(icon: icon, tone: tone, size: 20)
-            VStack(alignment: .leading, spacing: 0) {
-                Text(title).font(FN.font(11, .semibold)).foregroundStyle(s.ink)
-                Text(detail).font(FN.font(10)).foregroundStyle(s.muted)
-            }
-            Spacer()
-            Text(tag).font(FN.font(10, .medium)).foregroundStyle(tagTone)
-        }
-    }
-
-    private func filed(_ text: String) -> some View {
-        HStack(spacing: 6) {
-            Icon("check", size: 10, weight: 2.4).foregroundStyle(s.ok)
-            Text(text).font(FN.font(11.5)).foregroundStyle(s.ink)
-        }
-    }
-}
-
-/// "Remind me…" and the task it becomes, typed out as it happens.
-private struct RemindMock: View {
-    @Environment(\.onboarding) private var s
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var typed = 0
-    @State private var filed = false
-    private let message = "Remind me to pay rent on Friday"
-
-    var body: some View {
-        PaperCard {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 10) {
-                    MarkTile(size: 30)
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text("Four Notes").font(FN.font(13, .semibold)).foregroundStyle(s.ink)
-                        Text("Assistant").font(FN.font(11)).foregroundStyle(s.muted)
-                    }
-                }
-                Divider().overlay(s.cardEdge)
-
-                HStack {
-                    Spacer(minLength: 40)
-                    Text(String(message.prefix(typed)) + (typed < message.count ? "▍" : ""))
-                        .font(FN.font(13))
-                        .foregroundStyle(s.buttonText)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(s.buttonFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                }
-
-                if filed {
-                    HStack(spacing: 10) {
-                        Glyph(icon: "bell", tone: s.accent, size: 28)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("Pay rent").font(FN.font(13, .semibold)).foregroundStyle(s.ink)
-                            Text("Friday, 9:00 · I'll remind you").font(FN.font(11.5)).foregroundStyle(s.muted)
-                        }
-                        Spacer()
-                        Icon("check", size: 13, weight: 2.4).foregroundStyle(s.ok)
-                    }
-                    .padding(10)
-                    .background(s.field, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .transition(.opacity.combined(with: .offset(y: 8)))
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(16)
-            .frame(width: 360, height: 220, alignment: .topLeading)
-        }
-        .rotationEffect(.degrees(-1.5))
-        .arrive(0.05)
-        .task {
-            if reduceMotion { typed = message.count; filed = true; return }
-            try? await Task.sleep(for: .milliseconds(450))
-            for i in 1...message.count {
-                typed = i
-                try? await Task.sleep(for: .milliseconds(34))
-            }
-            try? await Task.sleep(for: .milliseconds(350))
-            withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) { filed = true }
-        }
-    }
-}
-
-/// Each look, drawn as a tiny window in its own colours.
-private struct ThemeTile: View {
-    @Environment(\.onboarding) private var s
-    let choice: ThemeChoice
-    let selected: Bool
-    let systemScheme: ColorScheme
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 10) {
-                preview
-                    .frame(width: 132, height: 88)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(selected ? s.accent : s.cardEdge, lineWidth: selected ? 2 : 1))
-                    .shadow(color: .black.opacity(selected ? 0.12 : 0.05), radius: selected ? 12 : 6, y: 4)
-                HStack(spacing: 5) {
-                    Icon(choice.icon, size: 12)
-                    Text(choice.label)
-                }
-                .font(FN.font(12.5, selected ? .semibold : .regular))
-                .foregroundStyle(selected ? s.ink : s.muted)
-            }
-            .scaleEffect(selected ? 1.03 : 1)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.fn)
-        .animation(Motion.standard, value: selected)
-        .accessibilityLabel(choice.label)
-        .accessibilityAddTraits(selected ? .isSelected : [])
-    }
-
-    private var preview: some View { ThemePreview(choice: choice) }
-}
-
-/// A theme drawn as a tiny window — sidebar, title and lines — in its own
-/// colours. System is half light, half dark. Used by setup and Settings.
-struct ThemePreview: View {
-    let choice: ThemeChoice
-
-    var body: some View {
-        if choice == .system {
-            // Half light, half dark: it follows the Mac.
-            HStack(spacing: 0) {
-                window(.light)
-                window(.dark)
-            }
-        } else {
-            window(choice.palette(for: choice == .dark ? .dark : .light))
-        }
-    }
-
-    private func window(_ p: Palette) -> some View {
-        HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 5) {
-                ForEach(0..<4, id: \.self) { i in
-                    Capsule().fill(i == 0 ? p.accent : p.faint.opacity(0.5)).frame(width: 16, height: 3)
-                }
-                Spacer()
-            }
-            .padding(8)
-            .frame(maxHeight: .infinity)
-            .background(p.panel)
-            VStack(alignment: .leading, spacing: 5) {
-                Capsule().fill(p.text).frame(width: 34, height: 4)
-                ForEach(0..<3, id: \.self) { _ in
-                    Capsule().fill(p.muted.opacity(0.5)).frame(height: 3)
-                }
-                Spacer()
-            }
-            .padding(9)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(p.bg)
-        }
-    }
-}
-
-/// A way for the brief to read, shown as a small live Today.
-private struct BriefStyleTile: View {
-    @Environment(\.onboarding) private var s
-    let style: BriefStyle
-    let selected: Bool
-    let action: () -> Void
-    /// Which link or row is lit: it moves along, to show what the style does.
-    @State private var beat = 0
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 12) {
-                PaperCard(radius: 14) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Good morning.")
-                            .font(.system(size: 17, design: .serif))
-                            .foregroundStyle(s.ink)
-                        if style == .paragraph { paragraph } else { points }
-                        Spacer(minLength: 0)
-                    }
-                    .padding(16)
-                    .frame(width: 280, height: 164, alignment: .topLeading)
-                }
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(selected ? s.accent : .clear, lineWidth: 2))
-                // Only the picture lifts: scaling the whole tile moved its
-                // label row out of line with the other one.
-                .scaleEffect(selected ? 1.03 : 1)
-
-                HStack(spacing: 6) {
-                    Icon(style.icon, size: 13)
-                    Text(style.label).font(FN.font(13.5, selected ? .semibold : .medium))
-                    if style == .paragraph {
-                        Text("Compact")
-                            .font(FN.font(10.5, .semibold))
-                            .foregroundStyle(s.accent)
-                            .padding(.horizontal, 7).padding(.vertical, 2)
-                            .background(s.accent.opacity(0.12), in: Capsule())
-                    }
-                    Spacer()
-                    ZStack {
-                        Circle().stroke(selected ? s.accent : s.faint.opacity(0.5), lineWidth: 1.5)
-                        Circle().fill(s.accent).padding(4).scaleEffect(selected ? 1 : 0.01)
-                    }
-                    .frame(width: 16, height: 16)
-                }
-                .foregroundStyle(selected ? s.ink : s.muted)
-                Text(style.detail)
-                    .font(FN.font(12.5)).foregroundStyle(s.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            // As wide as the picture: the label row's Spacer otherwise
-            // stretched it across the page, and its radio button ended up
-            // under the other tile.
-            .frame(width: 280, alignment: .leading)
-            .opacity(selected ? 1 : 0.82)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.fn)
-        .animation(.spring(response: 0.4, dampingFraction: 0.72), value: selected)
-        .accessibilityLabel(style.label)
-        .accessibilityHint(style.detail)
-        .accessibilityAddTraits(selected ? .isSelected : [])
-        .task {
-            guard !reduceMotion else { return }
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1.1))
-                withAnimation(.easeInOut(duration: 0.35)) { beat += 1 }
-            }
-        }
-    }
-
-    /// A few sentences, the phrases worth a click underlined — one lit at a time.
-    private var paragraph: some View {
-        let parts: [(String, Bool)] = [
-            ("You have ", false), ("3 things due", true), (" today, starting with ", false),
-            ("Call Budi", true), (" at 2:30 PM. Yesterday you spent ", false), ("Rp 120rb", true),
-            (", mostly on food.", false),
-        ]
-        let lit = beat % 3
-        var text = AttributedString()
-        var link = 0
-        for (piece, isLink) in parts {
-            var run = AttributedString(piece)
-            if isLink {
-                run.foregroundColor = link == lit ? s.accent : s.ink
-                run.underlineStyle = Text.LineStyle(pattern: .solid,
-                                                    color: link == lit ? s.accent : s.faint.opacity(0.7))
-                link += 1
-            }
-            text += run
-        }
-        return Text(text)
-            .font(.system(size: 12.5))
-            .foregroundStyle(s.muted)
-            .lineSpacing(4)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-
-    /// One line each, the next arriving in turn.
-    private var points: some View {
-        let rows: [(String, CGFloat)] = [("✳︎", 150), ("○", 120), ("○", 170), ("⚠︎", 110)]
-        let lit = beat % rows.count
-        return VStack(alignment: .leading, spacing: 9) {
-            ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
-                HStack(spacing: 9) {
-                    Text(row.0).font(.system(size: 10)).foregroundStyle(index == lit ? s.accent : s.faint)
-                        .frame(width: 12)
-                    Capsule()
-                        .fill(index == lit ? s.accent.opacity(0.55) : s.faint.opacity(0.35))
-                        .frame(width: row.1, height: 5)
-                }
-                .offset(x: index == lit ? 3 : 0)
-            }
-        }
-        .padding(.top, 2)
-    }
-}
-
-/// Everything the app does, around its mark.
-private struct FeatureOrbit: View {
-    @Environment(\.onboarding) private var s
-    private let items: [(icon: String, label: String)] = [
-        ("note", "Notes"), ("todo", "To-Do"), ("finance", "Finance"),
-        ("scan", "Scan"), ("mic", "Voice"), ("collapseLeft", "Edge dock"),
-    ]
-
-    var body: some View {
-        GeometryReader { proxy in
-            let c = CGPoint(x: proxy.size.width / 2, y: proxy.size.height / 2)
-            let r = min(proxy.size.width, proxy.size.height) / 2 - 36
-            ZStack {
-                Circle()
-                    .stroke(s.faint.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [3, 5]))
-                    .frame(width: r * 2, height: r * 2)
-                    .position(c)
-                MarkTile(size: 70)
-                    .position(c)
-                    .arrive(0.05)
-                ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                    let angle = -Double.pi / 2 + Double(index) * 2 * .pi / Double(items.count)
-                    VStack(spacing: 5) {
-                        Icon(item.icon, size: 17)
-                            .foregroundStyle(s.ink.opacity(0.75))
-                            .frame(width: 42, height: 42)
-                            .background(s.card, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).stroke(s.cardEdge, lineWidth: 1))
-                            .shadow(color: .black.opacity(s.dark ? 0.35 : 0.06), radius: 8, y: 3)
-                        Text(item.label).font(FN.font(10.5)).foregroundStyle(s.muted)
-                    }
-                    .position(x: c.x + r * cos(angle), y: c.y + r * sin(angle) + 8)
-                    .arrive(0.12 + Double(index) * 0.07)
-                }
-            }
-        }
-    }
-}
-
-/// The last page: what you just set up, in a row, with the mark raised.
-private struct CelebrationRow: View {
-    @Environment(\.onboarding) private var s
-    @State private var raised = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private let left: [(String, Color)] = [("note", .hex(0x7D6FF6)), ("todo", .hex(0x3BA5F1)), ("today", .hex(0xF0A23B))]
-    private let right: [(String, Color)] = [("finance", .hex(0x3CC6A3)), ("mic", .hex(0xF2616E)), ("scan", .hex(0x5B6CF0))]
-
-    var body: some View {
-        VStack(spacing: 14) {
-            Text("I've just set up my Four Notes 🎉")
-                .font(.system(size: 24, weight: .regular, design: .serif))
-                .foregroundStyle(s.ink)
-                .padding(.horizontal, 22)
-                .frame(height: 50)
-                .background(s.card.opacity(0.75), in: Capsule())
-                .overlay(Capsule().stroke(s.cardEdge, lineWidth: 1))
-                .shadow(color: .black.opacity(s.dark ? 0.3 : 0.05), radius: 10, y: 4)
-                .arrive(0.35)
-
-            HStack(spacing: 12) {
-                ForEach(left, id: \.0) { tile($0.0, $0.1) }
-                MarkTile(size: raised ? 74 : 54)
-                    .offset(y: raised ? -14 : 0)
-                ForEach(right, id: \.0) { tile($0.0, $0.1) }
-            }
-            .padding(.horizontal, 14)
-            .frame(height: 76)
-            .background(s.card.opacity(0.55), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(s.cardEdge, lineWidth: 1))
-            .arrive(0.05)
-        }
-        .onAppear {
-            if reduceMotion { raised = true; return }
-            withAnimation(.spring(response: 0.55, dampingFraction: 0.62).delay(0.25)) { raised = true }
-        }
-    }
-
-    private func tile(_ icon: String, _ tone: Color) -> some View {
-        Icon(icon, size: 20, weight: 1.9)
-            .foregroundStyle(tone)
-            .frame(width: 50, height: 50)
-            .background(s.card, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(s.cardEdge, lineWidth: 1))
-            .shadow(color: .black.opacity(s.dark ? 0.35 : 0.06), radius: 6, y: 2)
-    }
-}
-
-private struct TrustBadge: View {
-    @Environment(\.onboarding) private var s
-    let icon: String
-    let text: String
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Icon(icon, size: 12).foregroundStyle(s.accent)
-            Text(text).font(FN.font(11.5)).foregroundStyle(s.muted)
-        }
-    }
-}
-
-// MARK: - The edge dock, shown working
-
-/// A key, drawn as a small keycap.
-private struct Keycap: View {
-    @Environment(\.onboarding) private var s
-    let key: String
-    init(_ key: String) { self.key = key }
-
-    var body: some View {
-        Text(key)
-            .font(FN.font(12, .semibold))
-            .foregroundStyle(s.ink)
-            .frame(minWidth: 24, minHeight: 24)
-            .background(s.card, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(s.cardEdge, lineWidth: 1))
-            .shadow(color: .black.opacity(s.dark ? 0.3 : 0.06), radius: 0, y: 1.5)
     }
 }
 

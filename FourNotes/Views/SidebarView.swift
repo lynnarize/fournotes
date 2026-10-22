@@ -104,8 +104,8 @@ struct SidebarView: View {
                 entries.append(.divider)
             }
             entries += [
-                .item("Search or add…") { nav.present(.palette) },
-                .item("Settings…") { nav.present(.settings) },
+                .item("Search or add…", icon: "search") { nav.present(.palette) },
+                .item("Settings…", icon: "settings") { nav.present(.settings) },
             ]
             return entries
         } label: {
@@ -151,23 +151,23 @@ struct SidebarView: View {
         switch tab {
         case .today:
             return [
-                .item("Open Today") { nav.tab = .today },
-                .item("Search or quick add…") { nav.present(.palette) },
+                .item("Open Today", icon: "today") { nav.tab = .today },
+                .item("Search or quick add…", icon: "search") { nav.present(.palette) },
             ]
         case .notes:
             return [
-                .item("New note") { QuickCreate.note(store: store, nav: nav) },
-                .item("Scan a note…") { assistant.pickAndScan() },
-                .item(assistant.recording ? "Stop recording" : "Record to note") {
+                .item("New note", icon: "noteAdd") { QuickCreate.note(store: store, nav: nav) },
+                .item("Scan a note…", icon: "scan") { assistant.pickAndScan() },
+                .item(assistant.recording ? "Stop recording" : "Record to note", icon: assistant.recording ? "stop" : "mic") {
                     assistant.recording ? assistant.stopRecording() : assistant.startRecording()
                 },
             ]
         case .todo:
-            return [.item("New task") { QuickCreate.task(store: store, nav: nav) }]
+            return [.item("New task", icon: "todo") { QuickCreate.task(store: store, nav: nav) }]
         case .finance:
             return [
-                .item("New transaction") { QuickCreate.transaction(store: store, nav: nav) },
-                .item("Scan a receipt…") { assistant.pickAndScan() },
+                .item("New transaction", icon: "finance") { QuickCreate.transaction(store: store, nav: nav) },
+                .item("Scan a receipt…", icon: "scan") { assistant.pickAndScan() },
             ]
         }
     }

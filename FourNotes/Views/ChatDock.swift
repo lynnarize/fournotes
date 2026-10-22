@@ -51,7 +51,7 @@ struct ChatDock: View {
                     .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { panelFrame = $0 }
                     .onExitCommand { collapse() }
                     .frame(maxWidth: .infinity, alignment: .trailing)
-                    .padding(.trailing, 20)
+                    .padding(.trailing, 24)
                     .padding(.bottom, 20)
                     // Opens out of the pill's corner, and folds back into it.
                     .transition(.scale(scale: 0.4, anchor: .bottomTrailing).combined(with: .opacity))
@@ -132,19 +132,19 @@ struct ChatDock: View {
         VStack(spacing: 0) {
             HStack(spacing: 4) {
                 Text(cardTitle)
-                    .font(FN.font(13, .medium))
+                    .font(FN.bodyMedium)
                     .foregroundStyle(p.foreground)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                IconButton("newChat", size: 16, box: 30, help: "New chat") {
+                IconButton("newChat", size: 18, box: 36, help: "New chat") {
                     glideTo(false) { assistant.clear() }
                 }
                 .disabled(assistant.busy != nil)
-                IconButton("x", size: 16, box: 30, help: "Close the chat") { glideTo(false) }
+                IconButton("x", size: 18, box: 36, help: "Close the chat") { glideTo(false) }
             }
             .padding(.leading, 18)
             .padding(.trailing, 10)
-            .frame(height: 48)
+            .frame(height: 56)
             .overlay(alignment: .bottom) { Rectangle().fill(p.borderSubtle).frame(height: 1) }
 
             ChatThread(onJump: jump, onSplit: { splitTxId = $0 })
@@ -153,13 +153,15 @@ struct ChatDock: View {
                          placeholder: "Ask a follow-up, / for commands, @ to add a note",
                          onSend: submit)
                 .matchedGeometryEffect(id: "composer", in: glide)
-                .padding(12)
+                .padding(.horizontal, 12)
+                .padding(.top, 4)
+                .padding(.bottom, 12)
         }
         .background(p.surface, in: RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous).strokeBorder(p.border, lineWidth: 1))
         // As tall as the window allows, within reason.
-        .containerRelativeFrame(.vertical) { height, _ in max(420, min(680, height - 200)) }
+        .containerRelativeFrame(.vertical) { height, _ in max(440, min(680, height - 210)) }
         .transition(.opacity.combined(with: .offset(y: 6)))
         .onExitCommand { glideTo(false) }
     }
@@ -186,28 +188,28 @@ struct ChatDock: View {
             Spacer()
             AskPill(busy: assistant.busy, unread: unread) { reveal(focus: true) }
         }
-        .padding(.trailing, 20)
-        .padding(.bottom, 20)
+        .padding(.trailing, 24)
+        .padding(.bottom, 24)
     }
 
     private var panel: some View {
         VStack(spacing: 0) {
             HStack(spacing: 4) {
                 HStack(spacing: 8) {
-                    Text("Assistant").font(FN.font(13, .medium)).foregroundStyle(p.foreground)
+                    Text("Assistant").font(FN.bodyMedium).foregroundStyle(p.foreground)
                     if engine.chatRunsOnDevice { OnDeviceMark(origin: .onDevice) }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                if !assistant.messages.isEmpty {
-                    IconButton("newChat", size: 16, box: 30, help: "New chat") { assistant.clear() }
-                        .disabled(assistant.busy != nil)
-                }
-                IconButton("expand", size: 15, box: 30, help: "Open on Today") { openOnToday() }
-                IconButton("x", size: 16, box: 30, help: "Close") { collapse() }
+                // As on the web, New chat is there, faded, before there's a chat.
+                IconButton("newChat", size: 18, box: 36, help: "New chat") { assistant.clear() }
+                    .disabled(assistant.messages.isEmpty || assistant.busy != nil)
+                    .opacity(assistant.messages.isEmpty || assistant.busy != nil ? 0.4 : 1)
+                IconButton("expand", size: 18, box: 36, help: "Open on Today") { openOnToday() }
+                IconButton("x", size: 18, box: 36, help: "Close the assistant") { collapse() }
             }
             .padding(.leading, 18)
             .padding(.trailing, 10)
-            .frame(height: 48)
+            .frame(height: 56)
             .overlay(alignment: .bottom) { Rectangle().fill(p.borderSubtle).frame(height: 1) }
 
             ChatThread(onJump: jump, onSplit: { splitTxId = $0 }, onSuggest: { q in submit(q) })
@@ -215,11 +217,13 @@ struct ChatDock: View {
             ChatComposer(text: $text, focused: $inputFocused,
                          placeholder: "Ask anything, / for commands, @ to add a note",
                          onSend: submit)
-                .padding(12)
+                .padding(.horizontal, 12)
+                .padding(.top, 4)
+                .padding(.bottom, 12)
         }
-        .frame(width: 420)
+        .frame(width: 440)
         .clipShape(RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous))
-        .containerRelativeFrame(.vertical) { height, _ in min(720, height - 40) }
+        .containerRelativeFrame(.vertical) { height, _ in min(880, height - 40) }
         .floating(p)
     }
 
@@ -369,16 +373,13 @@ private struct AskPill: View {
                     if busy != nil {
                         BusyRing(color: p.foreground).scaleEffect(1.35)
                     }
-                    Icon("sparkle", size: 15)
+                    Icon("sparkle", size: 14)
                         .foregroundStyle(p.foreground)
-                        .phaseAnimator(reduceMotion ? [false] : [false, true]) { icon, up in
-                            icon.scaleEffect(up ? 1.16 : 0.88).rotationEffect(.degrees(up ? 16 : -10))
-                        } animation: { _ in .easeInOut(duration: 1.6) }
                 }
-                .frame(width: 22, height: 22)
+                .frame(width: 24, height: 24)
 
                 Text(label)
-                    .font(FN.font(13))
+                    .font(FN.body)
                     .foregroundStyle(hovering ? p.foreground : p.textSecondary)
                     .lineLimit(1)
                     // A band of light that crosses the words now and then.
@@ -395,9 +396,10 @@ private struct AskPill: View {
                                     LinearKeyframe(1.2, duration: 3)
                                 }
                         }
-                        .mask(Text(label).font(FN.font(13)).lineLimit(1))
+                        .mask(Text(label).font(FN.body).lineLimit(1))
                         .allowsHitTesting(false)
-                        .opacity(reduceMotion ? 0 : 1)
+                        // Only while it's working, as the web's fn-shimmer.
+                        .opacity(reduceMotion || busy == nil ? 0 : 1)
                     }
 
                 if unread {
@@ -405,15 +407,15 @@ private struct AskPill: View {
                         .transition(.scale(scale: 0.2).combined(with: .opacity))
                 }
             }
-            .padding(.leading, 12)
+            .padding(.leading, 14)
             .padding(.trailing, 16)
-            .frame(height: 40)
+            .frame(height: 44)
             .background {
                 Capsule().fill(p.surface)
-                    .shadow(color: p.shadowStrong, radius: hovering ? 22 : 16, y: hovering ? 10 : 6)
+                    .shadow(color: p.shadowStrong, radius: 24, y: 10)
+                    .shadow(color: p.shadow, radius: 5, y: 2)
             }
-            .overlay(Capsule().strokeBorder(hovering ? p.borderStrong : p.border, lineWidth: 1))
-            .scaleEffect(hovering ? 1.03 : 1, anchor: .bottomTrailing)
+            .overlay(Capsule().strokeBorder(p.border, lineWidth: 1))
             .contentShape(Capsule())
         }
         .buttonStyle(.fn)

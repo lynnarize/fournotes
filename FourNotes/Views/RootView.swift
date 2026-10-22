@@ -85,16 +85,20 @@ struct RootView: View {
     @ViewBuilder
     private var paletteOverlay: some View {
         if nav.sheet == .palette {
-            ZStack(alignment: .top) {
-                Color.black.opacity(0.28)
-                    .contentShape(Rectangle())
-                    .onTapGesture { nav.sheet = nil }
-                    .accessibilityLabel("Close search")
-                    .accessibilityAddTraits(.isButton)
-                    .transition(.opacity)
-                CommandPaletteView()
-                    .padding(.top, 90)
-                    .transition(.scale(scale: 0.97, anchor: .top).combined(with: .opacity))
+            GeometryReader { geo in
+                ZStack(alignment: .top) {
+                    Color.black.opacity(0.3)
+                        .contentShape(Rectangle())
+                        .onTapGesture { nav.sheet = nil }
+                        .accessibilityLabel("Close search")
+                        .accessibilityAddTraits(.isButton)
+                        .transition(.opacity)
+                    // A tenth and a bit of the way down, as the web's (12vh).
+                    CommandPaletteView()
+                        .frame(maxHeight: geo.size.height * 0.76, alignment: .top)
+                        .padding(.top, geo.size.height * 0.12)
+                        .transition(.scale(scale: 0.97, anchor: .top).combined(with: .opacity))
+                }
             }
         }
     }

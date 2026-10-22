@@ -346,14 +346,14 @@ struct NoteEditorView: View {
 
             IconMenu("more", size: 18, box: 36, help: "More actions") {
                 [
-                    .item("Copy note text", action: copyText),
+                    .item("Copy note text", icon: "copy", action: copyText),
                     .item(EdgeStickies.shared.isStuck(note.id) ? "Take off screen edge" : "Stick to screen edge",
-                          action: { EdgeStickies.shared.toggle(note.id) }),
-                    .item("Duplicate", action: duplicate),
-                    .item("Download as text…", action: downloadText),
-                    .item("Print…", action: printNote),
+                          icon: "pin", action: { EdgeStickies.shared.toggle(note.id) }),
+                    .item("Duplicate", icon: "noteAdd", action: duplicate),
+                    .item("Download as text…", icon: "download", action: downloadText),
+                    .item("Print…", icon: "print", action: printNote),
                     .divider,
-                    .item("Delete note", destructive: true, action: deleteNote),
+                    .item("Delete note", icon: "trash", destructive: true, action: deleteNote),
                 ]
             }
         }
@@ -813,11 +813,11 @@ struct NoteEditorView: View {
                 MenuButton(help: "Remind me about this note", align: .trailing) {
                     [
                         .header("Remind me about this note"),
-                        .item("In an hour") { setReminder(hours: 1) },
-                        .item("Tomorrow at 9:00") { setReminder(hours: 24) },
-                        .item("Next week") { setReminder(hours: 24 * 7) },
+                        .item("In an hour", icon: "clock") { setReminder(hours: 1) },
+                        .item("Tomorrow at 9:00", icon: "today") { setReminder(hours: 24) },
+                        .item("Next week", icon: "calendar") { setReminder(hours: 24 * 7) },
                         .divider,
-                        .item("Pick a date and time…") {
+                        .item("Pick a date and time…", icon: "bell") {
                             reminderAt = Self.tomorrowAtNine
                             showReminderPicker = true
                         },

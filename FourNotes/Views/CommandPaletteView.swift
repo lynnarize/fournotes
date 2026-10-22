@@ -35,18 +35,21 @@ struct CommandPaletteView: View {
     var body: some View {
         let items = items
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Icon("search", size: 16).foregroundStyle(p.textMuted)
-                TextField("Search, or: t task · n note · $ coffee 25k · s quick note · ? question",
-                          text: $query)
+            HStack(spacing: 12) {
+                Icon("search", size: 18).foregroundStyle(p.textMuted)
+                TextField("Search or add", text: $query)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 15))
+                    .font(FN.font(17))
                     .foregroundStyle(p.text)
                     .focused($focused)
                     .onSubmit { run(items.indices.contains(active) ? items[active] : nil) }
+                Button(action: close) { KeyCap("esc") }
+                    .buttonStyle(.fn)
+                    .help("Close")
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 15)
+            .padding(.leading, 20)
+            .padding(.trailing, 16)
+            .frame(height: 60)
 
             Rectangle().fill(p.borderSubtle).frame(height: 1)
 
@@ -64,8 +67,8 @@ struct CommandPaletteView: View {
                                 Text(item.group)
                                     .font(FN.small)
                                     .foregroundStyle(p.textMuted)
-                                    .padding(.horizontal, 10)
-                                    .padding(.top, 8)
+                                    .padding(.horizontal, 12)
+                                    .padding(.top, index == 0 ? 8 : 12)
                                     .padding(.bottom, 4)
                             }
                             // Keyed by the item, not its position: the lazy stack
@@ -83,18 +86,19 @@ struct CommandPaletteView: View {
                                 }
                         }
                     }
-                    .padding(6)
+                    .padding(8)
                     .animation(Motion.quick, value: items.map(\.id))
                 }
-                .frame(maxHeight: 380)
+                .frame(maxHeight: 520)
                 .onChange(of: active) { _, index in
                     guard items.indices.contains(index) else { return }
                     proxy.scrollTo(items[index].id, anchor: .center)
                 }
             }
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) { footer }
         .coordinateSpace(.named(Self.space))
-        .frame(width: 620)
+        .frame(width: 640)
         .clipShape(RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous))
         .floating(p)
         .onAppear {
@@ -132,22 +136,57 @@ struct CommandPaletteView: View {
 
     private func row(_ item: Item, selected: Bool) -> some View {
         Button { run(item) } label: {
-            HStack(spacing: 8) {
-                Icon(item.icon, size: 15).foregroundStyle(p.textSecondary)
-                Text(item.label).font(FN.font(13.5)).foregroundStyle(p.foreground).lineLimit(1)
+            HStack(spacing: 12) {
+                Icon(item.icon, size: 18).foregroundStyle(p.textSecondary)
+                Text(marked(item.label)).font(FN.body).foregroundStyle(p.foreground).lineLimit(1)
                 Spacer(minLength: 12)
                 if let hint = item.hint, !hint.isEmpty {
-                    Text(hint).font(FN.small).foregroundStyle(p.textMuted).lineLimit(1)
+                    Text(hint).font(FN.font(13)).monospacedDigit().foregroundStyle(p.textMuted).lineLimit(1)
                 }
+                if selected { KeyCap("↵") }
             }
-            .padding(.horizontal, 10)
-            .frame(maxWidth: .infinity, minHeight: 34, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
             .background(selected ? p.accentSubtle : .clear,
-                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
             .motion(selected, Motion.quick)
             .contentShape(Rectangle())
         }
         .buttonStyle(.fn)
+    }
+
+    /// How to move and add, along the foot.
+    private var footer: some View {
+        HStack(spacing: 16) {
+            HStack(spacing: 6) { KeyCap("↑"); KeyCap("↓"); Text("Move") }
+            HStack(spacing: 6) { KeyCap("↵"); Text("Open") }
+            Spacer(minLength: 0)
+            Text("Start with t, n, $, s or ? to add a task, note, spending, quick note or question")
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .font(FN.small)
+        .foregroundStyle(p.textMuted)
+        .padding(.horizontal, 20)
+        .frame(height: 48)
+        .overlay(alignment: .top) { Rectangle().fill(p.borderSubtle).frame(height: 1) }
+        .background(p.surface)
+    }
+
+    /// Every place the query appears in a row, in medium and underlined, as on the web.
+    private func marked(_ text: String) -> AttributedString {
+        var out = AttributedString(text)
+        let q = query.trimmingCharacters(in: .whitespaces)
+        guard q.count >= 1, q.firstMatch(of: /^(?i)(t|todo|task|n|note|\$|spent|s|sticky|\?|ask)\s/) == nil else { return out }
+        var search = out.startIndex
+        while search < out.endIndex,
+              let range = out[search...].range(of: q, options: .caseInsensitive) {
+            out[range].font = FN.bodyMedium
+            out[range].underlineStyle = Text.LineStyle(pattern: .solid, color: p.borderStrong)
+            search = range.upperBound
+        }
+        return out
     }
 
     /// The palette floats over the window rather than being a sheet, so a
@@ -281,5 +320,23 @@ struct CommandPaletteView: View {
         }
         out.append(contentsOf: commands)
         return out
+    }
+}
+
+/// The kit's key cap: a hairline border, 22pt tall.
+struct KeyCap: View {
+    @Environment(\.palette) private var p
+    let text: String
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        Text(text)
+            .font(FN.small)
+            .foregroundStyle(p.textSecondary)
+            .padding(.horizontal, 6)
+            .frame(minWidth: 22, minHeight: 22)
+            .background(p.surface, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(p.border, lineWidth: 1))
+            .fixedSize()
     }
 }

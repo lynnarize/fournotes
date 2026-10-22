@@ -152,10 +152,10 @@ struct FinanceView: View {
             // `.btn-secondary .btn-icon`: a round bordered "…".
             MenuButton(help: "More finance actions", align: .trailing) {
                 [
-                    .item("Monthly report…") { showReport = true },
-                    .item("Paste a payment notification…") { showPaste = true },
+                    .item("Monthly report…", icon: "download") { showReport = true },
+                    .item("Paste a payment notification…", icon: "clipboard") { showPaste = true },
                     .divider,
-                    .item("Budgets and categories…") { showBudgets = true },
+                    .item("Budgets and categories…", icon: "target") { showBudgets = true },
                 ]
             } label: {
                 MoreCircle()

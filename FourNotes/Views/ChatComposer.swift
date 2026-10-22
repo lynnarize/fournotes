@@ -38,15 +38,15 @@ struct ChatComposer: View {
                     .transition(.opacity.combined(with: .offset(y: -4)))
             }
 
+            // 16pt on a 24pt line, as the web's textarea.
             TextField(placeholder, text: $text, axis: .vertical)
                 .textFieldStyle(.plain)
-                .font(FN.font(15))
+                .font(FN.font(16))
+                .lineSpacing(4.5)
                 .foregroundStyle(p.foreground)
                 .lineLimit(1...8)
                 .focused(focused)
-                .padding(.horizontal, 8)
-                .padding(.top, 8)
-                .padding(.bottom, 10)
+                .padding(8)
                 .onSubmit {
                     if listOpen { pick(options[min(active, options.count - 1)], trigger) } else { send() }
                 }
@@ -137,12 +137,12 @@ struct ChatComposer: View {
     }
 
     private var plusMenu: some View {
-        IconMenu("plus", size: 18, box: 32, help: "Add a photo, recording or text") {
-            [.item("Scan a receipt or note…") { assistant.pickAndScan() },
-             .item(assistant.recording ? "Stop recording" : "Record a voice note") {
+        IconMenu("plus", size: 18, box: 36, help: "Add a photo, recording or text") {
+            [.item("Scan a receipt or note…", icon: "scan") { assistant.pickAndScan() },
+             .item(assistant.recording ? "Stop recording" : "Record a voice note", icon: assistant.recording ? "stop" : "mic") {
                  assistant.recording ? assistant.stopRecording() : assistant.startRecording()
              },
-             .item("Paste from the clipboard") {
+             .item("Paste from the clipboard", icon: "clipboard") {
                  if let clip = NSPasteboard.general.string(forType: .string) {
                      text = String(clip.prefix(2_000))
                      focused.wrappedValue = true
@@ -154,14 +154,15 @@ struct ChatComposer: View {
 
     /// Which model answers, as the web's model chip. Changed in Settings.
     private var modelMark: some View {
-        HStack(spacing: 5) {
-            Icon("sparkle", size: 13).foregroundStyle(p.foreground)
-            Text(engine.route.label).lineLimit(1)
+        HStack(spacing: 6) {
+            Icon("sparkle", size: 14).foregroundStyle(p.foreground)
+            Text(engine.route.label).font(FN.bodyMedium).lineLimit(1)
         }
-        .font(FN.font(12.5))
-        .foregroundStyle(p.textSecondary)
-        .padding(.horizontal, 8)
-        .frame(height: 28)
+        .foregroundStyle(p.foreground)
+        .padding(.leading, 12)
+        .padding(.trailing, 10)
+        .frame(height: 36)
+        .frame(maxWidth: 240)
         .help("Answers come from \(engine.route.label). Change it in Settings → AI & API keys.")
     }
 
@@ -171,7 +172,7 @@ struct ChatComposer: View {
                 Button { assistant.stopRecording() } label: {
                     Icon("stop", size: 14, weight: 2)
                         .foregroundStyle(.white)
-                        .frame(width: 32, height: 32)
+                        .frame(width: 36, height: 36)
                         .background(p.danger, in: Circle())
                         .contentShape(Circle())
                 }
@@ -179,7 +180,7 @@ struct ChatComposer: View {
                 .help("Stop and write it up")
                 .accessibilityLabel("Stop recording")
             } else {
-                IconButton("mic", size: 17, box: 32, help: "Record a voice note") { assistant.startRecording() }
+                IconButton("mic", size: 18, box: 36, help: "Record a voice note") { assistant.startRecording() }
                     .disabled(assistant.busy != nil)
             }
         }
@@ -195,11 +196,11 @@ struct ChatComposer: View {
                 if busy {
                     BusyRing(color: p.foreground)
                 } else {
-                    Icon("arrowUp", size: 16, weight: 2)
+                    Icon("arrowUp", size: 18)
                         .foregroundStyle(empty ? p.textMuted : p.accentForeground)
                 }
             }
-            .frame(width: 32, height: 32)
+            .frame(width: 36, height: 36)
             .contentShape(Circle())
         }
         .buttonStyle(.fn)

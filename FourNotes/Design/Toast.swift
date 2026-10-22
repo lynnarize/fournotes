@@ -43,31 +43,43 @@ struct ToastStack: View {
     var body: some View {
         VStack(alignment: .trailing, spacing: 8) {
             ForEach(toasts.toasts) { toast in
-                HStack(alignment: .top, spacing: 10) {
+                HStack(alignment: .top, spacing: 12) {
                     // As on the web: a small status mark instead of a coloured edge.
-                    Icon(toast.tone == .error ? "warning" : "check", size: 15)
+                    Icon(toast.tone == .error ? "warning" : "check", size: 18)
                         .foregroundStyle(toast.tone == .error ? p.danger : p.success)
                         .padding(.top, 1)
                     Text(toast.text)
                         .font(FN.body)
+                        .lineSpacing(3)
                         .foregroundStyle(p.text)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 1)
+                        .padding(.trailing, toast.action == nil ? 6 : 0)
                     if let action = toast.action {
-                        Button(action.label) {
+                        // `.btn .btn-sm` on the muted surface.
+                        Button {
                             action.run()
                             toasts.dismiss(toast.id)
+                        } label: {
+                            Text(action.label)
+                                .font(FN.font(13, .medium))
+                                .foregroundStyle(p.foreground)
+                                .padding(.horizontal, 12)
+                                .frame(height: 32)
+                                .background(p.surfaceMuted, in: Capsule())
+                                .contentShape(Capsule())
                         }
                         .buttonStyle(.fn)
-                        .font(FN.bodyMedium)
-                        .foregroundStyle(p.accent)
+                        .padding(.vertical, -4)
                     }
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 11)
-                .frame(maxWidth: 360, alignment: .leading)
+                .padding(.leading, 16)
+                .padding(.trailing, 10)
+                .padding(.vertical, 10)
+                .frame(maxWidth: 384, alignment: .leading)
                 .floating(p, radius: 22)
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .transition(.offset(x: 18).combined(with: .opacity))
                 .entrance()
             }
         }

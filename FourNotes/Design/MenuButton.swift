@@ -34,12 +34,14 @@ struct MenuEntry {
     var enabled = true
     /// A colour chip shown before the title, for colour pickers.
     var swatch: NSColor?
+    /// One of the app's glyphs before the title, as the web's menu items have.
+    var icon: String?
 
-    static func item(_ title: String, checked: Bool = false, destructive: Bool = false,
+    static func item(_ title: String, icon: String? = nil, checked: Bool = false, destructive: Bool = false,
                      enabled: Bool = true, swatch: NSColor? = nil,
                      action: @escaping @MainActor () -> Void) -> MenuEntry {
         MenuEntry(title: title, kind: .action(action), checked: checked,
-                  destructive: destructive, enabled: enabled, swatch: swatch)
+                  destructive: destructive, enabled: enabled, swatch: swatch, icon: icon)
     }
 
     static func menu(_ title: String, _ children: [MenuEntry]) -> MenuEntry {
@@ -667,16 +669,17 @@ private struct MenuPanel: View {
                 }
             }
             .padding(6)
-            .frame(minWidth: 180, maxWidth: 340, alignment: .leading)
+            .frame(minWidth: 240, maxWidth: 340, alignment: .leading)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
         }
         .scrollBounceBehavior(.basedOnSize)
         .scrollIndicators(contentHeight > maxHeight ? .automatic : .never)
         .frame(height: contentHeight == 0 ? nil : min(contentHeight, maxHeight))
         .fixedSize(horizontal: true, vertical: false)
+        // The kit's `.floating` card.
         .background(p.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(p.border, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous).strokeBorder(p.border, lineWidth: 1))
         .shadow(color: p.shadow, radius: 5, y: 2)
         .shadow(color: p.shadowStrong, radius: 22, y: 10)
         .accessibilityElement(children: .contain)
@@ -685,7 +688,7 @@ private struct MenuPanel: View {
     }
 
     private var separator: some View {
-        Rectangle().fill(p.borderSubtle).frame(height: 1).padding(.vertical, 5).padding(.horizontal, 10)
+        Rectangle().fill(p.borderSubtle).frame(height: 1).padding(.vertical, 6).padding(.horizontal, 12)
     }
 
     private var backRow: some View {
@@ -699,8 +702,8 @@ private struct MenuPanel: View {
                 Spacer(minLength: 0)
             }
             .foregroundStyle(p.muted)
-            .padding(.horizontal, 10)
-            .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -715,14 +718,17 @@ private struct MenuPanel: View {
             Text(entry.title)
                 .font(FN.small)
                 .foregroundStyle(p.textMuted)
-                .padding(.horizontal, 10)
-                .padding(.top, index == 0 ? 4 : 8)
-                .padding(.bottom, 3)
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+                .padding(.bottom, 6)
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .action, .submenu:
             let lit = state.highlight == index && entry.enabled
             Button { choose(index) } label: {
-                HStack(spacing: 10) {
+                HStack(spacing: 12) {
+                    if let icon = entry.icon {
+                        Icon(icon, size: 17).foregroundStyle(entry.destructive ? p.danger : p.textSecondary)
+                    }
                     if let swatch = entry.swatch {
                         RoundedRectangle(cornerRadius: 3, style: .continuous)
                             .fill(Color(nsColor: swatch))
@@ -731,20 +737,20 @@ private struct MenuPanel: View {
                             .frame(width: 14, height: 14)
                     }
                     Text(entry.title)
-                        .font(FN.body)
+                        .font(FN.font(14, entry.checked ? .medium : .regular))
                         .lineLimit(1)
                     Spacer(minLength: 16)
                     if case .submenu = entry.kind {
-                        Icon("chevron", size: 13).foregroundStyle(p.faint)
+                        Icon("chevron", size: 14).foregroundStyle(p.faint)
                     } else if entry.checked {
-                        Icon("check", size: 14).foregroundStyle(p.accent)
+                        Icon("check", size: 15).foregroundStyle(p.accent)
                     }
                 }
                 .foregroundStyle(entry.destructive ? p.danger : p.foreground)
-                .padding(.horizontal, 10)
-                .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+                .padding(.horizontal, 12)
+                .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
                 .background(lit ? (entry.destructive ? p.dangerSubtle : p.hover) : .clear,
-                            in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                 .contentShape(Rectangle())
                 .opacity(entry.enabled ? 1 : 0.4)
             }

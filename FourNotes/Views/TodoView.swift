@@ -139,7 +139,7 @@ struct TodoView: View {
                     // A's reminder suggestion stays on screen for task B, and a
                     // new task's title field never takes focus.
                     .id(todo.id)
-                    .frame(width: expanded ? nil : 440)
+                    .frame(width: expanded ? nil : 420)
                     .frame(maxWidth: expanded ? .infinity : nil)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }

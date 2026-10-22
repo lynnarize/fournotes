@@ -38,7 +38,7 @@ struct TaskPanel: View {
         guard let d = DateKit.date(todo.createdAt) else { return "" }
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US")
-        f.dateFormat = "MMMM d, yyyy 'at' h:mm a"
+        f.dateFormat = "MMM d, yyyy, h:mm a"
         return f.string(from: d)
     }
 
@@ -46,103 +46,141 @@ struct TaskPanel: View {
         VStack(spacing: 0) {
             header
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 20) {
                     title
-                    properties
-                    Divider().overlay(p.line).padding(.vertical, 24)
-                    details
-                    if let rrule = todo.rrule {
-                        Text("\(Recurrence.label(rrule)) · completing it schedules the next one")
-                            .font(FN.small)
-                            .foregroundStyle(p.muted)
-                            .padding(.top, 16)
+                    // The status, as a segmented control across the panel.
+                    SegmentedTabs(items: BoardColumn.allCases.map { ($0.rawValue, $0.label) },
+                                  selection: Binding(get: { todo.column.rawValue },
+                                                     set: { if let col = BoardColumn(rawValue: $0) { onMove(col) } }),
+                                  fill: true)
+                    VStack(alignment: .leading, spacing: 0) {
+                        properties
+                        if let rrule = todo.rrule {
+                            Text("\(Recurrence.label(rrule)), completing it schedules the next one")
+                                .font(FN.small)
+                                .foregroundStyle(p.textMuted)
+                                .padding(.top, 12)
+                        }
                     }
+                    calendar
+                    details
                 }
-                .padding(.horizontal, expanded ? 48 : 24)
-                .padding(.top, 24)
-                .padding(.bottom, 40)
-                .frame(maxWidth: expanded ? 760 : .infinity)
+                .padding(.horizontal, 24)
+                .padding(.top, expanded ? 36 : 12)
+                .padding(.bottom, 24)
+                .frame(maxWidth: expanded ? 672 : .infinity)
                 .frame(maxWidth: .infinity)
             }
+            footer
         }
         .background(p.surface)
-        .clipShape(RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous).strokeBorder(p.border, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: expanded ? 0 : FN.radiusPanel, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous)
+            .strokeBorder(expanded ? .clear : p.border, lineWidth: 1))
         .frame(maxHeight: expanded ? .infinity : 760)
         .onAppear { if isNew { titleFocused = true } }
     }
 
-    // MARK: - Header
+    // MARK: - Header and foot
 
+    /// "Task", and the buttons to open it full width and to close it.
     private var header: some View {
         HStack(spacing: 4) {
-            IconButton("collapseRight", size: 20, box: 30, help: "Close task", action: onClose)
-            IconButton(expanded ? "shrink" : "expand", size: 18, box: 30,
-                       help: expanded ? "Back to side panel" : "Open full width", action: onToggleExpand)
+            Text("Task")
+                .font(FN.font(13))
+                .foregroundStyle(p.textMuted)
+                .padding(.leading, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            IconButton(expanded ? "shrink" : "expand", size: 18, box: 36,
+                       help: expanded ? "Back to side panel" : "Open full screen", action: onToggleExpand)
+            IconButton("x", size: 18, box: 36, help: "Close (Esc)", action: onClose)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 16)
+    }
 
-            Rectangle().fill(p.line).frame(width: 1, height: 22).padding(.horizontal, 4)
-
-            HStack(spacing: 4) {
-                Text("To-Do").foregroundStyle(p.muted)
-                Icon("chevron", size: 12).foregroundStyle(p.muted)
-                Text(todo.title.isEmpty ? "New task" : todo.title).foregroundStyle(p.text)
+    /// Delete on the left; done (or paid, for a bill) on the right.
+    private var footer: some View {
+        HStack(spacing: 8) {
+            KitButton(kind: .danger, title: "Delete", large: true) {
+                let id = todo.id
+                store.remove(.todos, id)
+                toasts.push("Task deleted", action: Toast.Action(label: "Undo") { [store] in
+                    store.updateTodo(id) { $0.deletedAt = nil }
+                })
+                onClose()
             }
-            .font(FN.body)
-            .lineLimit(1)
-
-            Spacer()
-
-            IconMenu("more", size: 20, help: "More actions") {
-                [
-                    .item("Add to Google Calendar") { openURL(Calendars.googleURL(todo)) },
-                    .item("Apple / Outlook (.ics)…") { Calendars.exportIcs(todo, toasts: toasts) },
-                    .divider,
-                    .item("Delete task", destructive: true) {
-                        store.remove(.todos, todo.id)
-                        toasts.push("Task deleted")
-                        onClose()
-                    },
-                ]
+            Spacer(minLength: 0)
+            if todo.done {
+                KitButton(kind: .secondary, title: "Mark as not done", large: true) { onMove(.todo) }
+            } else {
+                KitButton(kind: .primary, title: todo.bill != nil ? "Mark as paid" : "Mark as done",
+                          icon: "check", large: true) { onMove(.done) }
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.top, 10)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .overlay(alignment: .top) { Rectangle().fill(p.borderSubtle).frame(height: 1) }
+    }
+
+    /// Google opens a prefilled event; Apple and Outlook take an .ics file.
+    private var calendar: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Add to calendar").font(FN.font(13)).foregroundStyle(p.textMuted)
+            HStack(spacing: 8) {
+                calendarButton("Google") { openURL(Calendars.googleURL(todo)) }
+                calendarButton("Apple") { Calendars.exportIcs(todo, toasts: toasts) }
+                    .help("Saves an .ics file")
+                calendarButton("Outlook") { Calendars.exportIcs(todo, toasts: toasts) }
+                    .help("Saves an .ics file")
+            }
+        }
+    }
+
+    private func calendarButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(FN.font(13, .medium))
+                .foregroundStyle(p.foreground)
+                .frame(maxWidth: .infinity)
+                .frame(height: 32)
+                .background(p.surface, in: Capsule())
+                .overlay(Capsule().strokeBorder(p.border, lineWidth: 1))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.fn)
     }
 
     // MARK: - Title and details
 
     private var title: some View {
+        // 22pt medium beside the board; the display face when it has the page.
         CommittedField(placeholder: "New task", value: todo.title,
-                       font: FN.serif(30), axis: .vertical) { value in
+                       font: expanded ? FN.display(32) : FN.font(22, .medium), axis: .vertical) { value in
             store.updateTodo(todo.id) { $0.title = value.replacingOccurrences(of: "\n", with: " ") }
         }
-        .tracking(-0.6)
+        .tracking(expanded ? FN.displayTracking(32) : -0.02 * 22)
         .foregroundStyle(todo.done ? p.faint : p.text)
         .strikethrough(todo.done)
         .focused($titleFocused)
-        .padding(.bottom, 20)
     }
 
+    /// The kit's textarea `.field`: 14pt in, relaxed lines.
     private var details: some View {
-        CommittedField(placeholder: "Add details, links or steps…", value: todo.notes ?? "",
-                       font: .system(size: 15), axis: .vertical, minHeight: 110) { value in
+        CommittedField(placeholder: "Add details, links or steps", value: todo.notes ?? "",
+                       boxed: true, axis: .vertical, minHeight: 112) { value in
             store.updateTodo(todo.id) { $0.notes = value.isEmpty ? nil : value }
         }
-        .lineSpacing(3)
+        .lineSpacing(5)
         .focused($detailsFocused)
     }
 
     // MARK: - Properties
 
     private var properties: some View {
-        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 2) {
-            prop("status", "Status") {
-                SegmentedTabs(items: BoardColumn.allCases.map { ($0.rawValue, $0.label) },
-                              selection: Binding(get: { todo.column.rawValue },
-                                                 set: { if let col = BoardColumn(rawValue: $0) { onMove(col) } }))
-            }
-
-            prop("calendar", "Date") {
+        // One bordered group, a hairline between rows, as the web's.
+        VStack(spacing: 0) {
+            prop("calendar", "Due") {
                 OptionalDateField(value: todo.dueAt) { iso in
                     store.updateTodo(todo.id) {
                         $0.dueAt = iso
@@ -151,7 +189,7 @@ struct TaskPanel: View {
                 }
             }
 
-            prop("bell", "Alarm") {
+            prop("bell", "Remind") {
                 VStack(alignment: .leading, spacing: 6) {
                     OptionalDateField(value: todo.remindAt) { iso in
                         suggestion = nil
@@ -194,7 +232,7 @@ struct TaskPanel: View {
                 .animation(Motion.standard, value: shownSuggestion?.at ?? "none")
             }
 
-            prop("repeat", "Repeat") {
+            prop("repeat", "Repeats") {
                 HStack(spacing: 8) {
                     SelectMenu(options: [("", "Doesn't repeat"), ("DAILY", "Daily"), ("WEEKLY", "Weekly"),
                                          ("MONTHLY", "Monthly"), ("YEARLY", "Yearly")],
@@ -206,7 +244,7 @@ struct TaskPanel: View {
                                     : recurrence(freq: Freq(rawValue: raw) ?? .MONTHLY,
                                                  interval: rule?.interval ?? 1)
                             }
-                        }))
+                        }), quiet: true)
                         .fixedSize()
 
                     if let rule {
@@ -230,7 +268,7 @@ struct TaskPanel: View {
                 SelectMenu(options: [(Priority.high, "High"), (Priority.medium, "Medium"), (Priority.low, "Low")],
                            selection: Binding(
                     get: { todo.priority },
-                    set: { value in store.updateTodo(todo.id) { $0.priority = value } }))
+                    set: { value in store.updateTodo(todo.id) { $0.priority = value } }), quiet: true)
                     .fixedSize()
             }
 
@@ -247,11 +285,10 @@ struct TaskPanel: View {
                         }
                     }
                     .font(FN.body)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .frame(width: 130)
-                    .background(p.hover.opacity(0.6),
-                                in: RoundedRectangle(cornerRadius: FN.radiusSmall, style: .continuous))
+                    .padding(.horizontal, 10)
+                    .frame(width: 130, height: 36)
+                    .background(p.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(p.border, lineWidth: 1))
                     .help("Logs the spending when the task is done")
 
                     if let bill = todo.bill {
@@ -260,7 +297,7 @@ struct TaskPanel: View {
                             get: { bill.category },
                             set: { category in
                                 store.updateTodo(todo.id) { $0.bill?.category = category }
-                            }))
+                            }), quiet: true)
                             .fixedSize()
                             .transition(.opacity.combined(with: .offset(x: -6)))
                     }
@@ -273,24 +310,23 @@ struct TaskPanel: View {
                     SelectMenu(options: [("", "Empty")] + store.liveNotes.map { ($0.id, $0.title.isEmpty ? "Untitled" : $0.title) },
                                selection: Binding(
                         get: { todo.noteId ?? "" },
-                        set: { id in store.updateTodo(todo.id) { $0.noteId = id.isEmpty ? nil : id } }))
+                        set: { id in store.updateTodo(todo.id) { $0.noteId = id.isEmpty ? nil : id } }), quiet: true)
                         .frame(maxWidth: 240, alignment: .leading)
 
                     if let note {
-                        Button("Open") { nav.open(ChangeLink(kind: .notes, id: note.id)) }
-                            .buttonStyle(.fn)
-                            .font(FN.small)
-                            .foregroundStyle(p.accent)
+                        KitButton(kind: .plain, title: "Open", small: true) { nav.open(ChangeLink(kind: .notes, id: note.id)) }
                             .transition(.opacity.combined(with: .offset(x: -5)))
                     }
                 }
                 .animation(Motion.standard, value: note != nil)
             }
 
-            prop("clock", "Created") {
-                Text(created).font(FN.body).foregroundStyle(p.text)
+            prop("clock", "Created", last: true) {
+                Text(created).font(FN.body).monospacedDigit().foregroundStyle(p.textSecondary)
+                    .padding(.horizontal, 10)
             }
         }
+        .overlay(RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous).strokeBorder(p.border, lineWidth: 1))
     }
 
     /// Rebuild the rule from its frequency and interval while keeping a
@@ -314,23 +350,27 @@ struct TaskPanel: View {
         return Recurrence.normalised(base, anchoredTo: date)
     }
 
-    /// One property row: icon and name on the left, the value on the right.
-    private func prop<Content: View>(_ icon: String, _ label: String,
+    /// One property row: its name on the left, the value on the right.
+    private func prop<Content: View>(_ icon: String, _ label: String, last: Bool = false,
                                      @ViewBuilder _ content: () -> Content) -> some View {
-        GridRow {
-            HStack(spacing: 10) {
-                Icon(icon, size: 15)
-                Text(label).lineLimit(1)
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Text(label)
+                    .font(FN.font(13))
+                    .foregroundStyle(p.textMuted)
+                    .lineLimit(1)
+                    .frame(width: 76, alignment: .leading)
+                content()
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .font(FN.body)
-            .foregroundStyle(p.textMuted)
-            .frame(width: 128, alignment: .leading)
-            .frame(minHeight: 36)
-
-            content()
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(minHeight: 36)
+            .padding(.leading, 14)
+            .padding(.trailing, 8)
+            .padding(.vertical, 6)
+            .frame(minHeight: 48)
+            if !last { Rectangle().fill(p.borderSubtle).frame(height: 1) }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(label)
     }
 
     private func openURL(_ url: URL?) {

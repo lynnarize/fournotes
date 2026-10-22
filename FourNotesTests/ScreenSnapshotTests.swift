@@ -41,6 +41,15 @@ struct ScreenSnapshotTests {
         }
     }
 
+    @Test("A task, open beside the board")
+    func taskPanel() throws {
+        guard let todo = AppModel.shared.store.liveTodos.first else { return }
+        for dark in [false, true] {
+            try render(TaskPanel(todo: todo, isNew: false, onClose: {}, onMove: { _ in }), name: "task-panel",
+                       dark: dark, size: CGSize(width: 420, height: 760))
+        }
+    }
+
     @Test("Finance, the whole page")
     func financePage() throws {
         for dark in [false, true] {

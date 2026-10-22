@@ -200,6 +200,8 @@ struct SelectMenu<Value: Hashable>: View {
     @Binding var selection: Value
     var width: CGFloat?
     var help: String?
+    /// The web's `.prop-input`: plain until the pointer is over it, for property rows.
+    var quiet = false
 
     var body: some View {
         let current = options.first { $0.value == selection }?.label ?? ""
@@ -208,7 +210,7 @@ struct SelectMenu<Value: Hashable>: View {
                 .item(option.label, checked: option.value == selection) { selection = option.value }
             }
         }) {
-            SelectLabel(title: current, width: width)
+            SelectLabel(title: current, width: width, quiet: quiet)
         }
     }
 }
@@ -235,8 +237,31 @@ private struct SelectLabel: View {
     @State private var hovering = false
     let title: String
     let width: CGFloat?
+    var quiet = false
 
     var body: some View {
+        if quiet { quietBody } else { fieldBody }
+    }
+
+    private var quietBody: some View {
+        HStack(spacing: 6) {
+            Text(title).lineLimit(1).truncationMode(.tail)
+            Icon("chevronDown", size: 12).foregroundStyle(p.faint)
+        }
+        .font(FN.body)
+        .foregroundStyle(p.foreground)
+        .padding(.horizontal, 10)
+        .frame(width: width, alignment: .leading)
+        .frame(height: 36)
+        .background(open || (hovering && enabled) ? p.hover : .clear,
+                    in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .opacity(enabled ? 1 : 0.5)
+        .motion(hovering || open, Motion.quick)
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+    }
+
+    private var fieldBody: some View {
         HStack(spacing: 6) {
             Text(title).lineLimit(1).truncationMode(.tail)
             Spacer(minLength: 0)

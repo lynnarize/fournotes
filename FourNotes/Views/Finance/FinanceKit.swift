@@ -174,6 +174,8 @@ struct SegmentedTabs: View {
     let items: [(id: String, label: String)]
     @Binding var selection: String
     var alert: String?
+    /// Segments share the width given, as the web's `.seg .flex` with `flex-1` buttons.
+    var fill = false
 
     var body: some View {
         HStack(spacing: 2) {
@@ -184,6 +186,7 @@ struct SegmentedTabs: View {
                         .font(FN.font(13, on ? .medium : .regular))
                         .foregroundStyle(on || hovered == item.id ? p.foreground : p.textSecondary)
                         .padding(.horizontal, 12)
+                        .frame(maxWidth: fill ? .infinity : nil)
                         .frame(height: 30)
                         .background {
                             if on {

@@ -368,7 +368,7 @@ struct OnboardingView: View {
                     }
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Meetings and reminders").font(FN.font(20, .medium)).foregroundStyle(p.foreground)
-                        Text("With your calendar, today's meetings wait on the Transcribe page. A couple of minutes before one starts, a notification records it in a click. A call that starts in Zoom, Meet or Teams with nothing on the calendar gets the same offer.")
+                        Text("With your calendar, today's meetings wait on the Meetings page, and the next one on Today. A couple of minutes before one starts, a notification records it in a click. A call that starts in Zoom, Meet or Teams with nothing on the calendar gets the same offer.")
                             .font(FN.font(15)).lineSpacing(5).foregroundStyle(p.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }

@@ -4,7 +4,8 @@ import SwiftUI
 // Today, as on the web (src/components/TodayView.tsx): the date and a greeting, the
 // brief (one short paragraph written from your data, or the written brief point by
 // point, see Settings → Today), and the assistant under it. Beside them, at a glance:
-// what's due (tick it off right here), what you've spent today, and quick notes.
+// the next meeting, what's due (tick it off right here), what you've spent today, and
+// quick notes.
 // Sending to the assistant opens the conversation as a card where the brief was.
 
 struct TodayView: View {
@@ -110,6 +111,7 @@ struct TodayView: View {
                 mainColumn(alerts)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 VStack(spacing: 16) {
+                    NextMeetingCard()
                     DueTodayCard(tasks: tasks, upcoming: upcoming, focus: focus)
                     SpentTodayCard(yesterdayTotal: yesterdayTotal)
                     QuickNotesCard(quickNotes: quickNotes)

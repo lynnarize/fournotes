@@ -1,8 +1,9 @@
 import SwiftUI
 
-// Today's cards, at a glance beside the brief, as on the web: what's due (tick it off
-// right here) and what's coming up, what you've spent today against today's share of
-// your budgets, and quick notes — a line to jot in, and the newest few.
+// Today's cards, at a glance beside the brief, as on the web: the next meeting (record
+// it in a click), what's due (tick it off right here) and what's coming up, what you've
+// spent today against today's share of your budgets, and quick notes — a line to jot
+// in, and the newest few.
 
 private func cardHead(_ title: String, _ p: Palette) -> some View {
     Text(title)
@@ -10,6 +11,204 @@ private func cardHead(_ title: String, _ p: Palette) -> some View {
         .foregroundStyle(p.foreground)
         .lineLimit(1)
         .frame(maxWidth: .infinity, alignment: .leading)
+}
+
+// MARK: - Next meeting
+
+/// Which meeting Today's card shows, and how it says when. Pure, so it's tested; the
+/// web app's card follows the same rules.
+enum NextMeeting {
+    /// How far ahead the card looks.
+    static let window: TimeInterval = 12 * 3600
+    static let dismissedKey = "fournotes.today.nextMeetingDismissed"
+
+    /// The meeting on now (the one that began last, when two overlap), else the next one
+    /// within the window; and the one after it, when that's in the window too.
+    static func pick(_ meetings: [Meeting], now: Date) -> (shown: Meeting, then: Meeting?)? {
+        let ahead = meetings
+            .filter { $0.end > now && $0.start <= now.addingTimeInterval(window) }
+            .sorted { $0.start < $1.start }
+        guard let shown = ahead.last(where: { $0.isOn(at: now) }) ?? ahead.first(where: { $0.start > now })
+        else { return nil }
+        let then = ahead.first { $0.id != shown.id && $0.start > now && $0.start >= shown.start }
+        return (shown, then)
+    }
+
+    /// "Now · started 5 min ago", "Now · until 5:00 PM", "In 12 min", "At 3:30 PM",
+    /// "Tomorrow at 9:00 AM".
+    static func when(_ m: Meeting, now: Date, calendar: Calendar = .current) -> String {
+        if m.isOn(at: now) {
+            let minutes = Int(now.timeIntervalSince(m.start) / 60)
+            if minutes < 1 { return "Now · just started" }
+            return minutes < 60 ? "Now · started \(minutes) min ago" : "Now · until \(Fmt.time(m.end))"
+        }
+        let minutes = Int((m.start.timeIntervalSince(now) / 60).rounded(.up))
+        if minutes <= 1 { return "Starting now" }
+        if minutes < 60 { return "In \(minutes) min" }
+        if calendar.isDate(m.start, inSameDayAs: now) { return "At \(Fmt.time(m.start))" }
+        return "Tomorrow at \(Fmt.time(m.start))"
+    }
+
+    /// "3:30 – 4:00 PM", "11:30 AM – 12:30 PM".
+    static func range(_ m: Meeting) -> String {
+        let start = Fmt.time(m.start), end = Fmt.time(m.end)
+        let half = { (s: String) in s.split(separator: " ").last.map(String.init) ?? "" }
+        if half(start) == half(end), let bare = start.split(separator: " ").first { return "\(bare) – \(end)" }
+        return "\(start) – \(end)"
+    }
+}
+
+struct NextMeetingCard: View {
+    @Environment(\.palette) private var p
+    @EnvironmentObject private var nav: Navigation
+    @EnvironmentObject private var toasts: ToastCenter
+    @ObservedObject private var calendar = MeetingCalendar.shared
+    @ObservedObject private var talks = TalkStore.shared
+    @ObservedObject private var recorder = TalkRecorder.shared
+    @AppStorage(NextMeeting.dismissedKey) private var dismissed = false
+    /// The meeting being started, while its call opens.
+    @State private var starting: String?
+
+    var body: some View {
+        if calendar.access == .allowed {
+            TimelineView(.periodic(from: .now, by: 30)) { context in
+                card { HeadLink(title: "All meetings") { nav.tab = .transcribe } } content: {
+                    upcoming(now: context.date)
+                }
+            }
+        } else if !dismissed {
+            card {
+                IconButton("x", size: 12, box: 22, help: "Not now") {
+                    withAnimation(Motion.standard) { dismissed = true }
+                }
+            } content: { connect }
+        }
+    }
+
+    private func card<Trailing: View, Content: View>(@ViewBuilder _ trailing: () -> Trailing,
+                                                     @ViewBuilder content: () -> Content) -> some View {
+        let trailing = trailing(), content = content()
+        return Card(padding: 8) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 8) {
+                    cardHead("Next meeting", p)
+                    trailing
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
+                content
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 2)
+                    .padding(.bottom, 12)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func upcoming(now: Date) -> some View {
+        if let next = NextMeeting.pick(calendar.meetings, now: now) {
+            meeting(next.shown, then: next.then, now: now)
+        } else {
+            Text("No more meetings today.")
+                .font(FN.body)
+                .foregroundStyle(p.textSecondary)
+        }
+    }
+
+    private func meeting(_ m: Meeting, then: Meeting?, now: Date) -> some View {
+        let talk = talks.all.first { $0.isAlive && m.matches($0.event) }
+        let recording = talk != nil && recorder.isActive && talk?.id == recorder.talkId
+        return VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(NextMeeting.when(m, now: now))
+                    .font(FN.small)
+                    .foregroundStyle(p.textMuted)
+                Text(m.title)
+                    .font(FN.font(15, .medium))
+                    .foregroundStyle(p.foreground)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(([NextMeeting.range(m)] + (m.detail.isEmpty ? [] : [m.detail])).joined(separator: " · "))
+                    .font(FN.small)
+                    .foregroundStyle(p.textSecondary)
+                    .lineLimit(1)
+            }
+            .accessibilityElement(children: .combine)
+            buttons(m, talk: talk, recording: recording)
+            if let then {
+                Text("Then \(Fmt.time(then.start)) · \(then.title)")
+                    .font(FN.small)
+                    .foregroundStyle(p.textMuted)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func buttons(_ m: Meeting, talk: Talk?, recording: Bool) -> some View {
+        HStack(spacing: 8) {
+            if recording, let talk {
+                RecordingDot(size: 8)
+                Text("Recording").font(FN.small).foregroundStyle(p.textSecondary)
+                Spacer(minLength: 0)
+                SecondaryButton(title: "Open", small: true) { open(talk.id) }.fixedSize()
+            } else if let talk {
+                SecondaryButton(title: "Open notes", icon: "note", small: true) { open(talk.id) }.fixedSize()
+            } else {
+                let busy = starting == m.id
+                // One talk records at a time.
+                let blocked = recorder.isActive || starting != nil
+                if m.link != nil {
+                    PrimaryButton(title: busy ? "Joining…" : "Join and record", disabled: blocked, small: true) {
+                        record(m, join: true)
+                    }
+                    .fixedSize()
+                    SecondaryButton(title: "Record", small: true) { record(m, join: false) }
+                        .fixedSize()
+                        .disabled(blocked)
+                } else {
+                    PrimaryButton(title: busy ? "Starting…" : "Record", icon: "mic", disabled: blocked, small: true) {
+                        record(m, join: false)
+                    }
+                    .fixedSize()
+                }
+            }
+        }
+    }
+
+    private var connect: some View {
+        let denied = calendar.access == .denied
+        return VStack(alignment: .leading, spacing: 10) {
+            Text(denied
+                 ? "Calendar access is off. Turn it on in System Settings to see your next meeting here."
+                 : "See your next meeting here, and record it in one click.")
+                .font(FN.body)
+                .foregroundStyle(p.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            SecondaryButton(title: denied ? "Open System Settings" : "Connect calendar", icon: "calendar", small: true) {
+                Task { await calendar.requestAccess() }
+            }
+            .fixedSize()
+        }
+    }
+
+    private func record(_ m: Meeting, join: Bool) {
+        starting = m.id
+        Task {
+            defer { starting = nil }
+            do {
+                open(try await MeetingRecording.record(m, join: join))
+            } catch {
+                toasts.push(error.localizedDescription, tone: .error)
+            }
+        }
+    }
+
+    private func open(_ talkId: String) {
+        nav.open(ChangeLink(kind: .talks, id: talkId))
+    }
 }
 
 // MARK: - Due today

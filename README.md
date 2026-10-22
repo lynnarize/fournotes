@@ -6,8 +6,9 @@ default, and useful with no account, no key and no network.
 
 ## Features
 
-- **Today** — your day on one page: a written brief, what's due (tick it off
-  right there), heads-up alerts, quick notes, and the assistant in the middle.
+- **Today** — your day on one page: a written brief, your next meeting (record
+  it in a click), what's due (tick it off right there), heads-up alerts, quick
+  notes, and the assistant in the middle.
   The brief reads as one paragraph or point by point.
 - **Notes** — a rich-text editor with real bullet, numbered and checklist
   lists, spell-checking, find, undo, tags, sharing and printing. A focus mode
@@ -25,7 +26,7 @@ default, and useful with no account, no key and no network.
   question needs the internet.
 - **Scan and record** — a receipt photo becomes spending; a voice memo becomes
   a note with its to-dos. Text is read and speech transcribed on this Mac.
-- **Transcribe** — record a conversation in person, or a call in Zoom, Google
+- **Transcribe** — on the Meetings page, record a conversation in person, or a call in Zoom, Google
   Meet, Teams or WhatsApp on this Mac (your microphone for you, the app's sound
   for them, via ScreenCaptureKit), or transcribe a file. Apple's speech model
   writes the words as they're spoken; Whisper, when downloaded, transcribes it
@@ -41,8 +42,8 @@ default, and useful with no account, no key and no network.
   meetings are read in pieces, so Apple's on-device model covers all of an hour,
   not just its first ten minutes.
 - **Meetings** — today's and tomorrow's meetings from the Mac's calendars
-  (iCloud, Google, Outlook — no sign-in), with a Now line, on the Transcribe
-  page. One click records a meeting with its name and who's invited, or joins
+  (iCloud, Google, Outlook — no sign-in), with a Now line, on the Meetings
+  page, and the next one on Today. One click records a meeting with its name and who's invited, or joins
   its Zoom, Meet or Teams link and records. A notification a couple of minutes
   before starts it, and when Zoom, Teams, Meet, Slack or WhatsApp starts using
   the microphone with nothing on the calendar, Four Notes offers to transcribe
@@ -241,7 +242,7 @@ TEST_RUNNER_FOURNOTES_EVAL_LOCALSERVER=1 ./scripts/run-tests.sh         # LM Stu
 |---|---|
 | ⌘N / ⇧⌘N / ⌥⌘N | New note / task / transaction |
 | ⌘K | Search or quick add |
-| ⌘1 – ⌘6 | Today, Notes, To-Do, Finance, Transcribe, Library |
+| ⌘1 – ⌘6 | Today, Meetings, Notes, To-Do, Library, Finance |
 | ⇧⌘I | Scan a receipt or note |
 | ⇧⌘R | Record a voice note |
 | ⇧⌘. | Open the edge dock |

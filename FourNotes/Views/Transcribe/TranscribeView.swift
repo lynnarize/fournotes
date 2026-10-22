@@ -1,6 +1,7 @@
 import SwiftUI
 
-// Transcribe: conversations you record, in person or on a call (Zoom, Google Meet,
+// Meetings (the Transcribe tab, as the code still calls it): your calendar's meetings,
+// then the conversations you record, in person or on a call (Zoom, Google Meet,
 // a WhatsApp call), transcribed with who said what, written up, and searchable by the
 // assistant. A list of talks beside the open one, as Notes has it. Recording carries on
 // while you use the rest of the app. As on the web (src/components/TranscribeView.tsx).
@@ -82,7 +83,7 @@ struct TranscribeView: View {
     private func listColumn(selected: Detail) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 4) {
-                Text("Transcribe")
+                Text(Tab.transcribe.title)
                     .font(FN.display(28))
                     .tracking(FN.displayTracking(28))
                     .foregroundStyle(p.foreground)

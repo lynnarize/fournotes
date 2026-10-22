@@ -69,7 +69,7 @@ struct MeetingsSettings: View {
                     SettingsBlock(spacing: 14) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Calendars").font(FN.body).foregroundStyle(p.foreground)
-                            SettingsHint("Events from these are your meetings on the Transcribe page. All-day events and ones you declined never are.")
+                            SettingsHint("Events from these are your meetings on the Meetings page. All-day events and ones you declined never are.")
                         }
                         ForEach(calendar.sources) { source in
                             VStack(alignment: .leading, spacing: 8) {

@@ -95,6 +95,15 @@ struct MeetingsSnapshotTests {
         }
     }
 
+    @Test("Today, with the next meeting")
+    func today() throws {
+        MeetingCalendar.shared.show(Self.sampleMeetings())
+        AppModel.shared.nav.tab = .today
+        for dark in [false, true] {
+            try render(RootView(), name: "meetings-today", dark: dark, size: CGSize(width: 1280, height: 820))
+        }
+    }
+
     @Test("A finished talk, each tab")
     func talkPage() throws {
         let talk = Self.sampleTalk()

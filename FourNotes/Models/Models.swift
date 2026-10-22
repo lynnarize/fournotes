@@ -3,8 +3,12 @@ import Foundation
 // The shared data model, ported field-for-field from src/lib/types.ts so the
 // JSON on disk stays interchangeable with the web app's "four-notes:v1" blob.
 
+/// In the sidebar's order, which ⌘1… follow: meetings first after Today, then where
+/// what comes out of them goes (Notes, To-Do), then what they're answered from
+/// (Library), and Finance last. As on the web (src/components/Sidebar.tsx).
+/// `transcribe` is the Meetings page; the raw values are saved, so they don't change.
 enum Tab: String, CaseIterable, Codable, Identifiable {
-    case today, notes, todo, finance, transcribe, library
+    case today, transcribe, notes, todo, library, finance
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -12,7 +16,7 @@ enum Tab: String, CaseIterable, Codable, Identifiable {
         case .notes: return "Notes"
         case .todo: return "To-Do"
         case .finance: return "Finance"
-        case .transcribe: return "Transcribe"
+        case .transcribe: return "Meetings"
         case .library: return "Library"
         }
     }

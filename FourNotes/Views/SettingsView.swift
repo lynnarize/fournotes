@@ -85,7 +85,7 @@ struct SettingsView: View {
             Section(id: "api", icon: "sparkle", title: "AI and keys",
                     keywords: "assistant api key keys openrouter opencode claude anthropic model free paid apple intelligence lm studio ollama local cloud speech whisper transcription"),
             Section(id: "meetings", icon: "calendar", title: "Meetings",
-                    description: "Your calendar on the Transcribe page, a reminder before a meeting, and calls noticed as they start.",
+                    description: "Your calendar on the Meetings page, a reminder before a meeting, and calls noticed as they start.",
                     keywords: "meetings calendar transcribe record call calls zoom meet teams slack facetime whatsapp reminder reminders notification notifications microphone system audio screen recording permissions allow detect"),
             Section(id: "general", icon: "settings", title: "General",
                     keywords: "name currency money voice replies speak notifications reminders setup first run"),

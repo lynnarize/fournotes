@@ -242,7 +242,7 @@ struct FinanceDashboard: View {
                         Text("Log some spending first; the review is written from it.")
                     }
                 }
-                .font(FN.body)
+                .font(FN.font(16))
                 .foregroundStyle(p.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
@@ -288,7 +288,7 @@ struct FinanceDashboard: View {
                 HStack(spacing: 10) {
                     Icon("warning", size: 16).foregroundStyle(p.warning)
                     Text("Spending spike today: \(Text(Money.format(spentToday, cur)).foregroundStyle(p.foreground)), against a usual day of \(Money.format(usualDay, cur)).")
-                        .font(FN.body)
+                        .font(FN.font(16))
                         .monospacedDigit()
                         .foregroundStyle(p.textSecondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -469,7 +469,7 @@ struct FinanceDashboard: View {
                 let tone: Color? = b.ratio >= 1 ? p.danger : b.ratio >= 0.8 ? p.warning : nil
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(b.category).font(FN.body).foregroundStyle(p.foreground).lineLimit(1)
+                        Text(b.category).font(FN.font(16)).foregroundStyle(p.foreground).lineLimit(1)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         Text("\(Money.format(b.spent, cur)) \(Text("of \(b.limit.formatted(.number))").foregroundStyle(p.textMuted))")
                             .font(FN.font(13)).monospacedDigit()
@@ -531,7 +531,7 @@ struct FinanceDashboard: View {
             .frame(width: 44)
             .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(item.title.isEmpty ? "Untitled bill" : item.title).font(FN.body).foregroundStyle(p.foreground).lineLimit(1)
+                Text(item.title.isEmpty ? "Untitled bill" : item.title).font(FN.font(16)).foregroundStyle(p.foreground).lineLimit(1)
                 Text("\(sub), \(Money.format(item.amount, item.currency))")
                     .font(FN.small).monospacedDigit().foregroundStyle(p.textMuted).lineLimit(1)
             }
@@ -618,7 +618,7 @@ struct FinanceDashboard: View {
                 .background(p.surfaceMuted, in: Circle())
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(s.name).font(FN.body).foregroundStyle(p.foreground).lineLimit(1)
+                Text(s.name).font(FN.font(16)).foregroundStyle(p.foreground).lineLimit(1)
                 Text("\(s.settled ? "Paid" : "Owes you") \(Money.format(s.amount, tx.currency))")
                     .font(FN.small).monospacedDigit().foregroundStyle(p.textMuted)
             }

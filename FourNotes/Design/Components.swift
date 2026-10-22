@@ -283,6 +283,8 @@ struct KitButton: View {
     let title: String
     var icon: String?
     var small = false
+    /// `.btn-lg`: 44pt, for a page's main action.
+    var large = false
     /// A solid colour in place of the accent (a destructive primary).
     var tone: Color?
     var disabled = false
@@ -293,13 +295,13 @@ struct KitButton: View {
         let lit = hovering && !off
         Button(action: action) {
             HStack(spacing: small ? 6 : 8) {
-                if let icon { Icon(icon, size: small ? 14 : 16) }
+                if let icon { Icon(icon, size: small ? 14 : large ? 18 : 16) }
                 Text(title).lineLimit(1)
             }
-            .font(FN.font(small ? 13 : 14, kind == .plain ? .regular : .medium))
+            .font(FN.font(small ? 13 : large ? 15 : 14, kind == .plain ? .regular : .medium))
             .foregroundStyle(foreground(lit))
-            .padding(.horizontal, small ? 12 : 14)
-            .frame(height: small ? 32 : 36)
+            .padding(.horizontal, small ? 12 : large ? 20 : 14)
+            .frame(height: small ? 32 : large ? 44 : 36)
             .background(background(lit), in: Capsule())
             .overlay { if kind == .secondary { Capsule().strokeBorder(p.border, lineWidth: 1) } }
             .opacity(off ? 0.45 : 1)

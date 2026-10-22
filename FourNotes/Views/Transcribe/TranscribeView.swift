@@ -90,8 +90,9 @@ struct TranscribeView: View {
                         }
                         .font(FN.bodyMedium)
                         .foregroundStyle(p.danger)
-                        .padding(.horizontal, 12)
-                        .frame(height: 32)
+                        .padding(.leading, 10)
+                        .padding(.trailing, 14)
+                        .frame(height: 36)
                         .background(p.surface, in: Capsule())
                         .overlay(Capsule().strokeBorder(p.border, lineWidth: 1))
                     }
@@ -103,8 +104,9 @@ struct TranscribeView: View {
                 }
             }
             .padding(.leading, 8)
-            .padding(.top, 26)
-            .padding(.bottom, 14)
+            .padding(.trailing, 4)
+            .padding(.top, 24)
+            .padding(.bottom, 12)
 
             searchField
 
@@ -121,19 +123,20 @@ struct TranscribeView: View {
                             Spacer(minLength: 0)
                         }
                         .padding(.horizontal, 12)
-                        .frame(height: 34)
+                        .padding(.vertical, 8)
                         .contentShape(Rectangle())
                     }
                 }
                 .buttonStyle(.fn)
                 .padding(.horizontal, 4)
-                .padding(.bottom, 6)
+                .padding(.top, -4)
+                .padding(.bottom, 8)
                 .transition(.opacity)
             }
 
             ScrollView {
                 let rows = list
-                LazyVStack(spacing: 2) {
+                LazyVStack(spacing: 4) {
                     ForEach(rows) { talk in
                         TalkRow(talk: talk, isSelected: selected == .talk(talk.id) || selected == .live(talk.id),
                                 working: recorder.working[talk.id] != nil || talk.id == recorder.talkId) {
@@ -145,20 +148,21 @@ struct TranscribeView: View {
                         }
                     }
                     if mine.isEmpty {
-                        VStack(spacing: 6) {
-                            Text("No talks yet").font(FN.bodyMedium).foregroundStyle(p.foreground)
+                        VStack(spacing: 4) {
+                            Text("No talks yet").font(FN.font(16, .medium)).foregroundStyle(p.foreground)
                             Text("Record a conversation in person, or a Zoom, Google Meet or WhatsApp call on this Mac. You get who said what, a summary, and a note if you want one.")
-                                .font(FN.small).foregroundStyle(p.textMuted)
+                                .font(FN.body).lineSpacing(3).foregroundStyle(p.textMuted)
                                 .multilineTextAlignment(.center)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         .padding(.horizontal, 12)
-                        .padding(.vertical, 28)
+                        .padding(.vertical, 32)
                     } else if rows.isEmpty {
                         Text("No talk mentions that. Ask the assistant instead.")
-                            .font(FN.small).foregroundStyle(p.textMuted)
+                            .font(FN.body).foregroundStyle(p.textMuted)
                             .multilineTextAlignment(.center)
-                            .padding(.vertical, 24)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 32)
                     }
                 }
                 .animation(Motion.list, value: rows.map(\.id))
@@ -172,10 +176,10 @@ struct TranscribeView: View {
 
     private var searchField: some View {
         HStack(spacing: 8) {
-            Icon("search", size: 15).foregroundStyle(p.textMuted)
+            Icon("search", size: 16).foregroundStyle(p.textMuted)
             TextField("Search talks", text: $query)
                 .textFieldStyle(.plain)
-                .font(FN.font(13))
+                .font(FN.body)
                 .foregroundStyle(p.foreground)
                 .focused($searchFocused)
                 .onExitCommand { query = ""; searchFocused = false }
@@ -190,25 +194,29 @@ struct TranscribeView: View {
         }
         .padding(.leading, 12)
         .padding(.trailing, 6)
-        .frame(height: 34)
+        .frame(height: 36)
         .background(p.surface, in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous)
             .strokeBorder(searchFocused ? p.borderStrong : p.border, lineWidth: 1))
         .motion(searchFocused, Motion.quick)
         .padding(.horizontal, 4)
-        .padding(.bottom, 10)
+        .padding(.bottom, 12)
     }
 
     private var emptyDetail: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 0) {
             Icon("wave", size: 28).foregroundStyle(p.textMuted)
-            Text("Record a conversation").font(FN.bodyMedium).foregroundStyle(p.foreground)
+            Text("Record a conversation").font(FN.font(16, .medium)).foregroundStyle(p.foreground)
+                .padding(.top, 12)
             Text("In person, or a call in another app on this Mac.")
-                .font(FN.small).foregroundStyle(p.textMuted)
+                .font(FN.body).foregroundStyle(p.textMuted)
+                .multilineTextAlignment(.center)
+                .padding(.top, 4)
             PrimaryButton(title: "Record", icon: "mic") { nav.selectedTalkId = Self.newRecording }
-                .padding(.top, 6)
+                .padding(.top, 16)
         }
-        .frame(maxWidth: 360)
+        .frame(maxWidth: 384)
+        .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -245,10 +253,10 @@ private struct TalkRow: View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
-                    Icon(talk.mode == .call ? "monitor" : talk.mode == .upload ? "download" : "users", size: 13)
+                    Icon(talk.mode == .call ? "monitor" : talk.mode == .upload ? "download" : "users", size: 14)
                         .foregroundStyle(p.textMuted)
                     Text(talk.title)
-                        .font(FN.font(13.5, .medium))
+                        .font(FN.font(16, .medium))
                         .foregroundStyle(p.foreground)
                         .lineLimit(1)
                     Spacer(minLength: 4)
@@ -257,20 +265,21 @@ private struct TalkRow: View {
                         .foregroundStyle(p.textMuted)
                 }
                 Text(preview.isEmpty ? "No words yet" : preview)
-                    .font(FN.font(12.5))
+                    .font(FN.font(13))
                     .foregroundStyle(p.textSecondary)
-                    .lineSpacing(2)
+                    .lineSpacing(3.5)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
-                HStack(spacing: 5) {
+                HStack(spacing: 6) {
                     Text(TalkText.clock(talk.duration)).monospacedDigit()
                     if let app = talk.app { Text("·"); Text(app).lineLimit(1) }
                     if !people.isEmpty { Text("·"); Text(people.joined(separator: ", ")).lineLimit(1) }
                     Spacer(minLength: 4)
+                    // The kit's `.badge`, in danger while recording, the accent while transcribing.
                     if talk.status == .recording {
-                        Badge(text: "Recording", tone: p.danger, subtle: p.dangerSubtle)
+                        StatusPill(text: "Recording", tone: .bad, dot: false)
                     } else if talk.status == .transcribing || working {
-                        Badge(text: "Transcribing…")
+                        StatusPill(text: "Transcribing…", tone: .accent, dot: false)
                     }
                 }
                 .font(FN.small)

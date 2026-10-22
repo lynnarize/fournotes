@@ -413,7 +413,7 @@ struct OnboardingView: View {
         VStack(spacing: 36) {
             CelebrationRow()
             Text("Your notebook is ready. The edge dock waits on the side of your screen; ⇧⌘. opens it.")
-                .font(FN.body)
+                .font(FN.font(16))
                 .foregroundStyle(p.textSecondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
@@ -742,12 +742,12 @@ private struct WelcomePicture: View {
                     HStack(spacing: 14) {
                         Glyph(icon: row.icon)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(row.title).font(FN.bodyMedium).foregroundStyle(p.foreground)
+                            Text(row.title).font(FN.font(16, .medium)).foregroundStyle(p.foreground)
                             Text(row.detail).font(FN.font(13)).foregroundStyle(p.textMuted).lineLimit(1)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         Text(row.trailing)
-                            .font(i == 0 ? FN.bodyMedium : FN.font(13))
+                            .font(i == 0 ? FN.font(16, .medium) : FN.font(13))
                             .monospacedDigit()
                             .foregroundStyle(i == 0 ? p.foreground : i == 1 ? p.textSecondary : p.textMuted)
                     }

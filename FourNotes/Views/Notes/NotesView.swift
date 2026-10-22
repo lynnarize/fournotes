@@ -284,7 +284,7 @@ struct NotesView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 8) {
                         Text(note.title.isEmpty ? "Untitled" : note.title)
-                            .font(FN.bodyMedium)
+                            .font(FN.font(16, .medium))
                             .foregroundStyle(note.title.isEmpty ? p.textMuted : p.foreground)
                             .lineLimit(1)
                         Spacer(minLength: 4)

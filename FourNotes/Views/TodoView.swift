@@ -161,7 +161,7 @@ struct TodoView: View {
         return VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 12) {
                 Text("\(live.filter { !$0.done }.count) open, \(doneThisWeek) done this week")
-                    .font(FN.font(14))
+                    .font(FN.font(16))
                     .monospacedDigit()
                     .foregroundStyle(p.textSecondary)
                 Spacer()
@@ -234,7 +234,7 @@ struct TodoView: View {
             if shown.isEmpty {
                 VStack(spacing: 6) {
                     Text(filter == .all ? col.empty : "Nothing here")
-                        .font(FN.bodyMedium)
+                        .font(FN.font(16, .medium))
                         .foregroundStyle(p.foreground)
                     Text(filter == .all ? col.hint : "No tasks in this column match the filter.")
                         .font(FN.font(13))

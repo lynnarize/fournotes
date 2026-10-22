@@ -156,6 +156,8 @@ extension Icon {
         "users": "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8",
         "pin": "M12 17v5M9 3h6l-1 7 4 3v2H6v-2l4-3z",
         "download": "M12 3v12M7 10l5 5 5-5M5 21h14",
+        // The download glyph upside down, as the web draws "Transcribe a file".
+        "upload": "M12 21V9M17 14l-5-5-5 5M19 3H5",
         "cloud": "M7 18a5 5 0 0 1-.5-10A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9z",
         "wave": "M3 12h2M7 8v8M11 5v14M15 8v8M19 11v2",
         "target": "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 12h.01",

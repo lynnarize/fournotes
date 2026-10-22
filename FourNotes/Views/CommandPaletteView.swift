@@ -138,7 +138,7 @@ struct CommandPaletteView: View {
         Button { run(item) } label: {
             HStack(spacing: 12) {
                 Icon(item.icon, size: 18).foregroundStyle(p.textSecondary)
-                Text(marked(item.label)).font(FN.body).foregroundStyle(p.foreground).lineLimit(1)
+                Text(marked(item.label)).font(FN.font(16)).foregroundStyle(p.foreground).lineLimit(1)
                 Spacer(minLength: 12)
                 if let hint = item.hint, !hint.isEmpty {
                     Text(hint).font(FN.font(13)).monospacedDigit().foregroundStyle(p.textMuted).lineLimit(1)
@@ -182,7 +182,7 @@ struct CommandPaletteView: View {
         var search = out.startIndex
         while search < out.endIndex,
               let range = out[search...].range(of: q, options: .caseInsensitive) {
-            out[range].font = FN.bodyMedium
+            out[range].font = FN.font(16, .medium)
             out[range].underlineStyle = Text.LineStyle(pattern: .solid, color: p.borderStrong)
             search = range.upperBound
         }
@@ -218,7 +218,7 @@ struct CommandPaletteView: View {
                     toasts.push("✅ \(t.title)")
                 })
                 out.append(Item(id: "qa-task-ai", group: "Quick add", icon: "sparkle",
-                                label: "Let the assistant set the date & repeat", hint: text) {
+                                label: "Let the assistant set the date and repeat", hint: text) {
                     Task { await assistant.send("Add a task: \(text)") }
                 })
             } else if ["n", "note"].contains(kind) {
@@ -271,29 +271,29 @@ struct CommandPaletteView: View {
                         nav.open(ChangeLink(kind: .notes, id: n.id))
                     })
                 case .todo(let t, _):
-                    out.append(Item(id: t.id, group: "Tasks", icon: "todo", label: t.title,
-                                    hint: t.done ? "done" : Fmt.due(t.dueAt)) {
+                    out.append(Item(id: t.id, group: "To-Do", icon: "todo", label: t.title,
+                                    hint: t.done ? "Done" : Fmt.due(t.dueAt)) {
                         nav.open(ChangeLink(kind: .todos, id: t.id))
                     })
                 case .transaction(let t, _):
-                    out.append(Item(id: t.id, group: "Spending", icon: "finance", label: t.merchant,
+                    out.append(Item(id: t.id, group: "Finance", icon: "finance", label: t.merchant,
                                     hint: "\(Money.format(t.amount, t.currency)) · \(t.date)") {
                         nav.open(ChangeLink(kind: .transactions, id: t.id))
                     })
                 }
             }
-            out.append(Item(id: "ask", group: "Ask", icon: "sparkle",
-                            label: "Ask the assistant: “\(q)”", hint: nil) {
+            out.append(Item(id: "ask", group: "Add or ask", icon: "sparkle",
+                            label: "Ask the assistant about “\(q)”", hint: nil) {
                 Task { await assistant.send(q) }
             })
         }
 
         let isDark = (ThemeChoice(rawValue: themeRaw) ?? .system) == .dark
         var commands: [Item] = [
-            Item(id: "go-today", group: "Go to", icon: "today", label: "Today", hint: "⌘1") { nav.tab = .today },
-            Item(id: "go-notes", group: "Go to", icon: "note", label: "Notes", hint: "⌘2") { nav.tab = .notes },
-            Item(id: "go-todo", group: "Go to", icon: "todo", label: "To-Do", hint: "⌘3") { nav.tab = .todo },
-            Item(id: "go-finance", group: "Go to", icon: "finance", label: "Finance", hint: "⌘4") { nav.tab = .finance },
+            Item(id: "go-today", group: "Go to", icon: "today", label: "Today", hint: nil) { nav.tab = .today },
+            Item(id: "go-notes", group: "Go to", icon: "note", label: "Notes", hint: nil) { nav.tab = .notes },
+            Item(id: "go-todo", group: "Go to", icon: "todo", label: "To-Do", hint: nil) { nav.tab = .todo },
+            Item(id: "go-finance", group: "Go to", icon: "finance", label: "Finance", hint: nil) { nav.tab = .finance },
             Item(id: "new-note", group: "Create", icon: "plus", label: "New note", hint: "n …") {
                 let n = store.addNote { $0.title = "" }
                 nav.open(ChangeLink(kind: .notes, id: n.id))
@@ -309,7 +309,7 @@ struct CommandPaletteView: View {
                 themeRaw = (isDark ? ThemeChoice.light : ThemeChoice.dark).rawValue
             },
             Item(id: "settings", group: "Actions", icon: "settings",
-                 label: "Settings, budgets & sync", hint: "⌘,") { nav.present(.settings) },
+                 label: "Settings and sync", hint: "⌘,") { nav.present(.settings) },
         ]
 
         let lower = q.lowercased()

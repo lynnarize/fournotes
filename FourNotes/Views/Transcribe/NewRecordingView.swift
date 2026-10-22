@@ -28,9 +28,7 @@ struct NewRecordingView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                GhostButton(action: onCancel) {
-                    HStack(spacing: 4) { Icon("chevronLeft", size: 16); Text("Talks") }
-                }
+                KitButton(kind: .plain, title: "Talks", icon: "chevronLeft", action: onCancel)
                 Spacer()
             }
             .padding(.horizontal, 14)
@@ -40,8 +38,8 @@ struct NewRecordingView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     Text("New recording")
-                        .font(FN.display(32))
-                        .tracking(FN.displayTracking(32))
+                        .font(FN.display(30))
+                        .tracking(FN.displayTracking(30))
                         .foregroundStyle(p.foreground)
 
                     HStack(alignment: .top, spacing: 12) {
@@ -55,18 +53,18 @@ struct NewRecordingView: View {
 
                     HStack(alignment: .top, spacing: 12) {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("Name it (optional)").font(FN.small).foregroundStyle(p.textMuted)
+                            Text("Name it (optional)").font(FN.font(13)).foregroundStyle(p.textMuted)
                             TextField("Weekly sync with Andi", text: $title)
                                 .textFieldStyle(.plain)
                                 .font(FN.body)
-                                .padding(.horizontal, 12)
-                                .frame(height: 34)
+                                .padding(.horizontal, 14)
+                                .frame(height: 36)
                                 .background(p.surface, in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
                                 .overlay(RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous).strokeBorder(p.border, lineWidth: 1))
                         }
                         .frame(maxWidth: .infinity)
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("Language spoken").font(FN.small).foregroundStyle(p.textMuted)
+                            Text("Language spoken").font(FN.font(13)).foregroundStyle(p.textMuted)
                             MenuButton(help: "Language spoken") {
                                 TranscribeLanguages.all.map { code, name in .item(name, checked: lang == code) { lang = code } }
                             } label: {
@@ -74,8 +72,8 @@ struct NewRecordingView: View {
                                     Text(TranscribeLanguages.name(lang)).font(FN.body).foregroundStyle(p.foreground)
                                     Icon("chevronDown", size: 12).foregroundStyle(p.textMuted)
                                 }
-                                .padding(.horizontal, 12)
-                                .frame(height: 34)
+                                .padding(.horizontal, 14)
+                                .frame(height: 36)
                                 .background(p.surface, in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
                                 .overlay(RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous).strokeBorder(p.border, lineWidth: 1))
                             }
@@ -86,7 +84,7 @@ struct NewRecordingView: View {
                     how
 
                     Text("Tell everyone you're recording before you start. In many places it's the law.")
-                        .font(FN.small).foregroundStyle(p.textMuted)
+                        .font(FN.font(13)).foregroundStyle(p.textMuted)
 
                     if let preparing = recorder.preparing {
                         HStack(spacing: 8) {
@@ -96,12 +94,10 @@ struct NewRecordingView: View {
                     }
 
                     HStack(spacing: 12) {
-                        PrimaryButton(title: mode == .call ? "Start recording the call" : "Start recording", icon: "mic",
-                                      disabled: busy || recorder.isActive) { start() }
-                        GhostButton(action: pickFile) {
-                            HStack(spacing: 6) { Icon("download", size: 15).rotationEffect(.degrees(180)); Text("Transcribe a file") }
-                        }
-                        .disabled(busy)
+                        KitButton(kind: .primary, title: mode == .call ? "Start recording the call" : "Start recording",
+                                  icon: "mic", large: true, disabled: busy || recorder.isActive) { start() }
+                        KitButton(kind: .plain, title: "Transcribe a file", icon: "upload", large: true, action: pickFile)
+                            .disabled(busy)
                     }
                 }
                 .frame(maxWidth: 640, alignment: .leading)
@@ -124,8 +120,8 @@ struct NewRecordingView: View {
         return Button { modeRaw = id.rawValue } label: {
             VStack(alignment: .leading, spacing: 6) {
                 Icon(icon, size: 20).foregroundStyle(on ? p.accent : p.textSecondary)
-                Text(label).font(FN.bodyMedium).foregroundStyle(p.foreground)
-                Text(text).font(FN.small).foregroundStyle(p.textMuted)
+                Text(label).font(FN.font(16, .medium)).foregroundStyle(p.foreground)
+                Text(text).font(FN.font(13)).lineSpacing(2).foregroundStyle(p.textMuted)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
             }

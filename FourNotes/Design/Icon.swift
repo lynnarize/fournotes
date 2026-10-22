@@ -173,5 +173,7 @@ extension Icon {
         "arrowUp": "M5 12l7-7 7 7M12 19V5",
         "pinOff": "M12 17v5M9 3h6l-1 7 4 3v2H6v-2l4-3zM4 4l16 16",
         "wifiOff": "M2 2l20 20M8.5 16.5a5 5 0 0 1 7 0M5 13a10 10 0 0 1 5.2-2.8M19 13a10 10 0 0 0-2.2-1.7M2 8.8a15 15 0 0 1 4.2-2.6M22 8.8A15 15 0 0 0 10.7 5M12 20h.01",
+        // The library's folders.
+        "folder": "M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
     ]
 }

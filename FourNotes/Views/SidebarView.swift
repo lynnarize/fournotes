@@ -14,6 +14,7 @@ struct SidebarView: View {
     @ObservedObject private var updates = UpdateCheck.shared
     @ObservedObject private var talks = TalkStore.shared
     @ObservedObject private var recorder = TalkRecorder.shared
+    @ObservedObject private var library = Knowledge.shared
 
     private var counts: [Tab: Int] {
         let month = DateKit.localMonth()
@@ -24,6 +25,7 @@ struct SidebarView: View {
             .todo: store.liveTodos.filter { !$0.done }.count,
             .finance: store.liveTransactions.filter { $0.date.hasPrefix(month) }.count,
             .transcribe: talks.live(in: store.currentSpaceId).count,
+            .library: library.sources(in: store.currentSpaceId).count,
         ]
     }
 
@@ -177,6 +179,12 @@ struct SidebarView: View {
                 return [.item("Go to the recording") { nav.open(ChangeLink(kind: .talks, id: id)) }]
             }
             return [.item("New recording…") { nav.selectedTalkId = TranscribeView.newRecording; nav.tab = .transcribe }]
+        case .library:
+            return [
+                .item("Add files…", icon: "fileText") { nav.tab = .library; library.pickFiles() },
+                .item("Add a folder…", icon: "folder") { nav.tab = .library; library.pickFolder() },
+                .item("Add a web page…", icon: "link") { nav.selectedSourceId = LibraryView.newPage; nav.tab = .library },
+            ]
         }
     }
 }
@@ -411,6 +419,7 @@ extension Tab {
         case .todo: return "todo"
         case .finance: return "finance"
         case .transcribe: return "wave"
+        case .library: return "book"
         }
     }
 }

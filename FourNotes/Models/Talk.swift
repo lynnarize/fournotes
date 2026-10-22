@@ -17,6 +17,20 @@ struct TalkSegment: Codable, Equatable, Hashable {
     var text: String
 }
 
+/// A calendar event (EventKit) a talk was recorded for.
+struct TalkEvent: Codable, Equatable, Hashable {
+    /// The event's calendarItemIdentifier.
+    var id: String
+    var title: String
+    /// ISO 8601, as the rest of the talk's dates.
+    var start: String
+    var end: String
+    /// The people invited, by name (or address when there's no name).
+    var attendees: [String]
+    /// The call's link (Zoom, Meet, Teams…), when the event has one.
+    var url: String?
+}
+
 struct TalkSummary: Codable, Equatable {
     struct Person: Codable, Equatable {
         var speaker: String
@@ -62,6 +76,10 @@ struct Talk: Codable, Equatable, Identifiable {
     /// Each recorded channel ("me", "them", "room") and when it began, in seconds from
     /// the start of the talk.
     var channels: [String: Double]?
+    /// What you wrote while it ran, in Markdown: shorthand that Enhance writes out in full.
+    var notes: String?
+    /// The calendar event it was recorded for, as it was then.
+    var event: TalkEvent?
 
     init(id: String = UUID().uuidString.lowercased(), createdAt: Date = Date(), title: String, mode: Mode,
          app: String? = nil, lang: String, spaceId: String? = nil) {

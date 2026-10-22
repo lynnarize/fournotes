@@ -116,6 +116,50 @@ struct MeetingsSnapshotTests {
         }
     }
 
+    private static let planCitation = TalkCitation(KnowledgeCitation(
+        origin: .library(sourceId: "s", documentId: "d", page: 2, offset: 0),
+        label: "Q4 plan.pdf · p. 2", title: "From “Q4 plan.pdf”, page 2"))
+
+    @Test("Live Q&A beside the notes")
+    func liveAnswers() throws {
+        var talk = Self.sampleTalk()
+        talk.status = .recording
+        talk.enhanced = nil
+        talk.answers = [
+            TalkAnswer(speaker: "them:B", at: 20, question: "Can we keep those roles open?",
+                       answer: "Yes: the Q4 plan keeps two engineer roles open, one backend and one mobile, outside the freeze.",
+                       sources: [Self.planCitation], by: "Apple Intelligence", onThisMac: true),
+            TalkAnswer(speaker: "me", at: 4, question: "Are we freezing spend for Q4?",
+                       answer: "New tools are frozen for the quarter; contracts already signed carry on.",
+                       sources: [Self.planCitation], by: "Apple Intelligence", onThisMac: true),
+        ]
+        TalkStore.shared.add(talk)
+        // The column's tab is a preference of the app's own: put it back afterwards.
+        let key = "fournotes.talk.panel", before = UserDefaults.standard.object(forKey: key)
+        UserDefaults.standard.set(LivePanelTab.answers.rawValue, forKey: key)
+        defer { UserDefaults.standard.set(before, forKey: key) }
+        for dark in [false, true] {
+            try render(LiveRecordingView(talk: talk), name: "meetings-live-answers", dark: dark, size: CGSize(width: 1100, height: 760))
+        }
+    }
+
+    @Test("Recipes and a chat about a finished talk")
+    func chat() throws {
+        var talk = Self.sampleTalk()
+        talk.chat = [
+            TalkChatMessage(role: .user, text: "What did Sari ask for?"),
+            TalkChatMessage(role: .assistant, text: "Two engineer roles kept open for the hiring plan, at 0:20.",
+                            sources: [TalkCitation(KnowledgeCitation(origin: .talk(id: talk.id, at: 20),
+                                                                     label: "Weekly product sync · 0:20",
+                                                                     title: "Weekly product sync, from 0:20"))],
+                            by: "Apple Intelligence", onThisMac: true),
+        ]
+        for dark in [false, true] {
+            try render(TalkChatView(talk: talk) { RecipeChips(onRun: { _ in }, onEdit: { _ in }) },
+                       name: "meetings-chat", dark: dark, size: CGSize(width: 760, height: 700))
+        }
+    }
+
     @Test("The library, with a file in it")
     func library() async throws {
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("Q4 plan.md")

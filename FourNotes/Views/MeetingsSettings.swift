@@ -2,13 +2,15 @@ import AppKit
 import SwiftUI
 
 // Settings → Meetings: what macOS allows Transcribe, which calendars' events are
-// meetings, the reminder before one, and noticing calls that start without one.
+// meetings, the reminder before one, noticing calls that start without one, and Live
+// Q&A answering questions asked in them.
 
 struct MeetingsSettings: View {
     @Environment(\.palette) private var p
     @ObservedObject private var calendar = MeetingCalendar.shared
     @ObservedObject private var detector = CallDetector.shared
     @ObservedObject private var permissions = Permissions.shared
+    @ObservedObject private var live = LiveQA.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -51,6 +53,15 @@ struct MeetingsSettings: View {
                 }
                 .disabled(!detector.isOn)
                 .opacity(detector.isOn ? 1 : 0.45)
+            }
+
+            SettingsGroup {
+                SettingsRow("Answer questions during meetings",
+                            description: "Live Q&A: when someone asks something your notes, talks or library answer, the answer shows beside your notes. "
+                            + "Answered by the model in Settings → AI & API keys, on this Mac first unless you chose the cloud") {
+                    Toggle("Answer questions during meetings", isOn: $live.isOn)
+                        .toggleStyle(.fnSwitch)
+                }
             }
 
             if calendar.access == .allowed, !calendar.sources.isEmpty {

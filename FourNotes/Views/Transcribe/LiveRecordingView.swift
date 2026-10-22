@@ -1,8 +1,10 @@
 import SwiftUI
 
-// While recording: your notes in the middle, the words as they're heard beside them
-// (hide them to just write), the time and a meter for each side above. What you write
-// is kept on the talk with when you wrote it; Enhance writes it out in full afterwards.
+// While recording: your notes in the middle and a column beside them (hide it to just
+// write) with the words as they're heard, the questions Live Q&A answered and a chat
+// about the meeting so far (LivePanel); the time and a meter for each side above. What
+// you write is kept on the talk with when you wrote it; Enhance writes it out in full
+// afterwards.
 
 struct LiveRecordingView: View {
     @Environment(\.palette) private var p
@@ -16,7 +18,7 @@ struct LiveRecordingView: View {
                 Spacer(minLength: 8)
                 TalkTemplateMenu(talkId: talk.id, template: talk.template)
                 IconButton(showsTranscript ? "collapseRight" : "collapseLeft", size: 17,
-                           help: showsTranscript ? "Hide the transcript" : "Show the transcript") {
+                           help: showsTranscript ? "Hide the transcript, Live Q&A and chat" : "Show the transcript, Live Q&A and chat") {
                     showsTranscript.toggle()
                 }
                 StopButton()
@@ -32,8 +34,8 @@ struct LiveRecordingView: View {
                                 header: LiveTitle(talkId: talk.id, title: talk.title))
                 if showsTranscript {
                     Rectangle().fill(p.borderSubtle).frame(width: 1)
-                    LiveTranscript(talk: talk)
-                        .frame(width: 300)
+                    LivePanel(talk: talk)
+                        .frame(width: 340)
                         .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
@@ -149,7 +151,7 @@ private struct LiveWarning: View {
 }
 
 /// The words as they're heard, newest at the bottom.
-private struct LiveTranscript: View {
+struct LiveTranscript: View {
     @Environment(\.palette) private var p
     @ObservedObject private var recorder = TalkRecorder.shared
     let talk: Talk
@@ -157,9 +159,6 @@ private struct LiveTranscript: View {
     var body: some View {
         let lines = Array(TalkText.turns(talk).suffix(30))
         VStack(alignment: .leading, spacing: 0) {
-            SectionTitle("Transcript")
-                .padding(.horizontal, 20)
-                .padding(.top, 18)
             ScrollViewReader { scroller in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
@@ -179,7 +178,7 @@ private struct LiveTranscript: View {
                         }
                         Color.clear.frame(height: 1).id("end")
                     }
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, 14)
                     .padding(.bottom, 40)
                     .accessibilityElement(children: .contain)
                     .accessibilityLabel("Transcript so far")
@@ -191,7 +190,6 @@ private struct LiveTranscript: View {
             }
         }
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(p.surface)
     }
 }
 

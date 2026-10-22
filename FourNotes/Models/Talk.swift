@@ -87,6 +87,10 @@ struct Talk: Codable, Equatable, Identifiable {
     var template: String?
     /// Your notes written out in full from the transcript (Enhance).
     var enhanced: TalkNotes?
+    /// Questions asked in the conversation that Live Q&A answered from your notes and library.
+    var answers: [TalkAnswer]?
+    /// Your chat about the talk, while it ran and after.
+    var chat: [TalkChatMessage]?
 
     init(id: String = UUID().uuidString.lowercased(), createdAt: Date = Date(), title: String, mode: Mode,
          app: String? = nil, lang: String, spaceId: String? = nil) {

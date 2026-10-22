@@ -55,6 +55,15 @@ default, and useful with no account, no key and no network.
   assistant answers from your notes, talks and library, and shows the sources
   it used: a click opens the note, the moment in the talk, or the page of the
   PDF.
+- **Live Q&A and chat** — while a meeting records, questions asked in it ("can
+  we keep those roles open?") are looked up in your notes, other talks and the
+  Library, and answered beside your notes when something you have answers them,
+  with the sources; nothing is sent when nothing does. A chat beside the notes
+  answers "what did I miss?" or "what's been decided?" from the conversation so
+  far. Settings → Meetings turns Live Q&A off.
+- **Recipes** — one click on a finished talk writes a follow-up email (opened in
+  Mail), decisions and owners, next steps, open questions, objections, or a
+  short update for Slack. Save your own recipes beside them.
 - **Speech models** — download Whisper large-v3 turbo (about 630 MB, 99
   languages, Indonesian included) and a speaker model (33 MB) from Hugging Face
   inside the app, in Settings → AI & API keys → Speech models: size, speed and

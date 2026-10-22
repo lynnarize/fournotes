@@ -46,6 +46,11 @@ struct TalkNotesEditor<Header: View>: View {
             .onReceive(TalkStore.shared.$all.map { [talkId] in $0.first { $0.id == talkId }?.notes }.removeDuplicates()) { notes in
                 reloadIfChangedElsewhere(notes ?? "")
             }
+            .onReceive(NotificationCenter.default.publisher(for: .talkNotesAdded)) { note in
+                guard let info = note.userInfo, info["talkId"] as? String == talkId,
+                      let line = info["line"] as? String else { return }
+                take(line, at: info["at"] as? Double)
+            }
             .onDisappear { save() }
     }
 
@@ -90,6 +95,19 @@ struct TalkNotesEditor<Header: View>: View {
         plain = notes
         times = TalkStore.shared.talk(talkId)?.noteTimes ?? [:]
         attributed = NoteDocument.spaced(NoteDocument.usingBodyFont(NoteDocument.attributed(fromPlainText: notes)))
+    }
+
+    /// A line added from outside (Live Q&A's "Add to my notes"). Typing that isn't saved
+    /// yet would be written over it, so it joins this text and the two are saved together.
+    private func take(_ line: String, at: Double?) {
+        guard loadedId == talkId else { return }
+        if !plain.components(separatedBy: "\n").contains(line) {
+            let base = plain.trimmingCharacters(in: .newlines)
+            plain = base.isEmpty ? line : base + "\n" + line
+            if let at { times[NoteTimes.key(line)] = at }
+            attributed = NoteDocument.spaced(NoteDocument.usingBodyFont(NoteDocument.attributed(fromPlainText: plain)))
+        }
+        save()
     }
 
     private func changed(_ document: NSAttributedString) {

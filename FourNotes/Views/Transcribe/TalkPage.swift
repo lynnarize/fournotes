@@ -3,10 +3,11 @@ import AVFoundation
 import SwiftUI
 import UniformTypeIdentifiers
 
-// One talk: the recording, then three tabs. Notes: what you wrote, and Enhance's notes
+// One talk: the recording, then four tabs. Notes: what you wrote, and Enhance's notes
 // written out from it. Summary: who was in it (named by you or the conversation, each
 // with a short profile) and the write-up. Transcript: who said what, where a time plays
-// from that moment. As on the web (src/components/talks/TalkPage.tsx), with the notes.
+// from that moment. Chat: recipes to run on it, what Live Q&A answered while it ran, and
+// asking about it. As on the web (src/components/talks/TalkPage.tsx), with the notes.
 
 struct TalkPage: View {
     @Environment(\.palette) private var p
@@ -27,8 +28,10 @@ struct TalkPage: View {
     @State private var showsYours = false
     /// A moment to bring into view when the transcript next shows.
     @State private var jump: Double?
+    @State private var recipeRun: RecipeRun?
+    @State private var recipeEdit: RecipeEdit?
 
-    private enum Tab: String, CaseIterable { case notes = "Notes", summary = "Summary", transcript = "Transcript" }
+    private enum Tab: String, CaseIterable { case notes = "Notes", summary = "Summary", transcript = "Transcript", chat = "Chat" }
 
     /// Notes first when there are any (or there will be); else the summary.
     private var shownTab: Tab { tab ?? (talk.wantsNotes || talk.enhanced != nil ? .notes : .summary) }
@@ -45,9 +48,12 @@ struct TalkPage: View {
             case .notes: notesTab
             case .summary: scrolling { summaryTab }
             case .transcript: transcriptTab
+            case .chat: chatTab
             }
         }
         .background(p.bg)
+        .fnSheet(item: $recipeRun) { RecipeSheet(recipe: $0.recipe, talkId: talk.id) }
+        .fnSheet(item: $recipeEdit) { RecipeEditor(recipe: $0.recipe) }
         .onAppear {
             player.load(talk.hasAudio ? TalkStore.shared.audio(talk.id) : nil)
             takeMoment()
@@ -189,11 +195,37 @@ struct TalkPage: View {
         }
     }
 
+    // MARK: - Chat
+
+    /// Recipes, what was answered while it ran, then asking about it.
+    private var chatTab: some View {
+        TalkChatView(talk: talk) {
+            VStack(alignment: .leading, spacing: 24) {
+                RecipeChips(onRun: { recipeRun = RecipeRun(recipe: $0) }, onEdit: { recipeEdit = RecipeEdit(recipe: $0) })
+                if let answers = talk.answers, !answers.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        SectionTitle("Answered while it ran (Live Q&A)")
+                        ForEach(answers) { LiveAnswerCard(talk: talk, answer: $0) }
+                    }
+                }
+                SectionTitle("Ask about it")
+                    .padding(.bottom, -14)
+            }
+            .padding(.top, 14)
+        }
+        .frame(maxWidth: 680)
+        .padding(.horizontal, 40)
+        .frame(maxWidth: .infinity)
+    }
+
     // MARK: - Header
 
     private var header: some View {
         HStack(spacing: 8) {
             Spacer()
+            if !talk.segments.isEmpty {
+                RecipesMenu(onRun: { recipeRun = RecipeRun(recipe: $0) }, onEdit: { recipeEdit = RecipeEdit(recipe: $0) })
+            }
             if let note {
                 SecondaryButton(title: "Open note", icon: "note") { nav.open(ChangeLink(kind: .notes, id: note.id)) }
                     .fixedSize()
@@ -221,6 +253,9 @@ struct TalkPage: View {
                     entries.append(.item("Show recording in Finder") {
                         if let url = TalkStore.shared.audio(talk.id) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
                     })
+                }
+                if talk.chat?.isEmpty == false {
+                    entries.append(.item("Clear the chat") { TalkChat.shared.clear(talk.id) })
                 }
                 entries += [.divider, .item("Delete talk", destructive: true) { delete() }]
                 return entries

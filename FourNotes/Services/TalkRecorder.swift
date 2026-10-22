@@ -80,7 +80,10 @@ final class TalkRecorder: ObservableObject {
         caption = ""
         volatile = [:]
         do {
-            return try await begin(options)
+            let id = try await begin(options)
+            // Live Q&A reads the talk's lines as they come.
+            if !AppModel.isTesting { LiveQA.shared.follow(id) }
+            return id
         } catch {
             if let id = talkId { store.discard(id) }
             await teardown()

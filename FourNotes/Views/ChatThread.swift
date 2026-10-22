@@ -405,8 +405,8 @@ private struct ReplyView: View {
 }
 
 /// A place an answer came from, small: its kind and a few words. The whole of what it
-/// is shows on hover.
-private struct CitationChip: View {
+/// is shows on hover. Also under a talk's answers (Live Q&A, its chat).
+struct CitationChip: View {
     @Environment(\.palette) private var p
     @State private var hovering = false
     let citation: KnowledgeCitation

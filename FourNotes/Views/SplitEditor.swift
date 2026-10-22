@@ -205,43 +205,45 @@ struct SheetFrame<Content: View, Actions: View>: View {
     @Environment(\.closeModal) private var closeModal
     @Environment(\.modalMaxHeight) private var windowLimit
     let title: String
-    var width: CGFloat = 520
+    var width: CGFloat = 512
     var maxHeight: CGFloat = 640
     @ViewBuilder var actions: () -> Actions
     @ViewBuilder var content: () -> Content
     @State private var contentHeight: CGFloat = 0
 
-    init(title: String, width: CGFloat = 520, maxHeight: CGFloat = 640,
+    init(title: String, width: CGFloat = 512, maxHeight: CGFloat = 640,
          @ViewBuilder actions: @escaping () -> Actions,
          @ViewBuilder content: @escaping () -> Content) {
         self.title = title; self.width = width; self.maxHeight = maxHeight
         self.actions = actions; self.content = content
     }
 
-    private static var headerHeight: CGFloat { 49 }
+    /// The web's title bar: 8pt above and below a 36pt close button, and its hairline.
+    private static var headerHeight: CGFloat { 53 }
 
     var body: some View {
         let limit = min(maxHeight, windowLimit ?? maxHeight) - Self.headerHeight
         VStack(spacing: 0) {
             HStack(spacing: 2) {
                 Text(title)
-                    .font(FN.font(16, .semibold))
-                    .foregroundStyle(p.text)
+                    .font(FN.font(15, .medium))
+                    .foregroundStyle(p.foreground)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 actions()
-                IconButton("x", size: 18, box: 32, help: "Close") {
+                // `.btn .btn-plain .btn-icon`
+                IconButton("x", size: 18, box: 36, help: "Close") {
                     if let closeModal { closeModal() } else { dismiss() }
                 }
             }
-            .padding(.leading, 16)
+            .padding(.leading, 20)
             .padding(.trailing, 8)
             .frame(height: Self.headerHeight - 1)
-            Rectangle().fill(p.line).frame(height: 1)
+            Rectangle().fill(p.borderSubtle).frame(height: 1)
 
             ScrollView {
                 content()
-                    .padding(16)
+                    .padding(20)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
             }
@@ -250,12 +252,12 @@ struct SheetFrame<Content: View, Actions: View>: View {
         }
         .frame(width: width)
         .frame(maxHeight: min(maxHeight, windowLimit ?? maxHeight))
-        .background(p.bg)
+        .background(p.surface)
     }
 }
 
 extension SheetFrame where Actions == EmptyView {
-    init(title: String, width: CGFloat = 520, maxHeight: CGFloat = 640,
+    init(title: String, width: CGFloat = 512, maxHeight: CGFloat = 640,
          @ViewBuilder content: @escaping () -> Content) {
         self.init(title: title, width: width, maxHeight: maxHeight, actions: { EmptyView() }, content: content)
     }

@@ -34,6 +34,14 @@ struct ScreenSnapshotTests {
         }
     }
 
+    @Test("Finance, the whole page")
+    func financePage() throws {
+        for dark in [false, true] {
+            try render(ScrollView { FinanceView().padding(.horizontal, 32) }, name: "finance-page", dark: dark,
+                       size: CGSize(width: 1032, height: 2000))
+        }
+    }
+
     private func render<V: View>(_ view: V, name: String, dark: Bool, size: CGSize) throws {
         let model = AppModel.shared
         let root = PaletteProvider {

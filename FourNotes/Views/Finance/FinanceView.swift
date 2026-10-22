@@ -1,8 +1,8 @@
 import SwiftUI
 
-// The Finance tab: month picker and quick actions, the dashboard, and the
-// transaction list with its inline editor.
-// Ported from src/components/FinanceView.tsx.
+// Finance, as on the web (src/components/FinanceView.tsx): a header row (month, scan,
+// more), the dashboard, a one-line add bar, and the month's transactions in a sortable
+// table whose rows open to edit and split.
 
 struct FinanceView: View {
     @Environment(\.palette) private var p
@@ -23,12 +23,15 @@ struct FinanceView: View {
     @State private var pasteText = ""
     /// Narrows the transaction table.
     @State private var query = ""
+    @State private var categoryFilter = ""
+    @State private var sort = TableSort(column: .date, ascending: false)
 
     // The "add a transaction" row.
     @State private var newMerchant = ""
     @State private var newAmount = ""
     @State private var newCurrency = ""
     @State private var newCategory = "Food & Drink"
+    @FocusState private var merchantFocused: Bool
 
     private var cur: String { store.settings.currency }
 
@@ -42,26 +45,38 @@ struct FinanceView: View {
 
     var body: some View {
         ScrollViewReader { proxy in
-            page(scrollToTransactions: {
-                withAnimation(Motion.screen) { proxy.scrollTo("transactions", anchor: .top) }
+            page(scrollTo: { id in
+                withAnimation(Motion.screen) { proxy.scrollTo(id, anchor: .top) }
             })
         }
     }
 
-    private func page(scrollToTransactions: @escaping () -> Void) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            toolbar
+    private func page(scrollTo: @escaping (String) -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+                .padding(.top, -8)
+                .padding(.bottom, 24)
 
             FinanceDashboard(
                 month: month, summary: summary, summarizing: summarizing,
                 onSummarize: { Task { await summarize() } },
-                onReport: { showReport = true },
                 onBudgets: { showBudgets = true },
-                onOpenTransactions: scrollToTransactions,
-                onOpenTransaction: { openId = $0 })
+                onOpenTransactions: { scrollTo("transactions") },
+                onOpenTransaction: { id in openId = id; scrollTo("transactions") },
+                onAddIncome: {
+                    // The add bar switches to Income and waits for the amount.
+                    newCategory = "Income"
+                    scrollTo("add")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { merchantFocused = true }
+                })
+
+            addBar
+                .id("add")
+                .padding(.top, 24)
 
             transactionsSection
                 .id("transactions")
+                .padding(.top, 24)
         }
         .onAppear { if newCurrency.isEmpty { newCurrency = cur } }
         // The review is rewritten each time Finance opens after the month's
@@ -70,29 +85,40 @@ struct FinanceView: View {
         .task(id: nav.focus) {
             guard let link = nav.consumeFocus([.transactions, .budget]) else { return }
             if link.kind == .budget {
-                // Budgets live in Finance settings; the dashboard doesn't show them.
+                // Budgets are edited in Finance settings.
                 showBudgets = true
             } else if let t = store.liveTransactions.first(where: { $0.id == link.id }) {
                 // Only move months for a date the app can actually read.
                 if let day = DateKit.date(t.date) { month = DateKit.localMonth(day) }
+                query = ""
+                categoryFilter = ""
                 openId = t.id
             }
         }
         .fnSheet(isPresented: $showBudgets) {
-            // Budgets and categories, as the web app's Finance settings.
-            SheetFrame(title: "Finance settings", maxHeight: 720) {
-                VStack(alignment: .leading, spacing: 20) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        financeHeading("target", "Monthly budgets")
+            SheetFrame(title: "Budgets and categories", maxHeight: 720) {
+                VStack(alignment: .leading, spacing: 24) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Monthly budgets").font(FN.font(15, .medium)).foregroundStyle(p.foreground)
                         BudgetEditor()
                     }
-                    Rectangle().fill(p.line).frame(height: 1)
-                    VStack(alignment: .leading, spacing: 8) {
-                        financeHeading("finance", "Categories")
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Categories").font(FN.font(15, .medium)).foregroundStyle(p.foreground)
                         CategoryEditor()
                     }
-                    PrimaryButton(title: "Done") { showBudgets = false }
-                        .frame(maxWidth: .infinity)
+                    .padding(.top, 20)
+                    .overlay(alignment: .top) { Rectangle().fill(p.borderSubtle).frame(height: 1) }
+                    // `.btn-primary .btn-lg`, the width of the dialog.
+                    Button { showBudgets = false } label: {
+                        Text("Done")
+                            .font(FN.font(15, .medium))
+                            .foregroundStyle(p.accentForeground)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                            .background(p.accent, in: Capsule())
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.fn)
                 }
             }
         }
@@ -100,185 +126,114 @@ struct FinanceView: View {
         .fnSheet(isPresented: $showReport) { ReportView() }
     }
 
-    // MARK: - Toolbar
+    // MARK: - Header
 
-    /// Search on the left; the month and one menu of actions on the right.
-    private var toolbar: some View {
+    /// Under the page title (which carries the Beta badge): the month, scanning, and the
+    /// rest of Finance's actions.
+    private var header: some View {
         HStack(spacing: 10) {
-            HStack(spacing: 10) {
-                Icon("search", size: 17).foregroundStyle(p.faint)
-                TextField("Search transactions, categories or items", text: $query)
-                    .textFieldStyle(.plain)
-                    .font(FN.body)
-                if !query.isEmpty {
-                    IconButton("x", size: 13, box: 22, help: "Clear") { query = "" }
-                }
-            }
-            .padding(.horizontal, 16)
-            .frame(maxWidth: 420, minHeight: 44)
-            .background(p.bg, in: Capsule())
-            .overlay(Capsule().stroke(p.line, lineWidth: 1))
-
-            Spacer()
-
-            HStack(spacing: 2) {
-                IconButton("chevronLeft", size: 16, box: 30, help: "Previous month") {
-                    month = FinanceMath.shiftMonth(month, by: -1)
-                }
+            Spacer(minLength: 0)
+            HStack(spacing: 0) {
+                MonthStep(icon: "chevronLeft", help: "Previous month") { month = FinanceMath.shiftMonth(month, by: -1) }
                 Text(Fmt.monthYear(month))
                     .font(FN.bodyMedium)
-                    .foregroundStyle(p.text)
-                    .frame(minWidth: 118)
-                    .contentTransition(.numericText())
+                    .foregroundStyle(p.foreground)
+                    .frame(minWidth: 136)
+                    .contentTransition(.opacity)
                     .motion(month, Motion.screen)
-                IconButton("chevron", size: 16, box: 30, help: "Next month") {
-                    month = FinanceMath.shiftMonth(month, by: 1)
-                }
+                MonthStep(icon: "chevron", help: "Next month") { month = FinanceMath.shiftMonth(month, by: 1) }
             }
-            .padding(.horizontal, 6)
-            .frame(minHeight: 44)
-            .background(p.bg, in: Capsule())
-            .overlay(Capsule().stroke(p.line, lineWidth: 1))
+            .frame(height: 36)
+            .background(p.surface, in: Capsule())
+            .overlay(Capsule().strokeBorder(p.border, lineWidth: 1))
 
-            TextMenu(title: "Actions", help: "Report, paste a notification, finance settings") {
+            SecondaryButton(title: "Scan receipt", icon: "scan") { assistant.pickAndScan() }
+
+            // `.btn-secondary .btn-icon`: a round bordered "…".
+            MenuButton(help: "More finance actions", align: .trailing) {
                 [
                     .item("Monthly report…") { showReport = true },
                     .item("Paste a payment notification…") { showPaste = true },
-                    .item("Finance settings…") { showBudgets = true },
+                    .divider,
+                    .item("Budgets and categories…") { showBudgets = true },
                 ]
-            }
-            .font(FN.bodyMedium)
-            .padding(.horizontal, 16)
-            .frame(minHeight: 44)
-            .background(p.bg, in: Capsule())
-            .overlay(Capsule().stroke(p.line, lineWidth: 1))
-
-            IconButton("settings", size: 18, box: 44, help: "Finance settings: budgets and categories") {
-                showBudgets = true
-            }
-            .background(p.bg, in: Circle())
-            .overlay(Circle().stroke(p.line, lineWidth: 1))
-        }
-    }
-
-    private func financeHeading(_ icon: String, _ title: String) -> some View {
-        HStack(spacing: 8) {
-            Icon(icon, size: 16).foregroundStyle(p.muted)
-            Text(title).font(FN.bodyMedium).foregroundStyle(p.text)
-        }
-    }
-
-    // MARK: - Transactions
-
-    /// The table, narrowed by the search box.
-    private var shown: [Transaction] {
-        let q = query.trimmingCharacters(in: .whitespaces)
-        guard !q.isEmpty else { return txs }
-        return txs.filter { t in
-            t.merchant.localizedCaseInsensitiveContains(q) || t.category.localizedCaseInsensitiveContains(q)
-                || t.items.contains { $0.name.localizedCaseInsensitiveContains(q) }
-        }
-    }
-
-    private var monthSpent: Double {
-        txs.filter { $0.amount > 0 }.reduce(0) { $0 + Insights.myShare($1, cur) }
-    }
-
-    private var transactionsSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            addBar
-
-            HStack {
-                Text("Transactions").font(FN.serif(23)).foregroundStyle(p.text)
-                Spacer()
-                Text("\(Fmt.monthYear(month)): \(Money.format(monthSpent, cur))")
-                    .font(FN.body).monospacedDigit()
-                    .foregroundStyle(p.muted)
-                    .padding(.horizontal, 14)
-                    .frame(minHeight: 34)
-                    .overlay(Capsule().stroke(p.line, lineWidth: 1))
-            }
-            .padding(.top, 8)
-
-            if txs.isEmpty {
-                EmptyStart(
-                    title: "No spending logged yet",
-                    hint: "Add one above, scan a receipt, paste a payment notification — or just say what you spent.",
-                    prompts: ["Spent 25k on coffee at Starbucks", "Set my food budget to 1.5M a month"],
-                    extra: { SecondaryButton(title: "Paste a notification") { showPaste = true } })
-                    .transition(.opacity.combined(with: .offset(y: 8)))
-            } else {
-                VStack(spacing: 0) {
-                    TransactionHeader()
-                    Divider().overlay(p.line)
-                    if shown.isEmpty {
-                        Text("Nothing matches “\(query)”.")
-                            .font(FN.body).foregroundStyle(p.faint)
-                            .padding(.vertical, 20)
-                    }
-                    LazyVStack(spacing: 0) {
-                        ForEach(shown) { t in
-                            TransactionRow(tx: t, month: month,
-                                           open: openId == t.id,
-                                           onToggle: { openId = openId == t.id ? nil : t.id })
-                                .transition(.opacity)
-                        }
-                    }
-                    .animation(Motion.list, value: shown.map(\.id))
-                }
+            } label: {
+                MoreCircle()
             }
         }
     }
 
-    /// One line to add a transaction, as the reference's "New Project" bar.
-    private var addBar: some View {
-        HStack(spacing: 10) {
-            Icon("plus", size: 16).foregroundStyle(p.accent)
-            TextField("Add a transaction — merchant", text: $newMerchant)
-                .textFieldStyle(.plain)
-                .font(FN.bodyMedium)
-                .onSubmit(addTransaction)
-            TextField("Amount (25k)", text: $newAmount)
-                .textFieldStyle(.plain)
-                .font(FN.body).monospacedDigit()
-                .frame(width: 110)
-                .onSubmit(addTransaction)
-            TextMenu(title: newCategory, help: "Category") {
-                store.categories.map { c in .item(c, checked: c == newCategory) { newCategory = c } }
-            }
-            .font(FN.body)
-            TextMenu(title: newCurrency.isEmpty ? cur : newCurrency, help: "Currency") {
-                currencyOptions.map { c in .item(c, checked: c == newCurrency) { newCurrency = c } }
-            }
-            .font(FN.body)
-            Button(action: addTransaction) {
-                Icon("arrowRight", size: 15)
-                    .foregroundStyle(.white)
-                    .frame(width: 32, height: 32)
-                    .background(p.accent, in: Circle())
-            }
-            .buttonStyle(.fn)
-            .help("Add")
-            .accessibilityLabel("Add transaction")
-        }
-        .padding(.leading, 20)
-        .padding(.trailing, 8)
-        .frame(minHeight: 50)
-        .background(p.bg, in: Capsule())
-        .overlay(Capsule().stroke(p.line, lineWidth: 1))
-    }
+    // MARK: - Add a transaction
 
     private var currencyOptions: [String] {
         var seen = Set<String>()
         return ([cur] + CURRENCIES).filter { seen.insert($0).inserted }
     }
 
+    /// One line to add a transaction. Income goes in as money received.
+    private var addBar: some View {
+        HStack(spacing: 6) {
+            TextField(newCategory == "Income" ? "Add income, like Salary" : "Add a transaction, like Lunch at Sederhana",
+                      text: $newMerchant)
+                .textFieldStyle(.plain)
+                .font(FN.font(15))
+                .foregroundStyle(p.foreground)
+                .focused($merchantFocused)
+                .onSubmit(addTransaction)
+                .padding(.horizontal, 16)
+                .frame(height: 44)
+                .frame(minWidth: 240, maxWidth: .infinity)
+                .layoutPriority(1)
+            HStack(spacing: 6) {
+                MenuButton(help: "Currency") {
+                    currencyOptions.map { c in .item(c, checked: c == (newCurrency.isEmpty ? cur : newCurrency)) { newCurrency = c } }
+                } label: {
+                    BarMenuLabel(title: newCurrency.isEmpty ? cur : newCurrency, muted: true)
+                }
+                TextField("0", text: $newAmount)
+                    .textFieldStyle(.plain)
+                    .font(FN.body)
+                    .monospacedDigit()
+                    .foregroundStyle(p.foreground)
+                    .onSubmit(addTransaction)
+            }
+            .padding(.leading, 16)
+            .padding(.trailing, 16)
+            .frame(width: 170, height: 44)
+            .background(p.surfaceMuted, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            MenuButton(help: "Category") {
+                store.categories.map { c in .item(c, checked: c == newCategory) { newCategory = c } }
+            } label: {
+                BarMenuLabel(title: newCategory, muted: false)
+                    .padding(.horizontal, 16)
+                    .frame(height: 44)
+                    .background(p.surfaceMuted, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            }
+            .fixedSize()
+            Button(action: addTransaction) {
+                Text("Add")
+                    .font(FN.bodyMedium)
+                    .foregroundStyle(p.accentForeground)
+                    .padding(.horizontal, 22)
+                    .frame(height: 44)
+                    .background(p.accent, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.fn)
+            .fixedSize()
+            .accessibilityLabel("Add transaction")
+        }
+        .padding(6)
+        .background(p.surface, in: RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous).strokeBorder(p.border, lineWidth: 1))
+    }
+
     private func addTransaction() {
         guard !newMerchant.trimmingCharacters(in: .whitespaces).isEmpty,
-              let amount = Money.parse(newAmount) else { return }
+              let amount = Money.parse(newAmount), amount != 0 else { return }
         store.addTransaction {
             $0.merchant = newMerchant
-            $0.amount = amount
+            $0.amount = newCategory == "Income" ? -abs(amount) : amount
             $0.currency = newCurrency.isEmpty ? cur : newCurrency
             $0.fxRate = nil
             $0.category = newCategory
@@ -288,27 +243,139 @@ struct FinanceView: View {
         newAmount = ""
     }
 
+    // MARK: - Transactions
+
+    /// The table, narrowed by the search box and the category filter, then sorted.
+    private var shown: [Transaction] {
+        let q = query.trimmingCharacters(in: .whitespaces)
+        let out = txs.filter { t in
+            (categoryFilter.isEmpty || t.category == categoryFilter)
+                && (q.isEmpty || t.merchant.localizedCaseInsensitiveContains(q) || t.category.localizedCaseInsensitiveContains(q)
+                    || t.items.contains { $0.name.localizedCaseInsensitiveContains(q) })
+        }
+        return out.sorted { a, b in
+            let ordered: Bool
+            switch sort.column {
+            case .date: ordered = (a.date, a.createdAt) < (b.date, b.createdAt)
+            case .merchant: ordered = a.merchant.localizedCaseInsensitiveCompare(b.merchant) == .orderedAscending
+            case .category: ordered = a.category.localizedCaseInsensitiveCompare(b.category) == .orderedAscending
+            case .amount: ordered = Insights.baseAmount(a, cur) < Insights.baseAmount(b, cur)
+            }
+            return sort.ascending ? ordered : !ordered
+        }
+    }
+
+    private var filtered: Bool { !query.trimmingCharacters(in: .whitespaces).isEmpty || !categoryFilter.isEmpty }
+
+    private func share(_ list: [Transaction]) -> Double {
+        list.filter { $0.amount > 0 }.reduce(0) { $0 + Insights.myShare($1, cur) }
+    }
+
+    private var transactionsSection: some View {
+        let byCat = Insights.spendByCategory(txs, cur).filter { $0.value > 0 }
+            .sorted { $0.value > $1.value }.map { ($0.key, $0.value) }
+        let colors = categoryColors(byCat, p)
+        var seen = Set<String>()
+        let categories = (store.categories + txs.map(\.category)).filter { seen.insert($0).inserted }
+        let rows = shown
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                Text("Transactions").font(FN.font(20, .medium)).foregroundStyle(p.foreground)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: 8) {
+                    Icon("search", size: 16).foregroundStyle(p.textMuted)
+                    TextField("Search merchants or items", text: $query)
+                        .textFieldStyle(.plain)
+                        .font(FN.body)
+                        .foregroundStyle(p.foreground)
+                        .onExitCommand { query = "" }
+                }
+                .padding(.horizontal, 12)
+                .frame(width: 260, height: 36)
+                .background(p.surface, in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous).strokeBorder(p.border, lineWidth: 1))
+                SelectMenu(options: [("", "All categories")] + categories.map { ($0, $0) },
+                           selection: $categoryFilter, help: "Filter by category")
+                    .fixedSize()
+            }
+
+            if txs.isEmpty {
+                EmptyStart(
+                    title: "No spending logged yet",
+                    hint: "Add one above, scan a receipt, paste a payment notification, or just say what you spent.",
+                    prompts: ["Spent 25k on coffee at Starbucks", "Set my food budget to 1.5M a month"],
+                    extra: { SecondaryButton(title: "Paste a notification", small: true) { showPaste = true } })
+                    .transition(.opacity.combined(with: .offset(y: 8)))
+            } else {
+                VStack(spacing: 0) {
+                    TableHeader(sort: $sort)
+                    if rows.isEmpty {
+                        Rectangle().fill(p.borderSubtle).frame(height: 1)
+                        Text("Nothing matches\(query.trimmingCharacters(in: .whitespaces).isEmpty ? "" : " “\(query.trimmingCharacters(in: .whitespaces))”")\(categoryFilter.isEmpty ? "" : " in \(categoryFilter)").")
+                            .font(FN.body).foregroundStyle(p.textMuted)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 32)
+                    }
+                    LazyVStack(spacing: 0) {
+                        ForEach(rows) { t in
+                            TransactionRow(tx: t, color: colors[t.category] ?? p.finRest,
+                                           open: openId == t.id,
+                                           onToggle: { openId = openId == t.id ? nil : t.id },
+                                           onDelete: { delete(t) })
+                        }
+                    }
+                    .animation(Motion.list, value: rows.map(\.id))
+                    // Your share: of the month, or of what the filters leave.
+                    HStack {
+                        Text(filtered ? "Your share of the \(rows.count == 1 ? "one" : String(rows.count)) shown"
+                             : "Your share in \(FinanceDashboard.monthName(month))")
+                            .foregroundStyle(p.textSecondary)
+                        Spacer()
+                        Text(Money.format(filtered ? share(rows) : share(txs), cur))
+                            .font(FN.bodyMedium)
+                            .monospacedDigit()
+                            .foregroundStyle(p.foreground)
+                            .padding(.trailing, 48)
+                    }
+                    .font(FN.body)
+                    .padding(.leading, 24)
+                    .padding(.trailing, 24)
+                    .padding(.vertical, 14)
+                    .background(p.surfaceMuted)
+                    .overlay(alignment: .top) { Rectangle().fill(p.border).frame(height: 1) }
+                }
+                .background(p.surface)
+                .clipShape(RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous).strokeBorder(p.border, lineWidth: 1))
+            }
+        }
+    }
+
+    private func delete(_ t: Transaction) {
+        store.remove(.transactions, t.id)
+        if openId == t.id { openId = nil }
+        toasts.push("Deleted \(t.merchant)", action: Toast.Action(label: "Undo") { [store] in
+            store.updateTransaction(t.id) { $0.deletedAt = nil }
+        })
+    }
+
     // MARK: - Paste a notification
 
     private var pasteSheet: some View {
-        SheetFrame(title: "App / receipt notification") {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Paste a payment notification from any app — GoPay, OVO, DANA, ShopeePay, QRIS, a bank app — or the text of a receipt. For screenshots and photos, use the scan button instead.")
+        SheetFrame(title: "Paste a payment notification") {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Paste a payment notification from any app (GoPay, OVO, DANA, ShopeePay, QRIS, a bank app) or the text of a receipt. For screenshots and photos, use Scan receipt instead.")
                     .font(FN.body)
-                    .foregroundStyle(p.muted)
+                    .foregroundStyle(p.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                TextEditor(text: $pasteText)
-                    .font(FN.body)
-                    .scrollContentBackground(.hidden)
-                    .frame(height: 96)
-                    .padding(6)
-                    .overlay(RoundedRectangle(cornerRadius: FN.radiusSmall, style: .continuous)
-                        .stroke(p.line, lineWidth: 1))
+                CommittedField(placeholder: "Payment to Kopi Kenangan of Rp28,000 was successful", value: pasteText,
+                               boxed: true, axis: .vertical, lineLimit: 4...8, minHeight: 96, settle: nil) { pasteText = $0 }
 
-                HStack {
+                HStack(spacing: 8) {
                     Spacer()
-                    GhostButton(action: { showPaste = false }) { Text("Cancel") }
+                    KitButton(kind: .plain, title: "Cancel") { showPaste = false }
                     PrimaryButton(title: "Add",
                                   disabled: pasteText.trimmingCharacters(in: .whitespaces).isEmpty,
                                   action: submitPaste)
@@ -388,8 +455,68 @@ struct FinanceView: View {
     }
 }
 
-// MARK: - One transaction
+// MARK: - The table
 
+private struct TableSort: Equatable {
+    enum Column { case date, merchant, category, amount }
+    var column: Column
+    var ascending: Bool
+}
+
+/// Column widths, as the web's table: Date 104, Category 200, Amount 150, and 48 for delete.
+private enum Columns {
+    static let date: CGFloat = 104 - 24 - 12
+    static let category: CGFloat = 200 - 12
+    static let amount: CGFloat = 150 - 24
+    static let delete: CGFloat = 48
+}
+
+/// The column titles: click to sort, again to reverse.
+private struct TableHeader: View {
+    @Environment(\.palette) private var p
+    @Binding var sort: TableSort
+
+    var body: some View {
+        HStack(spacing: 12) {
+            title("Date", .date).frame(width: Columns.date, alignment: .leading)
+            title("Merchant", .merchant).frame(maxWidth: .infinity, alignment: .leading)
+            title("Category", .category).frame(width: Columns.category, alignment: .leading)
+            title("Amount", .amount).frame(width: Columns.amount, alignment: .trailing)
+                .padding(.trailing, 12)
+            Color.clear.frame(width: Columns.delete - 24, height: 1)
+        }
+        .padding(.leading, 24)
+        .padding(.trailing, 12)
+        .padding(.top, 14)
+        .padding(.bottom, 10)
+    }
+
+    private func title(_ text: String, _ column: TableSort.Column) -> some View {
+        let on = sort.column == column
+        return Button {
+            if sort.column == column {
+                sort.ascending.toggle()
+            } else {
+                sort = TableSort(column: column, ascending: !(column == .date || column == .amount))
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(text)
+                Icon("chevronDown", size: 12)
+                    .opacity(on ? 1 : 0)
+                    .rotationEffect(.degrees(on && sort.ascending ? 180 : 0))
+            }
+            .font(FN.font(12, on ? .medium : .regular))
+            .foregroundStyle(on ? p.foreground : p.textMuted)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.fn)
+        .accessibilityAddTraits(on ? .isSelected : [])
+    }
+}
+
+/// One transaction: date, merchant (with what's in it, split and linked), category,
+/// amount, and delete on hover. Opens to edit and split.
 private struct TransactionRow: View {
     @Environment(\.palette) private var p
     @EnvironmentObject private var store: Store
@@ -397,122 +524,131 @@ private struct TransactionRow: View {
     @State private var hovering = false
 
     let tx: Transaction
-    let month: String
+    let color: Color
     let open: Bool
     let onToggle: () -> Void
+    let onDelete: () -> Void
 
     private var cur: String { store.settings.currency }
     private var foreign: Bool { tx.currency != cur }
-    private var unsettled: Int { (tx.splits ?? []).filter { !$0.settled }.count }
+    private var income: Bool { tx.amount < 0 }
 
     var body: some View {
         VStack(spacing: 0) {
+            Rectangle().fill(p.borderSubtle).frame(height: 1)
             summaryRow
+                .background(open || hovering ? p.hover : .clear)
             if open {
                 editor
+                    .background(p.hover)
                     .transition(.opacity.combined(with: .offset(y: -8)))
             }
         }
-        .background(open ? p.hover : (hovering ? p.hover.opacity(0.5) : .clear),
-                    in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .flashes(nav.isFlashing(tx.id), palette: p)
         .motion(open || hovering, Motion.quick)
         .onHover { hovering = $0 }
     }
 
-    private var subtitle: String? {
-        var parts: [String] = []
-        if let splits = tx.splits, !splits.isEmpty {
-            parts.append("Split \(splits.count + 1) ways" + (unsettled > 0 ? " · \(unsettled) unpaid" : ""))
-        }
-        if !tx.items.isEmpty {
-            parts.append(String(tx.items.map(\.name).joined(separator: ", ").prefix(60)))
-        }
-        if foreign {
-            parts.append(tx.fxRate != nil ? "≈ " + Money.format(abs(Insights.baseAmount(tx, cur)), cur) : "fetching rate…")
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
-
-    /// Icon and name, amount, date, category, and a menu — the table's columns.
     private var summaryRow: some View {
-        HStack(spacing: 16) {
-            Button(action: onToggle) {
-                HStack(spacing: 12) {
-                    Group {
-                        if let image = Attachments.image(file: tx.imageFile, dataUrl: tx.imageDataUrl) {
-                            Image(nsImage: image)
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                        } else {
-                            Icon(categoryIcon(tx.category), size: 18)
-                                .foregroundStyle(p.accent)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                .background(p.mix(p.accent, 0.14))
-                        }
-                    }
-                    .frame(width: 42, height: 42)
-                    .clipShape(Circle())
+        let splits = tx.splits ?? []
+        let unsettled = splits.filter { !$0.settled }.count
+        return HStack(spacing: 12) {
+            Text(FinanceMath.shortDate(tx.date))
+                .font(FN.body).monospacedDigit()
+                .foregroundStyle(p.textSecondary)
+                .frame(width: Columns.date, alignment: .leading)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
-                            Text(tx.merchant).font(FN.bodyMedium).foregroundStyle(p.text).lineLimit(1)
-                            if tx.noteId != nil {
-                                Icon("link", size: 11).foregroundStyle(p.faint)
+            Button(action: onToggle) {
+                HStack(spacing: 10) {
+                    if let image = Attachments.image(file: tx.imageFile, dataUrl: tx.imageDataUrl) {
+                        Image(nsImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 32, height: 32)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(tx.merchant).font(FN.body).foregroundStyle(p.foreground).lineLimit(1)
+                        if !tx.items.isEmpty || !splits.isEmpty || tx.noteId != nil {
+                            HStack(spacing: 8) {
+                                if !tx.items.isEmpty {
+                                    Text(String(tx.items.map(\.name).joined(separator: ", ").prefix(60))).lineLimit(1)
+                                }
+                                if !splits.isEmpty {
+                                    HStack(spacing: 4) {
+                                        Icon("users", size: 12)
+                                        Text("Split with \(splits.count)\(unsettled > 0 ? ", \(unsettled) unpaid" : ", all settled")")
+                                    }
+                                }
+                                if tx.noteId != nil {
+                                    HStack(spacing: 4) { Icon("link", size: 12); Text("Linked note") }
+                                }
                             }
-                        }
-                        if let subtitle {
-                            Text(subtitle).font(FN.small).foregroundStyle(p.muted).lineLimit(1)
+                            .font(FN.small)
+                            .foregroundStyle(p.textMuted)
+                            .lineLimit(1)
                         }
                     }
                     Spacer(minLength: 0)
                 }
+                .frame(minHeight: 36)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.fn)
             .frame(maxWidth: .infinity)
+            .accessibilityValue(open ? "Open" : "")
 
-            Text((tx.amount < 0 ? "+" : "") + Money.format(abs(tx.amount), tx.currency))
-                .font(FN.body).monospacedDigit()
-                .foregroundStyle(tx.amount < 0 ? p.ok : p.text)
-                .contentTransition(.numericText())
-                .frame(width: TransactionHeader.amountWidth, alignment: .leading)
-
-            Text(FinanceMath.shortDate(tx.date))
-                .font(FN.body).monospacedDigit()
-                .foregroundStyle(p.muted)
-                .frame(width: TransactionHeader.dateWidth, alignment: .leading)
-
-            MenuButton(help: "Change the category") {
+            MenuButton(help: "Category of \(tx.merchant)") {
                 store.categories.map { c in
                     .item(c, checked: c == tx.category) { store.updateTransaction(tx.id) { $0.category = c } }
                 }
             } label: {
                 HStack(spacing: 6) {
-                    Circle().fill(p.accent).frame(width: 6, height: 6)
-                    Text(tx.category).font(FN.small).foregroundStyle(p.text).lineLimit(1)
+                    Circle().fill(color).frame(width: 8, height: 8)
+                    Text(tx.category).lineLimit(1)
+                    Icon("chevronDown", size: 12).opacity(0.6)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(p.mix(p.accent, 0.10), in: Capsule())
+                .font(FN.font(13))
+                .foregroundStyle(p.textSecondary)
+                .padding(.vertical, 4)
+                .contentShape(Rectangle())
             }
-            .frame(width: TransactionHeader.categoryWidth, alignment: .leading)
+            .frame(width: Columns.category, alignment: .leading)
 
-            IconMenu("more", size: 16, box: 28, help: "More") {
-                [
-                    .item(open ? "Close" : "Edit / split") { onToggle() },
-                    .divider,
-                    .item("Delete", destructive: true) { store.remove(.transactions, tx.id) },
-                ]
+            VStack(alignment: .trailing, spacing: 0) {
+                if !splits.isEmpty && !income {
+                    Text(Money.format(Insights.myShare(tx, cur), cur))
+                    Text("of \(Money.format(tx.amount, tx.currency))").font(FN.small).foregroundStyle(p.textMuted)
+                } else {
+                    Text((income ? "+" : "") + Money.format(abs(tx.amount), tx.currency))
+                    if foreign {
+                        Text(tx.fxRate != nil ? "≈ \(Money.format(abs(Insights.baseAmount(tx, cur)), cur))" : "Fetching the rate…")
+                            .font(FN.small).foregroundStyle(p.textMuted)
+                    }
+                    if income { Text("Income").font(FN.small).foregroundStyle(p.textMuted) }
+                }
             }
+            .font(FN.body)
+            .monospacedDigit()
+            .foregroundStyle(p.foreground)
+            .frame(width: Columns.amount, alignment: .trailing)
+            .padding(.trailing, 12)
+
+            // Shown on hover; red under the pointer.
+            DeleteButton(action: onDelete)
+                .opacity(hovering ? 1 : 0)
+                .frame(width: Columns.delete - 24)
         }
-        .padding(.horizontal, 4)
-        .padding(.vertical, 12)
+        .padding(.leading, 24)
+        .padding(.trailing, 12)
+        .padding(.vertical, 10)
     }
 
     private var editor: some View {
-        HStack(alignment: .top, spacing: 20) {
-            VStack(alignment: .leading, spacing: 10) {
+        HStack(alignment: .top, spacing: 24) {
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12, alignment: .topLeading),
+                                GridItem(.flexible(), spacing: 12, alignment: .topLeading)],
+                      alignment: .leading, spacing: 12) {
                 field("Merchant") {
                     CommittedField(placeholder: "Merchant", value: tx.merchant, boxed: true) { v in
                         store.updateTransaction(tx.id) { $0.merchant = v }
@@ -524,61 +660,36 @@ private struct TransactionRow: View {
                         set: { d in store.updateTransaction(tx.id) { $0.date = DateKit.localDate(d) } }),
                         displayedComponents: .date)
                         .labelsHidden()
+                        .frame(height: 36)
                 }
                 field("Amount") {
                     AmountField(value: tx.amount, currency: tx.currency) { amount in
                         store.updateTransaction(tx.id) { $0.amount = amount }
                     }
-                    .frame(width: 140)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .overlay(RoundedRectangle(cornerRadius: FN.radiusSmall, style: .continuous)
-                        .stroke(p.line, lineWidth: 1))
+                    .padding(.horizontal, 14)
+                    .frame(height: 36)
+                    .background(p.surface, in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous).strokeBorder(p.border, lineWidth: 1))
                 }
                 field("Currency") {
                     SelectMenu(options: currencyOptions.map { ($0, $0) },
                                selection: Binding(
                         get: { tx.currency },
-                        set: { c in store.updateTransaction(tx.id) { $0.currency = c; $0.fxRate = nil } }),
-                               width: 96)
+                        set: { c in store.updateTransaction(tx.id) { $0.currency = c; $0.fxRate = nil } }))
                 }
-                if foreign {
-                    field("Rate: 1 \(tx.currency) = ? \(cur)") {
-                        AmountField(value: tx.fxRate ?? 0, currency: cur) { rate in
-                            if rate > 0 { store.updateTransaction(tx.id) { $0.fxRate = rate } }
-                        }
-                        .frame(width: 140)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .overlay(RoundedRectangle(cornerRadius: FN.radiusSmall, style: .continuous)
-                            .stroke(p.line, lineWidth: 1))
-                    }
-                }
-                field("Linked note") {
-                    SelectMenu(options: [("", "None")] + store.liveNotes.map { ($0.id, $0.title.isEmpty ? "Untitled" : $0.title) },
-                               selection: Binding(
-                        get: { tx.noteId ?? "" },
-                        set: { id in store.updateTransaction(tx.id) { $0.noteId = id.isEmpty ? nil : id } }))
-                        .frame(maxWidth: 240, alignment: .leading)
-                }
-                Button("Delete transaction", role: .destructive) {
-                    store.remove(.transactions, tx.id)
-                }
-                .buttonStyle(.fn)
-                .font(FN.body)
-                .foregroundStyle(p.danger)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .modifier(EditorExtras(tx: tx, foreign: foreign, cur: cur, field: field))
 
-            VStack(alignment: .leading, spacing: 0) {
-                SectionTitle("Split bill")
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Split bill").font(FN.small).foregroundStyle(p.textMuted)
                 SplitEditor(txId: tx.id)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 12)
-        .padding(.bottom, 16)
+        .padding(.horizontal, 24)
         .padding(.top, 4)
+        .padding(.bottom, 20)
     }
 
     private var currencyOptions: [String] {
@@ -586,34 +697,128 @@ private struct TransactionRow: View {
         return ([cur, tx.currency] + CURRENCIES).filter { seen.insert($0).inserted }
     }
 
-    private func field<Content: View>(_ label: String, @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(label).font(FN.small).foregroundStyle(p.muted)
+    private func field<Content: View>(_ label: String, @ViewBuilder _ content: () -> Content) -> AnyView {
+        AnyView(VStack(alignment: .leading, spacing: 6) {
+            Text(label).font(FN.small).foregroundStyle(p.textMuted)
             content()
+        })
+    }
+}
+
+/// Below the editor's grid: the rate for a foreign currency, the linked note, a line on
+/// income, and delete.
+private struct EditorExtras: ViewModifier {
+    @Environment(\.palette) private var p
+    @EnvironmentObject private var store: Store
+    let tx: Transaction
+    let foreign: Bool
+    let cur: String
+    let field: (String, () -> AnyView) -> AnyView
+
+    func body(content: Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            content
+            if foreign {
+                field("Rate: 1 \(tx.currency) = ? \(cur)") {
+                    AnyView(AmountField(value: tx.fxRate ?? 0, currency: cur) { rate in
+                        if rate > 0 { store.updateTransaction(tx.id) { $0.fxRate = rate } }
+                    }
+                    .padding(.horizontal, 14)
+                    .frame(height: 36)
+                    .background(p.surface, in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous).strokeBorder(p.border, lineWidth: 1)))
+                }
+            }
+            field("Linked note") {
+                AnyView(SelectMenu(options: [("", "None")] + store.liveNotes.map { ($0.id, $0.title.isEmpty ? "Untitled" : $0.title) },
+                                   selection: Binding(
+                    get: { tx.noteId ?? "" },
+                    set: { id in store.updateTransaction(tx.id) { $0.noteId = id.isEmpty ? nil : id } }))
+                    .frame(maxWidth: .infinity, alignment: .leading))
+            }
+            Text("Amounts below zero are money received.").font(FN.small).foregroundStyle(p.textMuted)
+            KitButton(kind: .danger, title: "Delete transaction", small: true) { store.remove(.transactions, tx.id) }
+                .padding(.leading, -12)
         }
     }
 }
 
-/// The table's column titles.
-private struct TransactionHeader: View {
+/// The trash at a row's end: plain, red under the pointer.
+private struct DeleteButton: View {
     @Environment(\.palette) private var p
-    static let amountWidth: CGFloat = 130
-    static let dateWidth: CGFloat = 70
-    static let categoryWidth: CGFloat = 170
+    @State private var hovering = false
+    let action: () -> Void
 
     var body: some View {
-        HStack(spacing: 16) {
-            title("Transaction").frame(maxWidth: .infinity, alignment: .leading).padding(.leading, 54)
-            title("Amount").frame(width: Self.amountWidth, alignment: .leading)
-            title("Date").frame(width: Self.dateWidth, alignment: .leading)
-            title("Category").frame(width: Self.categoryWidth, alignment: .leading)
-            Color.clear.frame(width: 28, height: 1)
+        Button(action: action) {
+            Icon("trash", size: 14)
+                .foregroundStyle(hovering ? p.danger : p.textSecondary)
+                .frame(width: 32, height: 32)
+                .background(hovering ? p.hover : .clear, in: Circle())
+                .contentShape(Circle())
         }
-        .padding(.horizontal, 4)
-        .padding(.bottom, 10)
+        .buttonStyle(.fn)
+        .onHover { hovering = $0 }
+        .help("Delete")
     }
+}
 
-    private func title(_ text: String) -> some View {
-        Text(text).font(FN.small).foregroundStyle(p.muted)
+/// A month step in the month switcher: 36pt round, under the pointer a shade darker.
+private struct MonthStep: View {
+    @Environment(\.palette) private var p
+    @State private var hovering = false
+    let icon: String
+    let help: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Icon(icon, size: 16)
+                .foregroundStyle(hovering ? p.foreground : p.textSecondary)
+                .frame(width: 36, height: 36)
+                .background(hovering ? p.hover : .clear, in: Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.fn)
+        .onHover { hovering = $0 }
+        .help(help)
+        .accessibilityLabel(help)
+    }
+}
+
+/// The header's "…": a round bordered button (`.btn-secondary .btn-icon`).
+private struct MoreCircle: View {
+    @Environment(\.palette) private var p
+    @Environment(\.menuIsOpen) private var open
+    @State private var hovering = false
+
+    var body: some View {
+        Icon("more", size: 18)
+            .foregroundStyle(p.textSecondary)
+            .frame(width: 36, height: 36)
+            .background(hovering || open ? p.surfaceMuted : p.surface, in: Circle())
+            .overlay(Circle().strokeBorder(p.border, lineWidth: 1))
+            .contentShape(Circle())
+            .onHover { hovering = $0 }
+            .motion(hovering || open, Motion.quick)
+    }
+}
+
+/// A menu's label inside the add bar: plain text and a small chevron.
+private struct BarMenuLabel: View {
+    @Environment(\.palette) private var p
+    @State private var hovering = false
+    let title: String
+    let muted: Bool
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(title).lineLimit(1)
+            Icon("chevronDown", size: 12).opacity(0.7)
+        }
+        .font(FN.body)
+        .foregroundStyle(hovering ? p.foreground : (muted ? p.textMuted : p.textSecondary))
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
     }
 }

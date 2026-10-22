@@ -74,7 +74,7 @@ struct BriefText: View {
         return out as String
     }
 
-    private static func icon(for label: String) -> String {
+    static func icon(for label: String) -> String {
         let l = label.lowercased()
         if l.contains("total") || l.contains("spent") { return "wallet" }
         if l.contains("top") || l.contains("categor") { return "chart" }

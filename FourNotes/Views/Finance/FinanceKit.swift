@@ -227,8 +227,13 @@ enum FinanceMath {
         before > 0 ? (now - before) / before : nil
     }
 
+    /// "Oct 16", as the web's toLocaleDateString(en-US, short month and day).
     static func shortDate(_ iso: String) -> String {
-        DateKit.date(String(iso.prefix(10))).map(Fmt.dayMonth) ?? iso
+        guard let date = DateKit.date(String(iso.prefix(10))) else { return iso }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US")
+        f.dateFormat = "MMM d"
+        return f.string(from: date)
     }
 
     static func daysFromToday(_ iso: String) -> Int {

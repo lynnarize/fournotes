@@ -4,8 +4,9 @@ import UserNotifications
 
 // First-run setup, over the whole window, as on the web (src/components/Onboarding.tsx):
 // a welcome that shows what the app does, then asks only what it needs: how the day
-// reads, the edge dock, how it looks, the assistant, a backup, the currency. It ends on
-// a small celebration. Skippable at every step. Each step blurs into the next.
+// reads, the edge dock, how it looks, the assistant, what macOS should allow for
+// meetings, a backup, the currency. It ends on a small celebration. Skippable at every
+// step. Each step blurs into the next.
 
 struct OnboardingView: View {
     @Environment(\.palette) private var p
@@ -16,6 +17,7 @@ struct OnboardingView: View {
     @EnvironmentObject private var nav: Navigation
     @ObservedObject private var dock = EdgeDock.shared
     @ObservedObject private var sync = AppModel.shared.sync
+    @ObservedObject private var permissions = Permissions.shared
 
     @AppStorage("fournotes.theme") private var themeRaw = ThemeChoice.system.rawValue
 
@@ -33,7 +35,7 @@ struct OnboardingView: View {
 
     /// The steps, in order. The celebration comes after the last.
     private enum Page: CaseIterable {
-        case welcome, oneView, brief, nothingSlips, edgeDock, look, assistant, backup, money
+        case welcome, oneView, brief, nothingSlips, edgeDock, look, assistant, meetings, backup, money
     }
 
     /// The numbered stepper groups the steps into the stages people recognise.
@@ -41,6 +43,7 @@ struct OnboardingView: View {
         ("Welcome", [.welcome, .oneView, .brief, .nothingSlips, .edgeDock]),
         ("Look", [.look]),
         ("Assistant", [.assistant]),
+        ("Meetings", [.meetings]),
         ("Backup", [.backup]),
         ("Money", [.money]),
     ]
@@ -216,6 +219,7 @@ struct OnboardingView: View {
                 }
             }
         case .assistant: assistant
+        case .meetings: meetings
         case .backup: backup
         case .money: money
         case nil: celebration
@@ -334,6 +338,43 @@ struct OnboardingView: View {
                     Trust(icon: "monitor", text: "On this Mac when it can be")
                     Trust(icon: "trash", text: "Delete any time")
                 }
+            }
+        }
+    }
+
+    /// What macOS has to allow for Transcribe, each with its button, and what each is for.
+    private var meetings: some View {
+        SideBySide {
+            Title("Let it hear\nyour meetings")
+            Lead("Four Notes transcribes talks in a room and calls on this Mac. Allow what it needs now, or the first time you record.")
+            PermissionCards()
+                .frame(maxWidth: 520)
+            HStack(spacing: 12) {
+                KitButton(kind: .primary, title: permissions.allAllowed ? "All allowed" : "Allow all",
+                          icon: permissions.allAllowed ? "check" : nil,
+                          disabled: permissions.allAllowed || permissions.asking != nil) {
+                    Task { await permissions.requestAll() }
+                }
+                KitButton(kind: .plain, title: "Skip for now") { go(1) }
+            }
+        } picture: {
+            PictureCard {
+                VStack(alignment: .leading, spacing: 24) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("How Four Notes uses sound").font(FN.font(20, .medium)).foregroundStyle(p.foreground)
+                        Text("Your microphone for you and the room, and a call's sound for the other side, transcribed on this Mac with who said what. It hears only while you record, and nothing you record leaves this Mac.")
+                            .font(FN.font(15)).lineSpacing(5).foregroundStyle(p.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Meetings and reminders").font(FN.font(20, .medium)).foregroundStyle(p.foreground)
+                        Text("With your calendar, today's meetings wait on the Transcribe page. A couple of minutes before one starts, a notification records it in a click. A call that starts in Zoom, Meet or Teams with nothing on the calendar gets the same offer.")
+                            .font(FN.font(15)).lineSpacing(5).foregroundStyle(p.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(28)
+                .frame(maxWidth: 440, alignment: .leading)
             }
         }
     }

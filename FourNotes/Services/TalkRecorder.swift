@@ -21,6 +21,8 @@ final class TalkRecorder: ObservableObject {
         var app: SystemAudio.App?
         var title: String
         var lang: String
+        /// The calendar event it's recorded for.
+        var event: TalkEvent?
     }
 
     struct Levels: Equatable {
@@ -96,6 +98,7 @@ final class TalkRecorder: ObservableObject {
                         mode: options.mode,
                         app: options.mode == .call ? (options.app?.name ?? "All sound on this Mac") : nil,
                         lang: options.lang, spaceId: AppModel.shared.store.currentSpaceId)
+        talk.event = options.event
         let folder = store.folder(talk.id)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 

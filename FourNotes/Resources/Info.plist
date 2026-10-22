@@ -44,6 +44,8 @@
 	</dict>
 	<key>NSHumanReadableCopyright</key>
 	<string>Four Notes</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Four Notes lists your meetings on the Transcribe page, so one records with its name and who's invited, and reminds you before one starts. Your calendar is only read, and stays on this Mac.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Four Notes records voice memos and turns them into notes with action items.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

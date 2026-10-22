@@ -3,14 +3,19 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 // Starting a recording: in person or a call, which app's sound for a call, a name, the
-// language spoken, and how it will be transcribed. Or a file to transcribe instead.
+// language spoken, and how it will be transcribed. Or a file to transcribe instead. A
+// meeting on the calendar, under way or coming up, fills it in: its name, a call in its
+// app when it has a link (which it can join first), and the event, kept with the talk.
 
 struct NewRecordingView: View {
     @Environment(\.palette) private var p
     @EnvironmentObject private var nav: Navigation
     @ObservedObject private var recorder = TalkRecorder.shared
     @ObservedObject private var models = SpeechModels.shared
+    @ObservedObject private var calendar = MeetingCalendar.shared
 
+    /// A meeting to start with, picked in the list.
+    var meetingId: String?
     let onStarted: (String) -> Void
     let onCancel: () -> Void
 
@@ -22,6 +27,8 @@ struct NewRecordingView: View {
     @State private var appsProblem: String?
     @State private var busy = false
     @State private var importing = false
+    /// The meeting it's being recorded for.
+    @State private var meeting: Meeting?
 
     private var mode: Talk.Mode { Talk.Mode(rawValue: modeRaw) == .call ? .call : .room }
 
@@ -41,6 +48,9 @@ struct NewRecordingView: View {
                         .font(FN.display(30))
                         .tracking(FN.displayTracking(30))
                         .foregroundStyle(p.foreground)
+
+                    let soon = upcoming
+                    if !soon.isEmpty { fromCalendar(soon) }
 
                     HStack(alignment: .top, spacing: 12) {
                         option(.room, icon: "users", label: "In person",
@@ -96,6 +106,10 @@ struct NewRecordingView: View {
                     HStack(spacing: 12) {
                         KitButton(kind: .primary, title: mode == .call ? "Start recording the call" : "Start recording",
                                   icon: "mic", large: true, disabled: busy || recorder.isActive) { start() }
+                        if let link = meeting?.link {
+                            KitButton(kind: .secondary, title: "Join \(link.service) and record", icon: "arrowUpRight",
+                                      large: true, disabled: busy || recorder.isActive) { joinAndStart() }
+                        }
                         KitButton(kind: .plain, title: "Transcribe a file", icon: "upload", large: true, action: pickFile)
                             .disabled(busy)
                     }
@@ -110,7 +124,78 @@ struct NewRecordingView: View {
         }
         .background(p.bg)
         .animation(Motion.standard, value: mode)
+        .animation(Motion.standard, value: meeting)
         .task(id: mode) { if mode == .call { await loadApps() } }
+        .task {
+            if let meetingId, let picked = calendar.meeting(meetingId) { pick(picked) }
+        }
+    }
+
+    // MARK: - From the calendar
+
+    /// Meetings under way or starting within the hour, and the one picked.
+    private var upcoming: [Meeting] {
+        let now = Date()
+        var out = calendar.meetings.filter { $0.end > now && $0.start <= now.addingTimeInterval(3600) }
+        if let meeting, !out.contains(meeting) { out.insert(meeting, at: 0) }
+        return Array(out.prefix(3))
+    }
+
+    private func fromCalendar(_ meetings: [Meeting]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("From your calendar").font(FN.font(13)).foregroundStyle(p.textMuted)
+            HStack(spacing: 8) {
+                ForEach(meetings) { m in
+                    let on = meeting?.id == m.id
+                    Button { on ? unpick() : pick(m) } label: {
+                        HStack(spacing: 6) {
+                            Icon("calendar", size: 13).foregroundStyle(on ? p.accent : p.textSecondary)
+                            Text(m.title).foregroundStyle(p.foreground).lineLimit(1)
+                            Text(MeetingRules.when(m, now: Date())).foregroundStyle(p.textMuted).fixedSize()
+                        }
+                        .font(FN.font(13))
+                        .padding(.horizontal, 12)
+                        .frame(height: 32)
+                        .background(on ? p.accentSubtle : p.surface, in: Capsule())
+                        .overlay(Capsule().strokeBorder(on ? p.accent : p.border, lineWidth: 1))
+                        .contentShape(Capsule())
+                    }
+                    .buttonStyle(.fn)
+                    .frame(maxWidth: 240, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .help(on ? "Record it as an ordinary talk instead" : "Record this meeting, with its name and who's invited")
+                    .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
+                }
+            }
+            if let meeting, !meeting.attendees.isEmpty {
+                Text("With " + Self.people(meeting.attendees))
+                    .font(FN.small).foregroundStyle(p.textSecondary)
+                    .lineLimit(2)
+                    .transition(.opacity)
+            }
+        }
+    }
+
+    /// "Andi, Budi, Citra and 2 more"
+    nonisolated static func people(_ names: [String]) -> String {
+        guard names.count > 1 else { return names.first ?? "" }
+        if names.count <= 3 { return names.dropLast().joined(separator: ", ") + " and " + names[names.count - 1] }
+        return names.prefix(3).joined(separator: ", ") + " and \(names.count - 3) more"
+    }
+
+    private func pick(_ m: Meeting) {
+        // A name typed by hand stays; one from another meeting is replaced.
+        if title.trimmingCharacters(in: .whitespaces).isEmpty || title == meeting?.title { title = m.title }
+        meeting = m
+        if m.link != nil {
+            modeRaw = Talk.Mode.call.rawValue
+            Task { await loadApps() }
+        }
+    }
+
+    private func unpick() {
+        if title == meeting?.title { title = "" }
+        meeting = nil
     }
 
     // MARK: - Pieces
@@ -224,6 +309,11 @@ struct NewRecordingView: View {
             apps = try await SystemAudio.apps()
             appsProblem = nil
             if !appId.isEmpty, !apps.contains(where: { $0.bundleId == appId }) { appId = "" }
+            // A meeting's call: the app it's in, when that's open.
+            if let link = meeting?.link,
+               let app = MeetingRecording.apps(for: link).lazy.compactMap({ id in apps.first { $0.bundleId == id } }).first {
+                appId = app.bundleId
+            }
         } catch {
             appsProblem = error.localizedDescription
         }
@@ -232,11 +322,28 @@ struct NewRecordingView: View {
     private func start() {
         busy = true
         let options = TalkRecorder.Options(mode: mode, app: mode == .call ? apps.first { $0.bundleId == appId } : nil,
-                                           title: title, lang: lang)
+                                           title: title, lang: lang, event: meeting?.event)
         Task {
             defer { busy = false }
             do {
                 onStarted(try await recorder.start(options))
+                if let meeting { MeetingAlerts.cancelReminder(meeting.id) }
+            } catch {
+                if case SystemAudio.Failure.denied = error { appsProblem = error.localizedDescription }
+                AppModel.shared.toasts.push(error.localizedDescription, tone: .error)
+            }
+        }
+    }
+
+    /// Opens the meeting's call, waits for its app, and records it.
+    private func joinAndStart() {
+        guard let meeting else { return }
+        busy = true
+        let name = title.trimmingCharacters(in: .whitespaces)
+        Task {
+            defer { busy = false }
+            do {
+                onStarted(try await MeetingRecording.record(meeting, join: true, title: name.isEmpty ? nil : name))
             } catch {
                 if case SystemAudio.Failure.denied = error { appsProblem = error.localizedDescription }
                 AppModel.shared.toasts.push(error.localizedDescription, tone: .error)

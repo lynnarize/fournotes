@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UserNotifications
 
 /// Quitting has to be a moment the app can react to. `.onDisappear` on a window
 /// does not reliably run on Cmd+Q, so the document is flushed here instead —
@@ -8,6 +9,14 @@ import SwiftUI
 /// Launch work lives here too, not in a window's `onAppear`: the edge dock
 /// keeps the app running with no window open at all.
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Before launch finishes: a notification's button that opened the app lands only on
+    /// a delegate that's already there.
+    @MainActor
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        UNUserNotificationCenter.current().delegate = self
+        MeetingAlerts.registerCategories()
+    }
+
     @MainActor
     func applicationDidFinishLaunching(_ notification: Notification) {
         let model = AppModel.shared
@@ -16,6 +25,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !AppModel.isTesting {
             EdgeDock.shared.install(model)
             EdgeStickies.shared.install(model)
+            MeetingCalendar.shared.start()
+            CallDetector.shared.start()
         }
     }
 
@@ -51,6 +62,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         !EdgeDock.shared.isEnabled
+    }
+}
+
+extension AppDelegate: UNUserNotificationCenterDelegate {
+    /// Transcribe's notifications show even with the app in front: their buttons are the
+    /// point. A task's reminder is a toast then, as it always was.
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                            willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
+        MeetingAlerts.isOurs(notification.request.content.categoryIdentifier) ? [.banner, .sound] : []
+    }
+
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                            didReceive response: UNNotificationResponse) async {
+        let content = response.notification.request.content
+        let action = response.actionIdentifier
+        let category = content.categoryIdentifier
+        var info: [String: String] = [:]
+        for (key, value) in content.userInfo {
+            if let key = key as? String, let value = value as? String { info[key] = value }
+        }
+        await MeetingAlerts.handle(action: action, category: category, info: info)
     }
 }
 

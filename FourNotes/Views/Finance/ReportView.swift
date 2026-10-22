@@ -66,20 +66,24 @@ struct ReportView: View {
 
     var body: some View {
         let data = data
-        SheetFrame(title: "Annual report", width: 900, maxHeight: 720) {
-            VStack(alignment: .leading, spacing: 16) {
+        // The web Modal's wide size (max-w-3xl).
+        SheetFrame(title: "Annual report", width: 768, maxHeight: 720) {
+            VStack(alignment: .leading, spacing: 20) {
                 HStack(spacing: 8) {
-                    SelectMenu(options: years.map { ($0, $0) }, selection: $year, width: 90)
+                    SelectMenu(options: years.map { ($0, $0) }, selection: $year)
+                        .fixedSize()
 
                     Spacer()
 
-                    SecondaryButton(title: "Transactions (Excel CSV)", icon: "download") {
+                    SecondaryButton(title: "Transactions (Excel CSV)", icon: "download", small: true) {
                         exportTransactions(data)
                     }
-                    SecondaryButton(title: "Summary (Excel CSV)", icon: "download") {
+                    .disabled(data.txs.isEmpty)
+                    SecondaryButton(title: "Summary (Excel CSV)", icon: "download", small: true) {
                         exportSummary(data)
                     }
-                    PrimaryButton(title: "Save as PDF", disabled: data.txs.isEmpty) {
+                    .disabled(data.txs.isEmpty)
+                    PrimaryButton(title: "Save as PDF", icon: "print", disabled: data.txs.isEmpty, small: true) {
                         exportPDF(data)
                     }
                 }
@@ -97,24 +101,30 @@ struct ReportView: View {
     @ViewBuilder
     private func report(_ data: ReportData) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Four Notes · \(year) financial report")
-                .font(FN.serif(25))
+            Text("Four Notes, \(year) financial report")
+                .font(FN.font(24, .medium))
+                .tracking(-0.02 * 24)
                 .foregroundStyle(p.text)
-            Text("\(spaceName) · amounts in \(cur) · generated \(generatedDate)")
+            Text("\(spaceName), amounts in \(cur), made \(generatedDate)")
                 .font(FN.body)
                 .foregroundStyle(p.muted)
-                .padding(.bottom, 16)
+                .padding(.top, 4)
+                .padding(.bottom, 20)
 
-            HStack(spacing: 12) {
+            HStack(spacing: 0) {
                 summaryTile("Spent (your share)", data.spent)
+                Rectangle().fill(p.line).frame(width: 1)
                 summaryTile("Income", data.earned)
+                Rectangle().fill(p.line).frame(width: 1)
                 summaryTile("Net", data.earned - data.spent)
             }
-            .padding(.bottom, 16)
+            .fixedSize(horizontal: false, vertical: true)
+            .overlay(RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous).strokeBorder(p.line, lineWidth: 1))
+            .padding(.bottom, 20)
 
             table(data)
 
-            Text("\(data.txs.count) transactions. Shares of split bills paid by others are excluded from spending.")
+            Text("\(data.txs.count) transactions. Shares of split bills paid by others are left out of spending.")
                 .font(FN.small)
                 .foregroundStyle(p.faint)
                 .padding(.top, 16)
@@ -129,12 +139,15 @@ struct ReportView: View {
     }
 
     private func summaryTile(_ label: String, _ amount: Double) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(label).font(FN.small).foregroundStyle(p.muted)
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(FN.small).foregroundStyle(p.faint)
             Text(Money.format(amount, cur))
-                .font(.system(size: 18, weight: .semibold)).monospacedDigit()
+                .font(FN.font(18, .medium)).monospacedDigit()
                 .foregroundStyle(p.text)
+                .lineLimit(1)
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -167,7 +180,7 @@ struct ReportView: View {
             HStack(spacing: 0) {
                 ForEach(Array(cells.enumerated()), id: \.offset) { index, cell in
                     Text(cell)
-                        .font(FN.font(11, bold ? .semibold : .regular))
+                        .font(FN.font(12, bold ? .medium : .regular))
                         .monospacedDigit()
                         .foregroundStyle(p.text)
                         .frame(maxWidth: .infinity,

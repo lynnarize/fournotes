@@ -188,20 +188,21 @@ struct PillButton: View {
     var icon: String?
     let title: String
     var selected = false
+    /// `.pill` (36pt, 14pt text) rather than `.pill-sm` (32pt, 13pt).
+    var regular = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 7) {
-                if let icon { Icon(icon, size: 15) }
+            HStack(spacing: 8) {
+                if let icon { Icon(icon, size: 16) }
                 Text(title).lineLimit(1)
             }
-            .font(FN.font(13, selected ? .medium : .regular))
+            .font(FN.font(regular ? 14 : 13, selected ? .medium : .regular))
             .foregroundStyle(selected || hovering ? p.foreground : p.textSecondary)
-            // The kit's `.pill-sm`: 12pt in from the sides.
             .padding(.leading, 12)
-            .padding(.trailing, 12)
-            .frame(height: 32)
+            .padding(.trailing, regular ? 14 : 12)
+            .frame(height: regular ? 36 : 32)
             .background(selected ? p.accentSubtle : (hovering ? p.hover : .clear), in: Capsule())
             .overlay(Capsule().strokeBorder(selected ? p.accent : p.border, lineWidth: 1))
             .contentShape(Capsule())

@@ -104,21 +104,22 @@ struct ChatDock: View {
     // MARK: - Today
 
     private var heroComposer: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        // On a wide window the web's composer rests on its border, no shadow (md:shadow-none).
+        VStack(alignment: .leading, spacing: 24) {
             ChatComposer(text: $text, focused: $inputFocused,
                          placeholder: "Ask anything, / for commands, @ to add a note",
-                         floating: true, onSend: submit)
+                         floating: false, onSend: submit)
                 .matchedGeometryEffect(id: "composer", in: glide)
 
             HStack(spacing: 8) {
                 ForEach(Self.starters, id: \.title) { starter in
-                    PillButton(icon: starter.icon, title: starter.title) {
+                    PillButton(icon: starter.icon, title: starter.title, regular: true) {
                         text = starter.text
                         if starter.text.hasSuffix("?") { submit(starter.text); text = "" } else { inputFocused = true }
                     }
                 }
                 if !assistant.messages.isEmpty {
-                    PillButton(icon: "undo", title: "Back to the conversation") { glideTo(true) }
+                    PillButton(icon: "undo", title: "Back to the conversation", regular: true) { glideTo(true) }
                         .transition(.opacity)
                 }
             }

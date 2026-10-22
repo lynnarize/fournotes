@@ -4,7 +4,7 @@ import Foundation
 // JSON on disk stays interchangeable with the web app's "four-notes:v1" blob.
 
 enum Tab: String, CaseIterable, Codable, Identifiable {
-    case today, notes, todo, finance
+    case today, notes, todo, finance, transcribe
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -12,6 +12,7 @@ enum Tab: String, CaseIterable, Codable, Identifiable {
         case .notes: return "Notes"
         case .todo: return "To-Do"
         case .finance: return "Finance"
+        case .transcribe: return "Transcribe"
         }
     }
     var icon: String {
@@ -20,6 +21,7 @@ enum Tab: String, CaseIterable, Codable, Identifiable {
         case .notes: return "doc.text"
         case .todo: return "checkmark.circle"
         case .finance: return "creditcard"
+        case .transcribe: return "waveform"
         }
     }
 }

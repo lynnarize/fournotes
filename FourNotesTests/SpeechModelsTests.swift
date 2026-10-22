@@ -82,6 +82,13 @@ struct SpeechModelsTests {
         let text = result.text.lowercased()
         #expect(text.contains("table") || text.contains("cake"))
 
+        // Transcribe's talks take it piece by piece, with times.
+        let timed = try await LocalSpeech.pieces(audio, whisperFolder: models.folder(tiny),
+                                                 speakersFolder: models.folder(SpeechModels.speakers))
+        print("SPEECH | pieces: \(timed.pieces.map { "[\(TalkText.clock($0.start))] \($0.speaker.map(String.init) ?? "-"): \($0.text)" })")
+        #expect(!timed.pieces.isEmpty)
+        #expect(zip(timed.pieces, timed.pieces.dropFirst()).allSatisfy { $0.start <= $1.start + 0.5 })
+
         // Leave this Mac as it was.
         models.delete(tiny)
         if !hadSpeakers { models.delete(SpeechModels.speakers) }

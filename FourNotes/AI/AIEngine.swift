@@ -476,7 +476,7 @@ final class AIEngine: ObservableObject {
     // MARK: - Short text jobs
 
     /// Asks each model in turn; the first answer wins.
-    private func firstAnswer(_ job: String,
+    func firstAnswer(_ job: String,
                              anthropic: @escaping @MainActor (AnthropicClient) async throws -> String,
                              provider: @escaping @MainActor (OpenAICompatibleClient) async throws -> String,
                              apple: @escaping @Sendable () async throws -> String) async throws -> String {

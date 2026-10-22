@@ -12,6 +12,8 @@ struct SidebarView: View {
     @EnvironmentObject private var assistant: Assistant
     @ObservedObject private var servers = LocalServers.shared
     @ObservedObject private var updates = UpdateCheck.shared
+    @ObservedObject private var talks = TalkStore.shared
+    @ObservedObject private var recorder = TalkRecorder.shared
 
     private var counts: [Tab: Int] {
         let month = DateKit.localMonth()
@@ -21,6 +23,7 @@ struct SidebarView: View {
             .notes: store.liveNotes.count,
             .todo: store.liveTodos.filter { !$0.done }.count,
             .finance: store.liveTransactions.filter { $0.date.hasPrefix(month) }.count,
+            .transcribe: talks.live(in: store.currentSpaceId).count,
         ]
     }
 
@@ -169,6 +172,11 @@ struct SidebarView: View {
                 .item("New transaction", icon: "finance") { QuickCreate.transaction(store: store, nav: nav) },
                 .item("Scan a receipt…", icon: "scan") { assistant.pickAndScan() },
             ]
+        case .transcribe:
+            if recorder.isActive, let id = recorder.talkId {
+                return [.item("Go to the recording") { nav.open(ChangeLink(kind: .talks, id: id)) }]
+            }
+            return [.item("New recording…") { nav.selectedTalkId = TranscribeView.newRecording; nav.tab = .transcribe }]
         }
     }
 }
@@ -214,6 +222,7 @@ private struct TabRow: View {
 
     let tab: Tab
     let count: Int
+    @ObservedObject private var recorder = TalkRecorder.shared
     let entries: () -> [MenuEntry]
 
     var body: some View {
@@ -240,8 +249,13 @@ private struct TabRow: View {
                             .transition(.scale(scale: 0.2).combined(with: .opacity))
                             .accessibilityLabel("New from the assistant")
                     }
-                    // The count gives way to the menu while the row is in use.
-                    if count > 0 {
+                    // A talk being recorded, whichever tab is showing.
+                    if tab == .transcribe && recorder.isActive {
+                        RecordingDot(size: 7)
+                            .opacity(hovering ? 0 : 1)
+                            .help("Recording")
+                    } else if count > 0 {
+                        // The count gives way to the menu while the row is in use.
                         Text("\(count)")
                             .font(FN.small)
                             .monospacedDigit()
@@ -396,6 +410,7 @@ extension Tab {
         case .notes: return "note"
         case .todo: return "todo"
         case .finance: return "finance"
+        case .transcribe: return "wave"
         }
     }
 }

@@ -191,6 +191,11 @@ struct AnthropicClient {
                        prompt: Prompts.writing(task, text: body, title: title))
     }
 
+    func talkWriteUp(_ input: TalkWriteUp.Input) async throws -> String {
+        try await text(model: model, maxTokens: 2000, system: TalkWriteUp.system,
+                       prompt: TalkWriteUp.prompt(input) + "\n\n" + TalkWriteUp.jsonShape)
+    }
+
     private func text(model: String, maxTokens: Int, system: String? = nil,
                       prompt: String) async throws -> String {
         var body: [String: Any] = [

@@ -36,9 +36,54 @@ enum LocalSpeech {
         }
     }
 
-    /// The recording as text, with "Speaker 1:" lines when the speaker model is there.
-    static func transcribe(_ audio: URL, whisperFolder: URL, speakersFolder: URL?) async throws -> Transcript {
+    /// One stretch of speech: who (an index from the speaker model, nil when voices
+    /// weren't told apart), when, and what.
+    struct Piece: Sendable, Equatable {
+        var speaker: Int?
+        var start: Double
+        var end: Double
+        var text: String
+    }
+
+    /// The recording piece by piece, with times, and voices told apart when the speaker
+    /// model is there and hears more than one. For Transcribe's talks.
+    static func pieces(_ audio: URL, whisperFolder: URL, speakersFolder: URL?) async throws -> (pieces: [Piece], speakers: Int) {
         let samples = try AudioProcessor.loadAudioAsFloatArray(fromPath: audio.path)
+        let results = try await words(samples, whisperFolder: whisperFolder, timed: speakersFolder != nil)
+        let plain = results.flatMap(\.segments).map { Piece(speaker: nil, start: Double($0.start), end: Double($0.end), text: clean($0.text)) }
+            .filter { !$0.text.isEmpty }
+        guard !plain.isEmpty else { throw Failure.empty }
+        guard let speakersFolder else { return (plain, 0) }
+        do {
+            let diarizer = try await speakers(speakersFolder, load: false)
+            let diarization = try await diarizer.diarize(audioArray: samples)
+            guard diarization.speakerCount > 1 else { return (plain, diarization.speakerCount) }
+            var out: [Piece] = []
+            for segment in diarization.addSpeakerInfo(to: results).flatMap({ $0 }) {
+                let text = clean(segment.text)
+                guard !text.isEmpty else { continue }
+                let speaker: Int?
+                switch segment.speaker {
+                case .speakerId(let id): speaker = id
+                case .multiple(let ids): speaker = ids.first
+                case .noMatch: speaker = out.last?.speaker
+                @unknown default: speaker = out.last?.speaker
+                }
+                out.append(Piece(speaker: speaker, start: Double(segment.startTime), end: Double(segment.endTime), text: text))
+            }
+            return (out.isEmpty ? plain : out, diarization.speakerCount)
+        } catch {
+            print("[speech] speaker separation failed: \(error.localizedDescription)")
+            return (plain, 0)
+        }
+    }
+
+    private static func clean(_ text: String) -> String {
+        text.replacingOccurrences(of: #"<\|[^|]*\|>"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func words(_ samples: [Float], whisperFolder: URL, timed: Bool) async throws -> [TranscriptionResult] {
         let kit = try await whisper(whisperFolder, prewarm: false)
         let options = DecodingOptions(
             task: .transcribe,
@@ -46,10 +91,16 @@ enum LocalSpeech {
             language: nil,
             detectLanguage: true,
             skipSpecialTokens: true,
-            wordTimestamps: speakersFolder != nil,
+            wordTimestamps: timed,
             chunkingStrategy: .vad
         )
-        let results = try await kit.transcribe(audioArray: samples, decodeOptions: options)
+        return try await kit.transcribe(audioArray: samples, decodeOptions: options)
+    }
+
+    /// The recording as text, with "Speaker 1:" lines when the speaker model is there.
+    static func transcribe(_ audio: URL, whisperFolder: URL, speakersFolder: URL?) async throws -> Transcript {
+        let samples = try AudioProcessor.loadAudioAsFloatArray(fromPath: audio.path)
+        let results = try await words(samples, whisperFolder: whisperFolder, timed: speakersFolder != nil)
         let plain = results.map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !plain.isEmpty else { throw Failure.empty }
 

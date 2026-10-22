@@ -25,6 +25,14 @@ default, and useful with no account, no key and no network.
   question needs the internet.
 - **Scan and record** — a receipt photo becomes spending; a voice memo becomes
   a note with its to-dos. Text is read and speech transcribed on this Mac.
+- **Transcribe** — record a conversation in person, or a call in Zoom, Google
+  Meet, Teams or WhatsApp on this Mac (your microphone for you, the app's sound
+  for them, via ScreenCaptureKit), or transcribe a file. Apple's speech model
+  writes the words as they're spoken; Whisper, when downloaded, transcribes it
+  again afterwards and tells voices apart. Each talk gets a summary, key points,
+  action items for To-Do and a short profile of each person, plays back from any
+  line, saves to Notes, and the assistant answers questions about it. Talks stay
+  on this Mac. ⌥⌘R starts one.
 - **Speech models** — download Whisper large-v3 turbo (about 630 MB, 99
   languages, Indonesian included) and a speaker model (33 MB) from Hugging Face
   inside the app, in Settings → AI & API keys → Speech models: size, speed and

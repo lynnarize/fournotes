@@ -133,7 +133,10 @@ struct SettingsView: View {
         .onAppear {
             updates.markSeen()
             if let requested = nav.settingsSection {
-                current = requested
+                // "api/speech": a section, with one of its groups open.
+                let parts = requested.split(separator: "/").map(String.init)
+                current = parts[0]
+                if parts.count > 1 { openGroup = parts[1] }
                 nav.settingsSection = nil
             }
         }

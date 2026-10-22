@@ -130,6 +130,12 @@ struct AppCommands: Commands {
                 assistant.recording ? assistant.stopRecording() : assistant.startRecording()
             }
             .keyboardShortcut("r", modifiers: [.command, .shift])
+            Button("Record a Conversation…") {
+                // Transcribe's own recorder: a talk in person or a call, with who said what.
+                nav.tab = .transcribe
+                nav.selectedTalkId = TalkRecorder.shared.talkId ?? TranscribeView.newRecording
+            }
+            .keyboardShortcut("r", modifiers: [.command, .option])
         }
 
         CommandGroup(after: .appInfo) {

@@ -396,6 +396,7 @@ private struct FiledCard: View {
         case .todos: return "squareCheck"
         case .transactions: return "wallet"
         case .budget: return "target"
+        case .talks: return "wave"
         default: return "check"
         }
     }

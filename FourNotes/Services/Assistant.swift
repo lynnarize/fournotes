@@ -158,7 +158,14 @@ final class Assistant: ObservableObject {
             let history = messages.filter { !$0.isError }.suffix(12)
                 .map { ChatMessage(role: $0.role, content: $0.content) }
             // A question or a request for ideas is answered, never filed.
-            let response = try await engine.chat(history, context: store.buildContext(relevantNotes: relevant),
+            var context = store.buildContext(relevantNotes: relevant)
+            // Recorded talks the message is about: the parts that match, as notes the
+            // assistant can read and quote. Talks stay on this Mac; only these parts go.
+            context.relevantNotes += TalkText.passages(TalkStore.shared.live(in: store.currentSpaceId), query: clean).map {
+                .init(title: "Recorded talk “\($0.talk.title)”, \(TalkText.meta($0.talk)), from \(TalkText.clock($0.start))",
+                      content: $0.text, updatedAt: $0.talk.createdAt)
+            }
+            let response = try await engine.chat(history, context: context,
                                                  tools: !Intent.answerOnly(clean))
             // A question about a note is answered, never filed: the model
             // used to save the note again under the same title.

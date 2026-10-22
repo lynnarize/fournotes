@@ -44,6 +44,8 @@ final class Navigation: ObservableObject {
 
     /// Notes: which note the editor has open.
     @Published var selectedNoteId: String?
+    /// Transcribe: which talk is open.
+    @Published var selectedTalkId: String?
 
     /// The note editor fills the window: no sidebar, no note list, no title.
     /// Lives here because RootView owns the sidebar it has to hide.
@@ -70,6 +72,9 @@ final class Navigation: ObservableObject {
         case .todos: tab = .todo
         case .transactions, .budget: tab = .finance
         case .stickies: tab = .today
+        case .talks:
+            tab = .transcribe
+            selectedTalkId = link.id
         }
         focus = FocusRequest(link: link)
     }
@@ -114,6 +119,7 @@ final class Navigation: ObservableObject {
             case .todos: return .todo
             case .transactions, .budget: return .finance
             case .stickies: return .today
+            case .talks: return .transcribe
             }
         })
         pulsing.formUnion(tabs.subtracting([tab]))
@@ -134,6 +140,7 @@ final class Navigation: ObservableObject {
             case .todos: pulsing.remove(.todo)
             case .transactions, .budget: pulsing.remove(.finance)
             case .stickies: pulsing.remove(.today)
+            case .talks: pulsing.remove(.transcribe)
             }
         }
     }

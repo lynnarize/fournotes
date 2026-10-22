@@ -52,7 +52,7 @@ enum ListKind: String {
 
 /// Where one filed item lives, so the chat can jump to it.
 struct ChangeLink: Equatable, Hashable {
-    enum Kind: String { case notes, todos, transactions, stickies, budget }
+    enum Kind: String { case notes, todos, transactions, stickies, budget, talks }
     var kind: Kind
     var id: String
 }

@@ -127,7 +127,11 @@ struct RootView: View {
     private var content: some View {
         // Notes fills the window (its list and editor scroll on their own);
         // other tabs scroll the page.
-        if nav.tab == .notes {
+        if nav.tab == .transcribe {
+            // A list of talks beside the open one, as Notes has it.
+            TranscribeView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if nav.tab == .notes {
             // Notes is a pair of panes running edge to edge — list, then
             // editor — with its title inside the list, as in the reference.
             NotesView()
@@ -188,6 +192,7 @@ struct RootView: View {
             case .notes: EmptyView()
             case .todo: TodoView()
             case .finance: FinanceView()
+            case .transcribe: EmptyView()
             }
         }
     }

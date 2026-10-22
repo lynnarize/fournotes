@@ -259,6 +259,13 @@ final class MeetingCalendar: ObservableObject {
         storeCanRead = access == .allowed
     }
 
+    /// These meetings, as if the calendar had them: how the snapshot tests draw the list
+    /// without asking for anyone's calendar.
+    func show(_ meetings: [Meeting]) {
+        access = .allowed
+        self.meetings = meetings
+    }
+
     static func currentAccess() -> Access {
         switch EKEventStore.authorizationStatus(for: .event) {
         case .fullAccess: return .allowed

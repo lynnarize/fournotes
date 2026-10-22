@@ -2,8 +2,9 @@ import SwiftUI
 
 // Enhance's notes on a talk: your own lines in full ink, what it added in a lighter
 // one, so you can see what you wrote and what was filled in. A line that knows where it
-// came from has its time beside it; a click shows that part of the conversation, to
-// play from there or find in the transcript.
+// came from shows its time when the pointer is on it (a time on every line was too much
+// to read past); a click shows that part of the conversation, to play from there or
+// find in the transcript.
 
 struct EnhancedNotesView: View {
     @Environment(\.palette) private var p
@@ -15,6 +16,8 @@ struct EnhancedNotesView: View {
 
     /// The line whose part of the conversation is showing.
     @State private var open: String?
+    /// The line under the pointer.
+    @State private var hovered: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 26) {
@@ -57,11 +60,16 @@ struct EnhancedNotesView: View {
                             .background(open == id ? p.accentSubtle : p.surfaceMuted, in: Capsule())
                     }
                     .buttonStyle(.fn)
+                    .opacity(hovered == id || open == id ? 1 : 0)
                     .help("Where this came from in the conversation")
                     .accessibilityLabel("From \(TalkText.clock(at)) in the conversation")
                 }
             }
             .padding(.leading, indent)
+            .contentShape(Rectangle())
+            .onHover { inside in
+                if inside { hovered = id } else if hovered == id { hovered = nil }
+            }
             .accessibilityElement(children: .combine)
             .accessibilityHint(line.mine ? "Your note" : "Added from the conversation")
 

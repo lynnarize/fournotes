@@ -307,19 +307,19 @@ struct NoteEditorView: View {
     private var header: some View {
         HStack(spacing: 4) {
             if !focusMode {
-                IconButton(listHidden ? "collapseRight" : "collapseLeft", size: 20, box: 30,
+                IconButton(listHidden ? "collapseRight" : "collapseLeft", size: 18, box: 36,
                            help: listHidden ? "Show note list" : "Hide note list", action: onToggleList)
             }
-            IconButton(focusMode ? "shrink" : "expand", size: 18, box: 30,
+            IconButton(focusMode ? "shrink" : "expand", size: 18, box: 36,
                        help: focusMode ? "Exit focus mode (Esc)" : "Focus mode", action: onToggleFocus)
 
             // Where you are, as on the web: muted, the note's name a shade stronger.
             HStack(spacing: 6) {
                 Text("Notes").foregroundStyle(p.faint)
-                Icon("chevron", size: 12).foregroundStyle(p.faint)
+                Icon("chevron", size: 14).foregroundStyle(p.faint)
                 Text(title.isEmpty ? "Untitled" : title).foregroundStyle(p.muted)
             }
-            .font(FN.body)
+            .font(FN.font(13))
             .lineLimit(1)
             .padding(.leading, 6)
 
@@ -344,7 +344,7 @@ struct NoteEditorView: View {
             SecondaryButton(title: "Share", icon: "share", action: share)
                 .fixedSize()
 
-            IconMenu("more", size: 20, help: "More actions") {
+            IconMenu("more", size: 18, box: 36, help: "More actions") {
                 [
                     .item("Copy note text", action: copyText),
                     .item(EdgeStickies.shared.isStuck(note.id) ? "Take off screen edge" : "Stick to screen edge",
@@ -357,7 +357,8 @@ struct NoteEditorView: View {
                 ]
             }
         }
-        .padding(.horizontal, 20)
+        .padding(.leading, 20)
+        .padding(.trailing, 16)
         .frame(height: 60)
     }
 
@@ -366,13 +367,13 @@ struct NoteEditorView: View {
         Rectangle().fill(p.line).frame(height: 1).padding(.horizontal, 36)
     }
 
-    /// The text column's width and where it sits: against the left edge beside
-    /// the list, centred when the editor has the window to itself.
+    /// The text column's width and where it sits, as on the web: 680pt (720 in
+    /// focus mode), centred, at least 40pt in from the sides.
     private func column<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         content()
-            .frame(maxWidth: focusMode ? 800 : 760, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: focusMode ? .center : .leading)
-            .padding(.horizontal, focusMode ? 48 : 36)
+            .frame(maxWidth: focusMode ? 720 : 680, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.horizontal, 40)
     }
 
     // MARK: - Title and properties
@@ -380,7 +381,14 @@ struct NoteEditorView: View {
     private static let stamp: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US")
-        f.dateFormat = "MMMM d, yyyy 'at' h:mm a"
+        f.dateFormat = "EEE, MMM d, yyyy"
+        return f
+    }()
+
+    private static let fullStamp: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US")
+        f.dateFormat = "EEEE, MMMM d, yyyy 'at' h:mm a"
         return f
     }()
 
@@ -397,12 +405,15 @@ struct NoteEditorView: View {
                                onCommit: saveTitle)
                     .tracking(FN.displayTracking(36))
                     .foregroundStyle(p.text)
-                    .padding(.bottom, 16)
+                    .padding(.bottom, 24)
 
                 Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 16, verticalSpacing: 10) {
                     // Focus mode keeps only what you might still change.
                     if !focusMode {
-                        property("Created") { Text(stamp(note.createdAt)).foregroundStyle(p.muted).help(stamp(note.createdAt)) }
+                        property("Created") {
+                            Text(stamp(note.createdAt)).monospacedDigit().foregroundStyle(p.muted)
+                                .help(DateKit.date(note.createdAt).map { Self.fullStamp.string(from: $0) } ?? "")
+                        }
                         if let source = SOURCE_NAME[note.source] {
                             property("Source") { Text(source) }
                         }
@@ -420,21 +431,24 @@ struct NoteEditorView: View {
                     }
                 }
                 .animation(Motion.standard, value: focusMode)
+
+                // Between the properties and the writing, as on the web.
+                Rectangle().fill(p.borderSubtle).frame(height: 1)
+                    .padding(.top, 24)
             }
-            .padding(.top, 22)
-            .padding(.bottom, 18)
+            .padding(.top, 40)
         }
     }
 
     private func property<Value: View>(_ label: String, @ViewBuilder _ value: () -> Value) -> some View {
         GridRow {
             Text(label)
-                .font(FN.body)
+                .font(FN.font(13))
                 .foregroundStyle(p.faint)
-                .frame(width: 104, alignment: .leading)
+                .frame(width: 120, alignment: .leading)
             value()
-                .font(FN.body)
-                .foregroundStyle(p.text)
+                .font(FN.font(13))
+                .foregroundStyle(p.muted)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -451,7 +465,7 @@ struct NoteEditorView: View {
         ToolbarLayout(expanded: toolbarExpanded) {
             HStack(spacing: 2) { insertMenu }.fixedSize()
             group {
-                IconMenu("textSize", size: 19, help: "Text style") { textStyleEntries }
+                IconMenu("textSize", size: 18, box: 32, help: "Text style") { textStyleEntries }
                 TextMenu(title: fontLabel, width: 92, help: "Font") { fontEntries }
                 TextMenu(title: "\(Int(state.fontSize))", width: 44, help: "Font size") { sizeEntries }
             }
@@ -491,37 +505,36 @@ struct NoteEditorView: View {
                 tb("subscript", "Subscript", active: state.subscript) { controller.toggleSubscript() }
             }
             group {
-                IconMenu("palette", size: 19,
+                IconMenu("palette", size: 18, box: 32,
                          tone: state.color.isEmpty ? nil : NSColor(hex: state.color).map { Color(nsColor: $0) },
                          help: "Font colour") { colorEntries }
-                IconMenu("highlight", size: 19, help: "Highlight") { highlightEntries }
+                IconMenu("highlight", size: 18, box: 32, help: "Highlight") { highlightEntries }
                 tb("eraser", "Clear formatting") { controller.clearFormatting() }
             }
             // Last: the layout keeps it at the end of the first line.
-            IconButton("chevronDown", size: 16, box: 30,
+            IconButton("chevronDown", size: 16, box: 32,
                        help: toolbarExpanded ? "Show fewer tools" : "Show all tools") {
                 toolbarExpanded.toggle()
             }
             .rotationEffect(.degrees(toolbarExpanded ? 180 : 0))
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
+        .padding(4)
         .frame(maxWidth: .infinity, alignment: .leading)
         // Tools that don't fit wait past the trailing edge, out of sight.
         .clipped()
-        // One slim pill, as the web app's toolbar: a rounded card once it opens to more lines.
-        .background(p.surface, in: RoundedRectangle(cornerRadius: toolbarExpanded ? 22 : 26, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: toolbarExpanded ? 22 : 26, style: .continuous).strokeBorder(p.border, lineWidth: 1))
-        .frame(maxWidth: focusMode ? 800 : 760)
-        .frame(maxWidth: .infinity, alignment: focusMode ? .center : .leading)
-        .padding(.horizontal, focusMode ? 48 : 36)
+        // The web app's toolbar: radius 18 around 32pt tools, 4pt in.
+        .background(p.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(p.border, lineWidth: 1))
+        .frame(maxWidth: focusMode ? 720 : 680)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.horizontal, 40)
         .animation(Motion.standard, value: toolbarExpanded)
     }
 
     /// A run of related tools that wraps as one piece, set off from the one before by a hairline.
     private func group<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         HStack(spacing: 2) {
-            Rectangle().fill(p.border).frame(width: 1, height: 20).padding(.horizontal, 5)
+            Rectangle().fill(p.border).frame(width: 1, height: 20).padding(.horizontal, 4)
             content()
         }
         .fixedSize()
@@ -591,14 +604,14 @@ struct NoteEditorView: View {
         } label: {
             HStack(spacing: 5) {
                 if aiRunning == nil {
-                    Icon("sparkle", size: 18).foregroundStyle(p.accent)
+                    Icon("sparkle", size: 17).foregroundStyle(p.accent)
                 } else {
                     ProgressView().controlSize(.small)
                 }
-                Text("Ask AI").font(FN.body).foregroundStyle(p.text)
+                Text("Ask AI").font(FN.font(13)).foregroundStyle(p.text)
             }
-            .padding(.horizontal, 6)
-            .frame(height: 30)
+            .padding(.horizontal, 8)
+            .frame(height: 32)
             .contentShape(Rectangle())
         }
     }
@@ -646,8 +659,7 @@ struct NoteEditorView: View {
     /// drawn inside the text's own scroll view, above the text.
     private var writingArea: some View {
         RichTextEditor(attributed: $attributed, controller: controller, onTextChange: save,
-                       column: TextColumn(maxWidth: focusMode ? 800 : 760, padding: focusMode ? 48 : 36,
-                                          centered: focusMode),
+                       column: TextColumn(maxWidth: focusMode ? 720 : 680, padding: 40, centered: true),
                        header: editorHeader)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -811,18 +823,19 @@ struct NoteEditorView: View {
                         },
                     ]
                 } label: {
+                    // `.btn-plain .btn-sm`
                     HStack(spacing: 6) {
                         Icon("bell", size: 15)
-                        Text("Remind me").font(FN.small)
+                        Text("Remind me").font(FN.font(13))
                     }
                     .foregroundStyle(p.muted)
-                    .padding(.horizontal, 10)
-                    .frame(height: 30)
+                    .padding(.horizontal, 12)
+                    .frame(height: 32)
                     .contentShape(Rectangle())
                 }
                 .fixedSize()
 
-                SecondaryButton(title: "Ask about this note", icon: "sparkle") {
+                SecondaryButton(title: "Ask about this note", icon: "sparkle", small: true) {
                     askAssistant("About my note “\(displayTitle)”: ")
                 }
                 .fixedSize()
@@ -837,15 +850,16 @@ struct NoteEditorView: View {
         HStack(spacing: 4) {
             Text(tag.capitalizedTag).lineLimit(1)
             Button { removeTag(tag) } label: {
-                Icon("x", size: 9)
-                    .frame(width: 14, height: 14)
-                    .contentShape(Rectangle())
+                Icon("x", size: 12)
+                    .foregroundStyle(p.textMuted)
+                    .frame(width: 18, height: 18)
+                    .contentShape(Circle().inset(by: -8))
             }
             .buttonStyle(.fn)
             .help("Remove tag")
             .accessibilityLabel("Remove tag \(tag)")
         }
-        .font(FN.font(12.5))
+        .font(FN.font(13))
         .foregroundStyle(p.textSecondary)
         .padding(.leading, 10)
         .padding(.trailing, 4)
@@ -861,11 +875,8 @@ struct NoteEditorView: View {
         } else {
             HoverRow(cornerRadius: 5) { hovering in
                 Button { tagDraft = "" } label: {
-                    HStack(spacing: 6) {
-                        Icon("plus", size: 12)
-                        Text("Add tag")
-                    }
-                    .font(FN.font(12.5))
+                    Text("Add tag")
+                    .font(FN.font(13))
                     .foregroundStyle(hovering ? p.foreground : p.textMuted)
                     .padding(.horizontal, 10)
                     .frame(height: 26)

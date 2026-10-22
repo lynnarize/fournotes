@@ -25,19 +25,21 @@ struct DueTodayCard: View {
         let shown = Array(tasks.prefix(5))
         Card(padding: 8) {
             VStack(alignment: .leading, spacing: 0) {
-                HStack {
+                HStack(spacing: 8) {
                     cardHead("Due today", p)
                     HeadLink(title: "All tasks") { nav.tab = .todo }
                 }
                 .padding(.horizontal, 12)
-                .padding(.top, 4)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
 
                 if shown.isEmpty {
                     Text(focus.isEmpty ? "Nothing due today." : "Nothing has a date today.")
-                        .font(FN.font(13.5))
+                        .font(FN.body)
                         .foregroundStyle(p.textSecondary)
                         .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
+                        .padding(.top, 4)
+                        .padding(.bottom, 12)
                 }
                 ForEach(shown) { TodayTaskRow(todo: $0) }
                 if tasks.count > shown.count {
@@ -48,6 +50,7 @@ struct DueTodayCard: View {
                     SectionTitle("High priority, no date")
                         .padding(.horizontal, 12)
                         .padding(.top, 4)
+                        .padding(.bottom, -2)
                     ForEach(focus) { TodayTaskRow(todo: $0) }
                 }
                 if !upcoming.isEmpty {
@@ -56,7 +59,8 @@ struct DueTodayCard: View {
                         .padding(.vertical, 4)
                     SectionTitle("Coming up")
                         .padding(.horizontal, 12)
-                        .padding(.top, 6)
+                        .padding(.top, 8)
+                        .padding(.bottom, -2)
                     ForEach(upcoming) { TodayTaskRow(todo: $0) }
                 }
             }
@@ -70,7 +74,6 @@ private struct TodayTaskRow: View {
     @EnvironmentObject private var store: Store
     @EnvironmentObject private var nav: Navigation
     @EnvironmentObject private var toasts: ToastCenter
-    @State private var hovering = false
     @State private var checking = false
     let todo: Todo
 
@@ -101,25 +104,26 @@ private struct TodayTaskRow: View {
         let note = todo.noteId.flatMap { id in store.liveNotes.first { $0.id == id } }
         HStack(alignment: .top, spacing: 12) {
             Button(action: complete) {
+                // The kit's round `.check`, red-rimmed when overdue.
                 Circle()
-                    .strokeBorder(overdue && !sameDay ? p.danger : (checking ? p.accent : p.borderStrong), lineWidth: 1.5)
+                    .strokeBorder(checking ? p.accent : (overdue ? p.danger : p.borderStrong), lineWidth: 1.5)
                     .background(Circle().fill(checking ? p.accent : .clear))
-                    .overlay { if checking { Icon("check", size: 11, weight: 2.4).foregroundStyle(p.accentForeground) } }
-                    .frame(width: 18, height: 18)
+                    .overlay { if checking { Icon("check", size: 12, weight: 2.4).foregroundStyle(p.accentForeground) } }
+                    .frame(width: 20, height: 20)
                     .padding(.top, 1)
-                    .contentShape(Rectangle().inset(by: -6))
+                    .contentShape(Rectangle().inset(by: -12))
             }
             .buttonStyle(.fn)
             .accessibilityLabel("Complete \(todo.title)")
 
             Button { nav.open(ChangeLink(kind: .todos, id: todo.id)) } label: {
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(todo.title)
-                        .font(FN.font(13.5))
+                        .font(FN.body)
                         .foregroundStyle(p.foreground)
                         .lineLimit(1)
                     if !when.isEmpty || note != nil || repeats != nil {
-                        HStack(spacing: 5) {
+                        HStack(spacing: 6) {
                             if !when.isEmpty {
                                 Text(when)
                                     .monospacedDigit()
@@ -127,11 +131,15 @@ private struct TodayTaskRow: View {
                             }
                             if !when.isEmpty && (note != nil || repeats != nil) { Text("·") }
                             if let note {
-                                Icon("link", size: 11)
-                                Text(note.title.isEmpty ? "Untitled" : note.title).lineLimit(1)
+                                HStack(spacing: 4) {
+                                    Icon("link", size: 12)
+                                    Text(note.title.isEmpty ? "Untitled" : note.title).lineLimit(1)
+                                }
                             } else if let repeats {
-                                Icon("repeat", size: 11)
-                                Text(repeats)
+                                HStack(spacing: 4) {
+                                    Icon("repeat", size: 12)
+                                    Text(repeats)
+                                }
                             }
                         }
                         .font(FN.small)
@@ -145,16 +153,13 @@ private struct TodayTaskRow: View {
 
             if let bill = todo.bill, bill.amount > 0 {
                 Text(Money.format(bill.amount, bill.currency ?? store.settings.currency))
-                    .font(FN.font(12.5))
+                    .font(FN.font(13))
                     .monospacedDigit()
                     .foregroundStyle(p.textSecondary)
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(hovering ? p.hover : .clear, in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
-        .onHover { hovering = $0 }
-        .motion(hovering, Motion.quick)
+        .padding(.vertical, 12)
         .flashes(nav.isFlashing(todo.id), palette: p)
         .transition(.opacity.combined(with: .offset(x: -8)))
     }
@@ -225,7 +230,7 @@ struct SpentTodayCard: View {
                     .monospacedDigit()
                     .foregroundStyle(p.foreground)
                     .contentTransition(.numericText())
-                    .padding(.top, 10)
+                    .padding(.top, 12)
                 Text(sub)
                     .font(FN.font(13))
                     .monospacedDigit()
@@ -267,32 +272,37 @@ struct QuickNotesCard: View {
     var body: some View {
         let shown = Array(quickNotes.prefix(3))
         Card(padding: 8) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 8) {
                     cardHead("Quick notes", p)
                     Text("Today's go into the brief").font(FN.small).foregroundStyle(p.textMuted)
                 }
                 .padding(.horizontal, 12)
-                .padding(.top, 6)
-                .padding(.bottom, 6)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
 
                 TextField("Jot something down", text: $draft, axis: .vertical)
                     .textFieldStyle(.plain)
-                    .font(FN.font(13.5))
+                    .font(FN.body)
+                    .lineSpacing(7)
                     .foregroundStyle(p.foreground)
                     .lineLimit(1...5)
                     .focused($focused)
                     .onSubmit(save)
                     .padding(.horizontal, 14)
-                    .padding(.vertical, 9)
+                    .padding(.vertical, 8)
+                    .frame(minHeight: 40)
                     .background(p.surfaceMuted, in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous)
                         .strokeBorder(focused ? p.borderStrong : p.border, lineWidth: 1))
                     .motion(focused, Motion.quick)
                     .accessibilityHint("Return saves it")
 
-                ForEach(shown) { QuickNoteRow(note: $0) }
-                    .animation(Motion.list, value: shown.map(\.id))
+                VStack(spacing: 0) {
+                    ForEach(shown) { QuickNoteRow(note: $0) }
+                }
+                .padding(.top, shown.isEmpty ? 0 : 4)
+                .animation(Motion.list, value: shown.map(\.id))
 
                 if quickNotes.count > shown.count {
                     HeadLink(title: "All notes") { nav.tab = .notes }
@@ -322,34 +332,32 @@ private struct QuickNoteRow: View {
     var body: some View {
         let title = note.title.isEmpty ? "Untitled" : note.title
         let stuck = stickies.isStuck(note.id)
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             Circle().fill(p.noteYellow).frame(width: 8, height: 8)
             Button { nav.open(ChangeLink(kind: .notes, id: note.id)) } label: {
                 Text(title)
-                    .font(FN.font(13.5))
+                    .font(FN.body)
                     .foregroundStyle(p.foreground)
                     .lineLimit(1)
-                    .frame(maxWidth: .infinity, minHeight: 34, alignment: .leading)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.fn)
+            Text(Self.ago(note.createdAt)).font(FN.small).foregroundStyle(p.textMuted)
+            // Mac only: stick it to the screen edge.
             if hovering || stuck {
-                IconButton("pin", size: 13, box: 26, tone: stuck ? p.accent : nil,
+                IconButton("pin", size: 14, box: 36, tone: stuck ? p.accent : nil,
                            help: stuck ? "Take off the screen edge" : "Stick to the screen edge") {
                     stickies.toggle(note.id)
                 }
                 .transition(.opacity)
             }
-            if hovering {
-                IconButton("x", size: 13, box: 26, help: "Delete “\(title)”") { store.remove(.notes, note.id) }
-                    .transition(.opacity)
-            } else {
-                Text(Self.ago(note.createdAt)).font(FN.small).foregroundStyle(p.textMuted)
-            }
+            // Shown on hover, its room kept, as on the web.
+            IconButton("x", size: 14, box: 36, help: "Delete “\(title)”") { store.remove(.notes, note.id) }
+                .opacity(hovering ? 1 : 0)
         }
         .padding(.leading, 12)
         .padding(.trailing, 4)
-        .background(hovering ? p.hover : .clear, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .onHover { hovering = $0 }
         .motion(hovering, Motion.quick)
         .flashes(nav.isFlashing(note.id), palette: p)
@@ -388,12 +396,12 @@ struct QuietLabel: View {
         HStack(spacing: 6) {
             if let icon { Icon(icon, size: 14) }
             Text(title)
-            if let trailingIcon { Icon(trailingIcon, size: 13) }
+            if let trailingIcon { Icon(trailingIcon, size: 14) }
         }
         .font(FN.font(13))
         .foregroundStyle(hovering || open ? p.foreground : p.textMuted)
-        .padding(.horizontal, 10)
-        .frame(height: 30)
+        .padding(.horizontal, 12)
+        .frame(height: 32)
         .background(hovering || open ? p.hover : .clear, in: Capsule())
         .contentShape(Capsule())
         .onHover { hovering = $0 }

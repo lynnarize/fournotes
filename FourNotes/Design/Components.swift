@@ -172,7 +172,7 @@ struct HeadLink: View {
                 .font(FN.font(13))
                 .foregroundStyle(hovering ? p.foreground : p.textSecondary)
                 .padding(.horizontal, 4)
-                .frame(minHeight: 28)
+                .frame(minHeight: 32)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.fn)
@@ -292,7 +292,7 @@ struct KitButton: View {
         let lit = hovering && !off
         Button(action: action) {
             HStack(spacing: small ? 6 : 8) {
-                if let icon { Icon(icon, size: small ? 14 : 15) }
+                if let icon { Icon(icon, size: small ? 14 : 16) }
                 Text(title).lineLimit(1)
             }
             .font(FN.font(small ? 13 : 14, kind == .plain ? .regular : .medium))

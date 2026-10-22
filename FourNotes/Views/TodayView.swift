@@ -118,8 +118,8 @@ struct TodayView: View {
                 .frame(maxWidth: narrow ? .infinity : nil)
             }
             .frame(maxWidth: 1180)
-            .padding(.horizontal, 36)
-            .padding(.top, nav.todayChat ? 32 : 64)
+            .padding(.horizontal, 32)
+            .padding(.top, nav.todayChat ? 40 : 72)
             .padding(.bottom, 48)
             .frame(maxWidth: .infinity)
         }
@@ -155,7 +155,7 @@ struct TodayView: View {
     /// the assistant.
     private func mainColumn(_ alerts: [String]) -> some View {
         VStack(alignment: .leading, spacing: 24) {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 12) {
                 Text(Self.dateLine(now))
                     .font(FN.font(14))
                     .foregroundStyle(p.textSecondary)
@@ -168,7 +168,7 @@ struct TodayView: View {
             }
 
             if !nav.todayChat {
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 16) {
                     if isEmptyApp {
                         emptyPrompt
                     } else if briefStyle == .paragraph {
@@ -189,7 +189,7 @@ struct TodayView: View {
             }
 
             ChatDock(minimized: false, hero: true)
-                .padding(.top, nav.todayChat ? 0 : 12)
+                .padding(.top, nav.todayChat ? 0 : 8)
         }
     }
 
@@ -231,7 +231,7 @@ struct TodayView: View {
                 QuietLabel(title: briefStyle.label, trailingIcon: "chevronDown")
             }
         }
-        .padding(.leading, -10)
+        .padding(.leading, -12)
     }
 
     /// The written brief, and anything that needs a look, a row each.

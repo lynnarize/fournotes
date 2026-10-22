@@ -114,7 +114,7 @@ struct SidebarView: View {
                     Logo(size: 30)
                     VStack(alignment: .leading, spacing: 1) {
                         Text("Four Notes")
-                            .font(FN.font(13, .medium))
+                            .font(FN.bodyMedium)
                             .foregroundStyle(p.foreground)
                             .lineLimit(1)
                         Text(spaceLabel)
@@ -123,7 +123,7 @@ struct SidebarView: View {
                             .lineLimit(1)
                     }
                     Spacer(minLength: 4)
-                    Icon("chevronsUpDown", size: 15)
+                    Icon("chevronsUpDown", size: 16)
                         .foregroundStyle(hovering ? p.foreground : p.textMuted)
                 }
                 .padding(.leading, 6)
@@ -182,20 +182,20 @@ private struct SearchFieldBody: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Icon("search", size: 15)
-            Text("Search or add").font(FN.font(13)).lineLimit(1)
+            Icon("search", size: 16)
+            Text("Search or add").font(FN.body).lineLimit(1)
             Spacer(minLength: 4)
             Text("⌘K")
-                .font(FN.font(11))
+                .font(FN.small)
                 .foregroundStyle(p.textSecondary)
-                .padding(.horizontal, 7)
-                .frame(height: 20)
+                .padding(.horizontal, 8)
+                .frame(height: 22)
                 .background(p.surfaceMuted, in: Capsule())
         }
         .foregroundStyle(p.textMuted)
         .padding(.leading, 12)
         .padding(.trailing, 6)
-        .frame(height: 34)
+        .frame(height: 36)
         .background(p.surface, in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous)
             .strokeBorder(hovering ? p.borderStrong : p.border, lineWidth: 1))
@@ -226,7 +226,7 @@ private struct TabRow: View {
                     Icon(tab.sidebarIcon, size: 16)
                         .foregroundStyle(selected ? p.accent : (hovering ? p.foreground : p.textSecondary))
                     Text(tab.title)
-                        .font(FN.font(13, selected ? .medium : .regular))
+                        .font(FN.font(14, selected ? .medium : .regular))
                         .foregroundStyle(selected || hovering ? p.foreground : p.textSecondary)
                     if tab == .finance {
                         // Still being shaped: said plainly beside its name.
@@ -251,7 +251,7 @@ private struct TabRow: View {
                     }
                 }
                 .padding(.horizontal, 12)
-                .frame(maxWidth: .infinity, minHeight: 34, alignment: .leading)
+                .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
                 .background(selected ? p.accentSubtle : (hovering ? p.hover : .clear),
                             in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
                 .contentShape(Rectangle())
@@ -262,7 +262,7 @@ private struct TabRow: View {
             .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
 
             if hovering {
-                IconMenu("more", size: 16, box: 26, help: "\(tab.title) actions", entries: entries)
+                IconMenu("more", size: 18, box: 28, help: "\(tab.title) actions", entries: entries)
                     .padding(.trailing, 4)
                     .transition(.opacity)
             }
@@ -301,7 +301,7 @@ private struct NavRow: View {
                         }
                     }
                     .animation(Motion.standard, value: badge != nil)
-                Text(title).font(FN.font(13))
+                Text(title).font(FN.body)
                 Spacer(minLength: 0)
                 if let shortcut {
                     Text(shortcut).font(FN.small).foregroundStyle(p.textMuted)
@@ -309,7 +309,7 @@ private struct NavRow: View {
             }
             .foregroundStyle(hovering ? p.foreground : p.textSecondary)
             .padding(.horizontal, 12)
-            .frame(height: 34)
+            .frame(height: 36)
             .background(hovering ? p.hover : .clear,
                         in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
             .contentShape(Rectangle())
@@ -336,12 +336,12 @@ private struct CaptureButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 7) {
-                Icon(icon, size: 15)
-                Text(title).font(FN.font(13)).lineLimit(1)
+            HStack(spacing: 8) {
+                Icon(icon, size: 16)
+                Text(title).font(FN.body).lineLimit(1)
             }
             .foregroundStyle(tone ?? p.foreground)
-            .frame(maxWidth: .infinity, minHeight: 32)
+            .frame(maxWidth: .infinity, minHeight: 36)
             .background(hovering ? p.surfaceMuted : p.surface, in: Capsule())
             .overlay(Capsule().strokeBorder(p.border, lineWidth: 1))
             .contentShape(Capsule())
@@ -415,14 +415,15 @@ private struct SyncStatusRow: View {
                 SyncLine(sync: sync)
             } else {
                 HStack(spacing: 8) {
-                    Icon("cloud", size: 15)
-                    Text("On this Mac").lineLimit(1)
+                    Icon("cloud", size: 16)
+                    Text("Saved on this Mac").lineLimit(1)
                     Spacer(minLength: 0)
                 }
                 .font(FN.small)
                 .foregroundStyle(p.textMuted)
                 .padding(.horizontal, 12)
-                .frame(height: 34)
+                .frame(minHeight: 32)
+                .padding(.top, 10)
             }
         }
     }
@@ -435,7 +436,7 @@ private struct SyncLine: View {
     @State private var hovering = false
 
     private var label: String {
-        guard sync.account != nil else { return "On this Mac" }
+        guard sync.account != nil else { return "Saved on this Mac" }
         switch sync.status {
         case .syncing: return "Syncing… · Google Drive"
         case .offline: return "Offline · Google Drive"
@@ -464,7 +465,7 @@ private struct SyncLine: View {
     var body: some View {
         Button { nav.openSettings(section: "sync") } label: {
             HStack(spacing: 8) {
-                Icon("cloud", size: 15)
+                Icon("cloud", size: 16)
                     .foregroundStyle(tone)
                     .opacity(sync.status == .syncing ? 0.6 : 1)
                     .motion(sync.status, Motion.quick)
@@ -480,7 +481,8 @@ private struct SyncLine: View {
             }
             .font(FN.small)
             .padding(.horizontal, 12)
-            .frame(height: 34)
+            .frame(minHeight: 32)
+            .padding(.top, 10)
             .contentShape(Rectangle())
         }
         .buttonStyle(.fn)

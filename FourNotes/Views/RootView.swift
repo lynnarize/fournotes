@@ -139,8 +139,9 @@ struct RootView: View {
                     header
                     tabContent
                 }
-                .padding(.horizontal, 28)
-                .padding(.bottom, 90)
+                // md:px-8 and pb-24, as on the web.
+                .padding(.horizontal, 32)
+                .padding(.bottom, 96)
                 .frame(maxWidth: FN.maxContentWidth)
                 .frame(maxWidth: .infinity)
             }
@@ -154,9 +155,13 @@ struct RootView: View {
         if nav.tab != .today {
             HStack(spacing: 12) {
                 Text(nav.tab.title)
-                    .font(FN.title)
-                    .tracking(FN.displayTracking(34))
+                    .font(FN.display(36))
+                    .tracking(FN.displayTracking(36))
                     .foregroundStyle(p.foreground)
+                if nav.tab == .finance {
+                    // Still being shaped: said plainly beside its name.
+                    StatusPill(text: "Beta", tone: .accent, dot: false)
+                }
                 if let space = store.spaceName {
                     Chip(tone: nil) {
                         Icon("users", size: 12)

@@ -176,9 +176,9 @@ private struct TextMenuLabel: View {
         let lit = hovering || open
         HStack(spacing: 3) {
             Text(title).lineLimit(1)
-            Icon("chevronDown", size: 10).opacity(0.7)
+            Icon("chevronDown", size: 12).opacity(0.7)
         }
-        .font(FN.body)
+        .font(FN.font(13))
         .monospacedDigit()
         .foregroundStyle(lit ? p.text : p.muted)
         .padding(.horizontal, 8)

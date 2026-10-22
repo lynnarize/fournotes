@@ -7,7 +7,7 @@ import SwiftUI
 private let SORTS: [(id: String, label: String)] = [
     ("updated", "Last edited"),
     ("created", "Date created"),
-    ("title", "Title (A–Z)"),
+    ("title", "Title, A to Z"),
 ]
 
 private let SOURCE_LABEL: [NoteSource: String] = [
@@ -143,7 +143,7 @@ struct NotesView: View {
                     .foregroundStyle(p.foreground)
                     .help("\(liveNotes.count) note\(liveNotes.count == 1 ? "" : "s")")
                 Spacer()
-                IconMenu("sort", size: 17, box: 32, help: "Sort notes") {
+                IconMenu("sort", size: 18, box: 36, help: "Sort notes") {
                     SORTS.map { option in
                         .item(option.label, checked: sort == option.id) { sort = option.id }
                     }
@@ -152,14 +152,15 @@ struct NotesView: View {
                     .help("New note (⌘N)")
             }
             .padding(.leading, 8)
-            .padding(.top, 26)
-            .padding(.bottom, 14)
+            .padding(.trailing, 4)
+            .padding(.top, 24)
+            .padding(.bottom, 12)
 
             HStack(spacing: 8) {
-                Icon("search", size: 15).foregroundStyle(p.textMuted)
+                Icon("search", size: 16).foregroundStyle(p.textMuted)
                 TextField("Search notes", text: $query)
                     .textFieldStyle(.plain)
-                    .font(FN.font(13))
+                    .font(FN.body)
                     .foregroundStyle(p.foreground)
                     .focused($searchFocused)
                     .onExitCommand { query = ""; searchFocused = false }
@@ -170,25 +171,41 @@ struct NotesView: View {
             }
             .padding(.leading, 12)
             .padding(.trailing, 6)
-            .frame(height: 34)
+            .frame(height: 36)
             .background(p.surface, in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous)
                 .strokeBorder(searchFocused ? p.borderStrong : p.border, lineWidth: 1))
             .motion(searchFocused, Motion.quick)
             .padding(.horizontal, 4)
-            .padding(.bottom, 10)
+            .padding(.bottom, 12)
 
             if query.trimmingCharacters(in: .whitespaces).count >= 3 {
-                SectionTitle("Best matches first").padding(.horizontal, 12)
+                Text("Best matches first")
+                    .font(FN.small)
+                    .foregroundStyle(p.textMuted)
+                    .padding(.horizontal, 12)
+                    .padding(.top, -6)
+                    .padding(.bottom, 6)
             }
 
             ScrollView {
                 let rows = list
                 let selectedID = selected?.id
-                LazyVStack(spacing: 2) {
-                    ForEach(rows) { note in
-                        noteCard(note, isSelected: note.id == selectedID)
-                            .transition(.move(edge: .leading).combined(with: .opacity))
+                LazyVStack(alignment: .leading, spacing: 4) {
+                    ForEach(groups(rows), id: \.label) { group in
+                        // Listed under the month, as on the web: "This month", "Last month", "August".
+                        if !group.label.isEmpty {
+                            Text(group.label)
+                                .font(FN.small)
+                                .foregroundStyle(p.textMuted)
+                                .padding(.horizontal, 8)
+                                .padding(.top, 12)
+                                .padding(.bottom, 2)
+                        }
+                        ForEach(group.notes) { note in
+                            noteCard(note, isSelected: note.id == selectedID)
+                                .transition(.move(edge: .leading).combined(with: .opacity))
+                        }
                     }
                     if !query.isEmpty && rows.isEmpty {
                         Text("No matching notes.")
@@ -203,6 +220,32 @@ struct NotesView: View {
         }
         .padding(.horizontal, 12)
         .animation(Motion.standard, value: query.isEmpty)
+    }
+
+    /// The notes under their month, newest first; one unlabelled group while searching
+    /// or sorted by title.
+    private func groups(_ rows: [Note]) -> [(label: String, notes: [Note])] {
+        if !query.trimmingCharacters(in: .whitespaces).isEmpty || sort == "title" { return rows.isEmpty ? [] : [("", rows)] }
+        var out: [(label: String, notes: [Note])] = []
+        for n in rows {
+            let label = Self.monthGroup(sort == "created" ? n.createdAt : n.updatedAt)
+            if out.last?.label == label { out[out.count - 1].notes.append(n) } else { out.append((label, [n])) }
+        }
+        return out
+    }
+
+    /// The heading a note is listed under: this month, last month, then the month's name.
+    private static func monthGroup(_ iso: String, now: Date = Date()) -> String {
+        guard let d = DateKit.date(iso) else { return "" }
+        let cal = Calendar.current
+        let back = (cal.component(.year, from: now) - cal.component(.year, from: d)) * 12
+            + cal.component(.month, from: now) - cal.component(.month, from: d)
+        if back <= 0 { return "This month" }
+        if back == 1 { return "Last month" }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US")
+        f.dateFormat = cal.component(.year, from: d) == cal.component(.year, from: now) ? "MMMM" : "MMMM yyyy"
+        return f.string(from: d)
     }
 
     private static let cardDate: DateFormatter = {
@@ -241,7 +284,7 @@ struct NotesView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 8) {
                         Text(note.title.isEmpty ? "Untitled" : note.title)
-                            .font(FN.font(13.5, .medium))
+                            .font(FN.bodyMedium)
                             .foregroundStyle(note.title.isEmpty ? p.textMuted : p.foreground)
                             .lineLimit(1)
                         Spacer(minLength: 4)
@@ -251,16 +294,16 @@ struct NotesView: View {
                             .foregroundStyle(p.textMuted)
                     }
                     Text(preview.isEmpty ? "No text yet" : preview)
-                        .font(FN.font(12.5))
+                        .font(FN.font(13))
                         .foregroundStyle(p.textSecondary)
-                        .lineSpacing(2)
+                        .lineSpacing(3.5)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                     if !tags.isEmpty || !linked.isEmpty || !source.isEmpty {
                         HStack(spacing: 6) {
                             if !tags.isEmpty { tagRow(tags) }
                             if !linked.isEmpty {
-                                HStack(spacing: 3) { Icon("link", size: 11); Text(linked) }
+                                HStack(spacing: 4) { Icon("link", size: 12); Text(linked) }
                                     .help("Linked to this note")
                             }
                             if !source.isEmpty { Text(source) }

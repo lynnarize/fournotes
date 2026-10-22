@@ -46,6 +46,19 @@ final class Navigation: ObservableObject {
     @Published var selectedNoteId: String?
     /// Transcribe: which talk is open.
     @Published var selectedTalkId: String?
+    /// Where to play the open talk from, once: a cited moment. The talk's page takes it.
+    @Published var talkMoment: Double?
+    /// Library: which source is open, and which of its documents.
+    @Published var selectedSourceId: String?
+    @Published var selectedDocumentId: String?
+    /// The passage of the open document to show, once: a cited one.
+    @Published var libraryPassage: LibraryPassage?
+
+    struct LibraryPassage: Equatable {
+        var documentId: String
+        var page: Int?
+        var offset: Int
+    }
 
     /// The note editor fills the window: no sidebar, no note list, no title.
     /// Lives here because RootView owns the sidebar it has to hide.
@@ -75,8 +88,24 @@ final class Navigation: ObservableObject {
         case .talks:
             tab = .transcribe
             selectedTalkId = link.id
+        case .library:
+            tab = .library
+            selectedSourceId = link.id
         }
         focus = FocusRequest(link: link)
+    }
+
+    /// Opens a talk to play from a moment in it.
+    func open(talk id: String, at seconds: Double) {
+        talkMoment = seconds > 0 ? seconds : nil
+        open(ChangeLink(kind: .talks, id: id))
+    }
+
+    /// Opens a document in the library at a passage.
+    func open(source: String, document: String, page: Int?, offset: Int) {
+        selectedDocumentId = document
+        libraryPassage = LibraryPassage(documentId: document, page: page, offset: offset)
+        open(ChangeLink(kind: .library, id: source))
     }
 
     /// Takes the pending request when it is meant for one of `kinds`, and clears
@@ -120,6 +149,7 @@ final class Navigation: ObservableObject {
             case .transactions, .budget: return .finance
             case .stickies: return .today
             case .talks: return .transcribe
+            case .library: return .library
             }
         })
         pulsing.formUnion(tabs.subtracting([tab]))
@@ -141,6 +171,7 @@ final class Navigation: ObservableObject {
             case .transactions, .budget: pulsing.remove(.finance)
             case .stickies: pulsing.remove(.today)
             case .talks: pulsing.remove(.transcribe)
+            case .library: pulsing.remove(.library)
             }
         }
     }

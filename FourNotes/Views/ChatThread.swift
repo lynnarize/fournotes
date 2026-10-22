@@ -141,6 +141,7 @@ private struct UserBubble: View {
 private struct ReplyView: View {
     @Environment(\.palette) private var p
     @EnvironmentObject private var assistant: Assistant
+    @EnvironmentObject private var nav: Navigation
     @EnvironmentObject private var engine: AIEngine
     let message: UIMessage
     let isLast: Bool
@@ -203,6 +204,7 @@ private struct ReplyView: View {
                     if !message.filed.isEmpty { filedCards }
                     if let txId = message.splitTxId { splitOffer(txId) }
                     if !message.sources.isEmpty { sourceList }
+                    if !message.citations.isEmpty { citationList }
                     if let offer = message.cloudOffer { cloudQuestion(offer) }
                     if message.webTopic != nil { webOffers }
                     actions
@@ -290,6 +292,36 @@ private struct ReplyView: View {
         PillButton(icon: "users", title: "Split this bill with someone?") { onSplit(txId) }
     }
 
+    /// The notes, talks and library passages the answer was worked out from. Each opens
+    /// where it is: the note, the talk at that moment, the file at that passage.
+    private var citationList: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("From your notes and library").font(FN.small).foregroundStyle(p.textMuted)
+            FlowLayout(spacing: 6, alignment: .leading) {
+                ForEach(message.citations, id: \.self) { citation in
+                    CitationChip(citation: citation) { open(citation) }
+                }
+            }
+        }
+    }
+
+    private func open(_ citation: KnowledgeCitation) {
+        switch citation.origin {
+        case .note(let id):
+            let link = ChangeLink(kind: .notes, id: id)
+            onJump(link, [link])
+        case .talk(let id, let at):
+            nav.talkMoment = at > 0 ? at : nil
+            let link = ChangeLink(kind: .talks, id: id)
+            onJump(link, [link])
+        case .library(let source, let document, let page, let offset):
+            nav.selectedDocumentId = document
+            nav.libraryPassage = .init(documentId: document, page: page, offset: offset)
+            let link = ChangeLink(kind: .library, id: source)
+            onJump(link, [link])
+        }
+    }
+
     /// The pages a web answer drew on.
     private var sourceList: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -329,7 +361,7 @@ private struct ReplyView: View {
                 Task { await assistant.askCloud(offer) }
                 return .handled
             })
-            .help("Reply “yes”, or click. Sends this question and the notes it mentions to \(offer.name).")
+            .help("Reply “yes”, or click. Sends this question, and the parts of your notes, talks and library it's about, to \(offer.name).")
     }
 
     @ViewBuilder
@@ -372,6 +404,37 @@ private struct ReplyView: View {
     }
 }
 
+/// A place an answer came from, small: its kind and a few words. The whole of what it
+/// is shows on hover.
+private struct CitationChip: View {
+    @Environment(\.palette) private var p
+    @State private var hovering = false
+    let citation: KnowledgeCitation
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Icon(citation.icon, size: 12)
+                Text(citation.label).lineLimit(1).truncationMode(.middle)
+            }
+            .font(FN.font(12.5))
+            .foregroundStyle(hovering ? p.foreground : p.textSecondary)
+            .padding(.horizontal, 10)
+            .frame(height: 26)
+            .frame(maxWidth: 260)
+            .background(hovering ? p.hover : p.surfaceMuted, in: Capsule())
+            .overlay(Capsule().strokeBorder(p.borderSubtle, lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.fn)
+        .onHover { hovering = $0 }
+        .motion(hovering, Motion.quick)
+        .help(citation.title)
+        .accessibilityLabel("Source: \(citation.title)")
+    }
+}
+
 /// What a reply filed: kind and title, with a check; clicking shows it.
 private struct FiledCard: View {
     @Environment(\.palette) private var p
@@ -397,6 +460,7 @@ private struct FiledCard: View {
         case .transactions: return "wallet"
         case .budget: return "target"
         case .talks: return "wave"
+        case .library: return "book"
         default: return "check"
         }
     }

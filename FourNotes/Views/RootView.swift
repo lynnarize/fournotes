@@ -57,6 +57,8 @@ struct RootView: View {
         .popupHost()
         .overlay(ToastStack().allowsHitTesting(false))
         .task {
+            // Notes, talks and the library, indexed for the assistant in the background.
+            if !AppModel.isTesting { Knowledge.shared.start(store: store) }
             // A brand new install starts on the setup wizard.
             if store.needsOnboarding, nav.sheet == nil { nav.present(.onboarding) }
             // A release found on an earlier day is offered again a little after launch.
@@ -131,6 +133,10 @@ struct RootView: View {
             // A list of talks beside the open one, as Notes has it.
             TranscribeView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if nav.tab == .library {
+            // Sources beside the open one, as Transcribe has it.
+            LibraryView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if nav.tab == .notes {
             // Notes is a pair of panes running edge to edge — list, then
             // editor — with its title inside the list, as in the reference.
@@ -192,7 +198,7 @@ struct RootView: View {
             case .notes: EmptyView()
             case .todo: TodoView()
             case .finance: FinanceView()
-            case .transcribe: EmptyView()
+            case .transcribe, .library: EmptyView()
             }
         }
     }

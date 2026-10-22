@@ -48,7 +48,11 @@ struct TalkPage: View {
             }
         }
         .background(p.bg)
-        .onAppear { player.load(talk.hasAudio ? TalkStore.shared.audio(talk.id) : nil) }
+        .onAppear {
+            player.load(talk.hasAudio ? TalkStore.shared.audio(talk.id) : nil)
+            takeMoment()
+        }
+        .onChange(of: nav.talkMoment) { _, _ in takeMoment() }
         .onChange(of: working) { _, now in
             // The mixed recording is made once transcribing starts.
             if now == nil || player.ready == false { player.load(talk.hasAudio ? TalkStore.shared.audio(talk.id) : nil) }
@@ -425,6 +429,15 @@ struct TalkPage: View {
     }
 
     // MARK: - Actions
+
+    /// A moment the assistant cited: the transcript there, the player ready to play it.
+    private func takeMoment() {
+        guard let moment = nav.talkMoment, nav.selectedTalkId == talk.id else { return }
+        nav.talkMoment = nil
+        jump = moment
+        tab = .transcript
+        player.seek(moment)
+    }
 
     private func rename(_ ids: [String]) {
         let clean = String(newName.trimmingCharacters(in: .whitespaces).prefix(60))

@@ -1,8 +1,8 @@
 import Foundation
 
 // Search across notes, tasks and spending. Keyword ranking (BM25) always works,
-// offline too. Ported from src/lib/search.ts; the embedding blend stays on the
-// hosted side, so the Mac app ranks locally and sends the top notes as context.
+// offline too. Ported from src/lib/search.ts. The assistant's context comes from
+// Knowledge.search, which blends this with meaning, worked out on this Mac.
 
 enum SearchHit: Identifiable {
     case note(Note, score: Double)
@@ -98,6 +98,25 @@ enum Search {
     /// The notes to send with a chat message: the ones it names outright plus
     /// the best keyword matches.
     static func relevantNotes(for text: String, in notes: [Note], openNoteId: String?, limit: Int = 5) -> [Note] {
+        var out = namedNotes(for: text, in: notes, openNoteId: openNoteId)
+
+        let candidates = notes.filter { !$0.title.isEmpty || !$0.content.isEmpty }
+        let scores = bm25(candidates.map { "\($0.title) \($0.title) \($0.content)" }, text)
+        let ranked = zip(candidates, scores)
+            .filter { $0.1 > 0 }
+            .sorted { $0.1 > $1.1 }
+            .map(\.0)
+
+        for n in ranked where !out.contains(where: { $0.id == n.id }) {
+            if out.count >= limit { break }
+            out.append(n)
+        }
+        return Array(out.prefix(limit))
+    }
+
+    /// The notes a message names outright: by a quoted title, or "this note" for the
+    /// open one. They go to the assistant whole; the rest is searched (Knowledge.search).
+    static func namedNotes(for text: String, in notes: [Note], openNoteId: String?) -> [Note] {
         var out: [Note] = []
 
         // A quoted title always goes in full, as does "this note" for the open one.
@@ -116,18 +135,6 @@ enum Search {
            let n = notes.first(where: { $0.id == openNoteId }), !out.contains(where: { $0.id == n.id }) {
             out.insert(n, at: 0)
         }
-
-        let candidates = notes.filter { !$0.title.isEmpty || !$0.content.isEmpty }
-        let scores = bm25(candidates.map { "\($0.title) \($0.title) \($0.content)" }, text)
-        let ranked = zip(candidates, scores)
-            .filter { $0.1 > 0 }
-            .sorted { $0.1 > $1.1 }
-            .map(\.0)
-
-        for n in ranked where !out.contains(where: { $0.id == n.id }) {
-            if out.count >= limit { break }
-            out.append(n)
-        }
-        return Array(out.prefix(limit))
+        return out
     }
 }

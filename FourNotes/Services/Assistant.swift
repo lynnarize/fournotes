@@ -4,8 +4,8 @@ import Speech
 import SwiftUI
 
 // Assistant state shared by the chat dock, sidebar and command palette:
-// chat with retrieval over your notes, photo OCR auto-sorting, and voice
-// recording turned into a summarised note.
+// chat with retrieval over your notes, talks and library, photo OCR
+// auto-sorting, and voice recording turned into a summarised note.
 //
 // Ported from src/components/assistant.tsx. Where the web version reaches for a
 // browser API, the Mac app uses the native one: NSOpenPanel instead of a file
@@ -29,6 +29,9 @@ struct UIMessage: Identifiable, Equatable {
     var webTopic: WebTopic?
     /// The pages a web answer drew on.
     var sources: [WebAnswer.Source] = []
+    /// The notes, talks and library passages the answering model was given: chips
+    /// under the reply that open each one where it was.
+    var citations: [KnowledgeCitation] = []
     /// Who answered: "Claude", "OpenRouter", "LM Studio"…
     var answererName: String?
     /// "OpenRouter couldn't answer (key rejected), so Apple Intelligence stepped in."
@@ -151,20 +154,18 @@ final class Assistant: ObservableObject {
 
         do {
             // Notes the message names outright go to the assistant in full.
-            let relevant = Search.relevantNotes(for: clean, in: store.liveNotes,
-                                                openNoteId: nav.selectedNoteId)
+            let named = Search.namedNotes(for: clean, in: store.liveNotes, openNoteId: nav.selectedNoteId)
             // Error notices are ours, not the assistant's: sending them back as
             // conversation history teaches it to talk about API keys.
             let history = messages.filter { !$0.isError }.suffix(12)
                 .map { ChatMessage(role: $0.role, content: $0.content) }
             // A question or a request for ideas is answered, never filed.
-            var context = store.buildContext(relevantNotes: relevant)
-            // Recorded talks the message is about: the parts that match, as notes the
-            // assistant can read and quote. Talks stay on this Mac; only these parts go.
-            context.relevantNotes += TalkText.passages(TalkStore.shared.live(in: store.currentSpaceId), query: clean).map {
-                .init(title: "Recorded talk “\($0.talk.title)”, \(TalkText.meta($0.talk)), from \(TalkText.clock($0.start))",
-                      content: $0.text, updatedAt: $0.talk.createdAt)
-            }
+            var context = store.buildContext(relevantNotes: named)
+            // Then the parts of notes, recorded talks and the library that answer it
+            // best, by words and meaning. All of it stays on this Mac; only these parts go.
+            let found = KnowledgeContext.entries(await Knowledge.shared.search(clean, limit: 12, in: store),
+                                                 named: Set(named.map(\.id)), notes: store.liveNotes, query: clean)
+            context.relevantNotes += found.map(\.relevant)
             let response = try await engine.chat(history, context: context,
                                                  tools: !Intent.answerOnly(clean))
             // A question about a note is answered, never filed: the model
@@ -197,6 +198,10 @@ final class Assistant: ObservableObject {
             reply.fallbackNote = response.fallbackNote
             reply.questionId = question.id
             reply.webTopic = about
+            // An answer says where it came from; a reply that filed something doesn't need to.
+            if result.created.isEmpty, !response.refused {
+                reply.citations = KnowledgeContext.citations(found, named: named.count, answeredBy: response.answererName)
+            }
             // Answered here, but a bigger model knows more of the world:
             // recommendations, ideas, a question about a note, or one the
             // local model said was beyond it.
@@ -257,13 +262,20 @@ final class Assistant: ObservableObject {
         let history = messages[...index].filter { !$0.isError }.suffix(12)
             .map { ChatMessage(role: $0.role, content: $0.content) }
         do {
-            let relevant = Search.relevantNotes(for: question, in: store.liveNotes, openNoteId: nav.selectedNoteId)
-            let response = try await engine.chatInCloud(Array(history),
-                                                        context: store.buildContext(relevantNotes: relevant))
+            // The same notes, talks and library passages this Mac was given.
+            let named = Search.namedNotes(for: question, in: store.liveNotes, openNoteId: nav.selectedNoteId)
+            var context = store.buildContext(relevantNotes: named)
+            let found = KnowledgeContext.entries(await Knowledge.shared.search(question, limit: 12, in: store),
+                                                 named: Set(named.map(\.id)), notes: store.liveNotes, query: question)
+            context.relevantNotes += found.map(\.relevant)
+            let response = try await engine.chatInCloud(Array(history), context: context)
             var reply = UIMessage(role: .assistant, content: response.reply)
             reply.origin = .cloud
             reply.answererName = response.answererName ?? offer.name
             reply.questionId = offer.questionId
+            if !response.refused {
+                reply.citations = KnowledgeContext.citations(found, named: named.count, answeredBy: reply.answererName)
+            }
             messages.append(reply)
         } catch {
             messages.append(UIMessage(role: .assistant, content: message(for: error), isError: true))

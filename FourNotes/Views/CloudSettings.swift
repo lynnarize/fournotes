@@ -12,7 +12,9 @@ struct CloudProviderTabs<Claude: View>: View {
     typealias Tab = CloudProviders.Tab
 
     @Environment(\.palette) private var p
+    @Environment(\.colorScheme) private var scheme
     @EnvironmentObject private var engine: AIEngine
+    @Namespace private var raised
     @ViewBuilder let claude: () -> Claude
 
     @State private var tab: Tab = .openrouter
@@ -32,7 +34,7 @@ struct CloudProviderTabs<Claude: View>: View {
     @State private var testing: Tab?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             tabBar
             VStack(alignment: .leading, spacing: 10) {
                 switch tab {
@@ -55,45 +57,51 @@ struct CloudProviderTabs<Claude: View>: View {
 
     // MARK: - Tabs
 
+    /// The kit's segmented control, a dot on the tabs with a key: green on the one asked first.
     private var tabBar: some View {
         HStack(spacing: 2) {
             ForEach(Tab.allCases) { t in
                 let on = tab == t
-                Button { tab = t } label: {
-                    HStack(spacing: 5) {
+                Button { withAnimation(Motion.standard) { tab = t } } label: {
+                    HStack(spacing: 6) {
                         Text(t.label)
                         if keyed.contains(t) {
                             Circle()
-                                .fill(engine.cloudTabs.first == t ? p.ok : p.faint)
+                                .fill(engine.cloudTabs.first == t ? p.success : p.textMuted)
                                 .frame(width: 6, height: 6)
                                 .help(engine.cloudTabs.first == t ? "Key saved · asked first" : "Key saved")
                         }
                     }
-                    .font(FN.font(12, on ? .semibold : .regular))
-                    .foregroundStyle(on ? p.text : p.muted)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .overlay(alignment: .bottom) {
-                        Rectangle().fill(on ? p.text : .clear).frame(height: 2)
+                    .font(FN.font(13, on ? .medium : .regular))
+                    .foregroundStyle(on ? p.foreground : p.textSecondary)
+                    .padding(.horizontal, 12)
+                    .frame(height: 30)
+                    .background {
+                        if on {
+                            Capsule()
+                                .fill(scheme == .dark ? p.surfaceRaised : p.surface)
+                                .shadow(color: .black.opacity(0.06), radius: 1, y: 1)
+                                .matchedGeometryEffect(id: "tab", in: raised)
+                        }
                     }
-                    .contentShape(Rectangle())
+                    .contentShape(Capsule())
                 }
                 .buttonStyle(.fn)
                 .accessibilityAddTraits(on ? .isSelected : [])
             }
-            Spacer(minLength: 0)
         }
-        .overlay(alignment: .bottom) { Rectangle().fill(p.line).frame(height: 1) }
+        .padding(3)
+        .background(p.surfaceMuted, in: Capsule())
     }
 
     // MARK: - OpenRouter
 
     @ViewBuilder
     private var openRouter: some View {
-        header(badge: orPaid ? "Paid" : "Free", tone: orPaid ? p.accent : p.ok,
-               title: "OpenRouter",
+        header(badge: orPaid ? "Paid" : "Free", tone: orPaid ? .accent : .success,
+               title: "OpenRouter key",
                link: orPaid ? ("Add credits", OpenRouterModels.creditsPage) : ("Get a free key", OpenRouterModels.keysPage))
-        KeyField(item: .openrouterKey, onChange: keysChanged)
+        KeyField(item: .openrouterKey, showsLabel: false, onChange: keysChanged)
         HStack(spacing: 8) {
             tierSwitch(paid: orPaid, paidLabel: "Paid") { paid in
                 orPaid = paid
@@ -105,10 +113,10 @@ struct CloudProviderTabs<Claude: View>: View {
                                : paidError ? "Model id, e.g. provider/model" : "Loading models…",
                            text: $orPaidModel) { pickPaid(orPaidModel) }
                 if let paidModels, !paidModels.isEmpty {
-                    TextMenu(title: "Choose", help: "OpenRouter's paid models") { paidEntries(paidModels) }
+                    SelectField(title: "Choose", help: "OpenRouter's paid models") { paidEntries(paidModels) }
                 }
             } else {
-                TextMenu(title: freeLabel, help: "OpenRouter's tested free models") {
+                SelectField(title: freeLabel, help: "OpenRouter's tested free models") {
                     OpenRouterModels.free.map { m in
                         .item(m.menuLabel, checked: m.id == orFreeModel) {
                             orFreeModel = m.id
@@ -121,8 +129,7 @@ struct CloudProviderTabs<Claude: View>: View {
         }
         hint(orPaid ? paidHint : freeHint)
         if orPaid, !OpenRouterModels.isModelId(orPaidModel) {
-            Text("Pick a paid model, or switch back to Free. Until then a free model answers.")
-                .font(FN.small).foregroundStyle(p.danger)
+            SettingsHint("Pick a paid model, or switch back to Free. Until then a free model answers.", tone: p.danger)
         }
         testRow(.openrouter)
         useFirst(.openrouter)
@@ -192,10 +199,10 @@ struct CloudProviderTabs<Claude: View>: View {
     @ViewBuilder
     private var openCode: some View {
         let go = ocTier == .go
-        header(badge: go ? "Go" : "Free", tone: go ? p.accent : p.ok,
-               title: "OpenCode",
+        header(badge: go ? "Go" : "Free", tone: go ? .accent : .success,
+               title: go ? "OpenCode Go key" : "OpenCode key",
                link: go ? ("Subscribe to Go", OpenCodeModels.goPage) : ("Get a key", OpenCodeModels.keysPage))
-        KeyField(item: .opencodeKey, onChange: keysChanged)
+        KeyField(item: .opencodeKey, showsLabel: false, onChange: keysChanged)
         HStack(spacing: 8) {
             tierSwitch(paid: go, paidLabel: "Go") { paid in
                 ocTier = paid ? .go : .free
@@ -203,7 +210,7 @@ struct CloudProviderTabs<Claude: View>: View {
                 ocModel = CloudProviders.openCodeModel
                 saved(.opencode)
             }
-            TextMenu(title: OpenCodeModels.label(ocModel, tier: ocTier), help: "OpenCode models") {
+            SelectField(title: OpenCodeModels.label(ocModel, tier: ocTier), help: "OpenCode models") {
                 OpenCodeModels.models(ocTier).map { m in
                     .item(m.menuLabel, checked: m.id == ocModel) {
                         ocModel = m.id
@@ -222,22 +229,8 @@ struct CloudProviderTabs<Claude: View>: View {
 
     // MARK: - Pieces
 
-    private func header(badge: String, tone: Color, title: String, link: (String, String)) -> some View {
-        HStack(spacing: 8) {
-            Text(badge.uppercased())
-                .font(FN.font(10, .semibold))
-                .tracking(0.4)
-                .foregroundStyle(.white)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(tone, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
-            Text(title).font(FN.bodyMedium).foregroundStyle(p.text)
-            Spacer(minLength: 8)
-            Button("\(link.0) ↗") { if let url = URL(string: link.1) { NSWorkspace.shared.open(url) } }
-                .buttonStyle(.fn)
-                .font(FN.small)
-                .foregroundStyle(p.accent)
-        }
+    private func header(badge: String, tone: CloudHeader.Tone, title: String, link: (String, String)) -> some View {
+        CloudHeader(badge: badge, tone: tone, title: title, link: link)
     }
 
     private func tierSwitch(paid: Bool, paidLabel: String, onPick: @escaping (Bool) -> Void) -> some View {
@@ -247,21 +240,21 @@ struct CloudProviderTabs<Claude: View>: View {
     }
 
     private func hint(_ text: String) -> some View {
-        Text(text).font(FN.small).foregroundStyle(p.muted)
-            .fixedSize(horizontal: false, vertical: true)
+        SettingsHint(text)
     }
 
     private func testRow(_ t: Tab) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SecondaryButton(title: testing == t ? "Testing…" : "Test") { Task { await test(t) } }
+        VStack(alignment: .leading, spacing: 8) {
+            SecondaryButton(title: testing == t ? "Testing…" : "Test", small: true) { Task { await test(t) } }
                 .disabled(testing != nil || !keyed.contains(t))
-                .opacity(testing != nil || !keyed.contains(t) ? 0.5 : 1)
             if let r = results[t] {
-                Text("\(r.ok ? "✓" : "✗") \(r.message)")
-                    .font(FN.small)
-                    .foregroundStyle(r.ok ? p.ok : p.danger)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .transition(.opacity.combined(with: .offset(y: 4)))
+                HStack(alignment: .top, spacing: 6) {
+                    Icon(r.ok ? "check" : "warning", size: 15).padding(.top, 1)
+                    Text(r.message).fixedSize(horizontal: false, vertical: true)
+                }
+                .font(FN.font(13))
+                .foregroundStyle(r.ok ? p.success : p.danger)
+                .transition(.opacity.combined(with: .offset(y: 4)))
             }
         }
         .animation(Motion.standard, value: results[t]?.message)
@@ -273,15 +266,21 @@ struct CloudProviderTabs<Claude: View>: View {
         let ready = engine.cloudTabs
         if ready.count > 1, ready.contains(t) {
             if ready.first == t {
-                Text("✓ Asked first in the cloud").font(FN.small).foregroundStyle(p.ok)
+                HStack(spacing: 6) {
+                    Icon("check", size: 15)
+                    Text("Asked first in the cloud")
+                }
+                .font(FN.font(13))
+                .foregroundStyle(p.success)
             } else if let first = ready.first {
                 Button("Ask this first, instead of \(first.label)") {
                     CloudProviders.prefer(t)
                     engine.refresh()
                 }
                 .buttonStyle(.fn)
-                .font(FN.small)
-                .foregroundStyle(p.accent)
+                .font(FN.font(13))
+                .foregroundStyle(p.foreground)
+                .underline(color: p.borderStrong)
             }
         }
     }

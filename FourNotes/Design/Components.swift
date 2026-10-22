@@ -153,7 +153,7 @@ struct Badge: View {
             .font(FN.font(11, .medium))
             .foregroundStyle(tone ?? p.accent)
             .padding(.horizontal, 6)
-            .frame(height: 18)
+            .frame(height: 20)
             .background(subtle ?? p.accentSubtle, in: Capsule())
             .fixedSize()
     }
@@ -270,62 +270,88 @@ struct GhostButton<Label: View>: View {
     }
 }
 
-/// The solid accent button used for primary actions.
-struct PrimaryButton: View {
+/// The kit's `.btn`: a round button, 36pt tall (`.btn-sm`, 32pt, when `small`).
+/// One primary per surface; secondary, plain and danger for the rest.
+struct KitButton: View {
+    enum Kind { case primary, secondary, plain, danger }
+
     @Environment(\.palette) private var p
+    @Environment(\.isEnabled) private var enabled
     @State private var hovering = false
+    let kind: Kind
     let title: String
     var icon: String?
+    var small = false
+    /// A solid colour in place of the accent (a destructive primary).
     var tone: Color?
     var disabled = false
     let action: () -> Void
 
     var body: some View {
+        let off = disabled || !enabled
+        let lit = hovering && !off
         Button(action: action) {
-            HStack(spacing: 6) {
-                if let icon { Icon(icon, size: 15) }
-                Text(title)
+            HStack(spacing: small ? 6 : 8) {
+                if let icon { Icon(icon, size: small ? 14 : 15) }
+                Text(title).lineLimit(1)
             }
-            .font(FN.bodyMedium)
-            .foregroundStyle(tone == nil ? p.accentForeground : .white)
-            .padding(.horizontal, 14)
-            .frame(height: 32)
-            .background(tone ?? (hovering ? p.accentStrong : p.accent), in: Capsule())
-            .opacity(disabled ? 0.45 : 1)
-            .motion(hovering, Motion.quick)
+            .font(FN.font(small ? 13 : 14, kind == .plain ? .regular : .medium))
+            .foregroundStyle(foreground(lit))
+            .padding(.horizontal, small ? 12 : 14)
+            .frame(height: small ? 32 : 36)
+            .background(background(lit), in: Capsule())
+            .overlay { if kind == .secondary { Capsule().strokeBorder(p.border, lineWidth: 1) } }
+            .opacity(off ? 0.45 : 1)
+            .motion(lit, Motion.quick)
             .contentShape(Capsule())
         }
         .buttonStyle(.fn)
         .disabled(disabled)
-        .onHover { hovering = $0 && !disabled }
+        .onHover { hovering = $0 }
+    }
+
+    private func foreground(_ lit: Bool) -> Color {
+        switch kind {
+        case .primary: return tone == nil ? p.accentForeground : .white
+        case .secondary: return p.foreground
+        case .plain: return lit ? p.foreground : p.textSecondary
+        case .danger: return p.danger
+        }
+    }
+
+    private func background(_ lit: Bool) -> Color {
+        switch kind {
+        case .primary: return tone ?? (lit ? p.accentStrong : p.accent)
+        case .secondary: return lit ? p.surfaceMuted : p.surface
+        case .plain: return lit ? p.hover : .clear
+        case .danger: return lit ? p.dangerSubtle : .clear
+        }
     }
 }
 
-/// A bordered secondary button.
-struct SecondaryButton: View {
-    @Environment(\.palette) private var p
-    @State private var hovering = false
+/// The solid accent button used for primary actions (`.btn-primary`).
+struct PrimaryButton: View {
     let title: String
     var icon: String?
+    var tone: Color?
+    var disabled = false
+    var small = false
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                if let icon { Icon(icon, size: 15) }
-                Text(title)
-            }
-            .font(FN.bodyMedium)
-            .foregroundStyle(p.foreground)
-            .padding(.horizontal, 14)
-            .frame(height: 32)
-            .background(hovering ? p.surfaceMuted : p.surface, in: Capsule())
-            .overlay(Capsule().strokeBorder(p.border, lineWidth: 1))
-            .motion(hovering, Motion.quick)
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.fn)
-        .onHover { hovering = $0 }
+        KitButton(kind: .primary, title: title, icon: icon, small: small, tone: tone, disabled: disabled, action: action)
+    }
+}
+
+/// A bordered secondary button (`.btn-secondary`).
+struct SecondaryButton: View {
+    let title: String
+    var icon: String?
+    var small = false
+    let action: () -> Void
+
+    var body: some View {
+        KitButton(kind: .secondary, title: title, icon: icon, small: small, action: action)
     }
 }
 
@@ -348,7 +374,7 @@ struct PlainField: View {
     }
 }
 
-/// A bordered input box (`inputBox` in the web app).
+/// A bordered input box: the kit's `.field`.
 struct BoxedField: View {
     @Environment(\.palette) private var p
     let placeholder: String
@@ -362,8 +388,8 @@ struct BoxedField: View {
             .textFieldStyle(.plain)
             .font(FN.body)
             .foregroundStyle(p.foreground)
-            .padding(.horizontal, 12)
-            .frame(height: 32)
+            .padding(.horizontal, 14)
+            .frame(height: 36)
             .frame(width: width)
             .background(p.surface, in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
             .overlay(
@@ -384,11 +410,13 @@ struct ProgressBar: View {
     var ratio: Double
     var tone: Color
     var height: CGFloat = 6
+    /// The empty part; the kit's meter uses the control track.
+    var track: Color?
 
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
-                Capsule().fill(p.controlTrack)
+                Capsule().fill(track ?? p.controlTrack)
                 Capsule().fill(tone)
                     .frame(width: max(0, min(1, ratio)) * geo.size.width)
                     .motion(ratio, Motion.data)
@@ -452,8 +480,9 @@ struct CommittedField: View {
             .font(font)
             .foregroundStyle(p.text)
             .focused($focused)
-            .padding(.horizontal, boxed ? 12 : 0)
-            .padding(.vertical, boxed ? 7 : 0)
+            // The kit's `.field`: 36pt tall, 14pt in from the sides.
+            .padding(.horizontal, boxed ? 14 : 0)
+            .padding(.vertical, boxed ? (axis == .vertical ? 10 : 9.5) : 0)
             .frame(minHeight: minHeight, alignment: .topLeading)
             .background {
                 if boxed {

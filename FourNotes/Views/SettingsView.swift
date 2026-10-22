@@ -1,9 +1,12 @@
 import AppKit
 import SwiftUI
+import UserNotifications
 
 // Settings, after Arc, as on the web (src/components/SettingsModal.tsx): a big dialog
-// with the sections listed on the left (the version below them) and the chosen
-// section on the right. Budgets and categories live in Finance settings.
+// with the sections listed on the left (a field to find a setting above them, the
+// version below) and the settings on the right as grouped rows. Every section is on
+// one page, so the list jumps to a section and follows the scrolling. Budgets and
+// categories live in Finance settings.
 
 private let KOFI_URL = "https://ko-fi.com/lynnarize"
 
@@ -25,9 +28,11 @@ struct SettingsView: View {
     @ObservedObject private var sync = AppModel.shared.sync
     @ObservedObject private var speech = SpeechModels.shared
     @Environment(\.palette) private var p
+    @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
     @Environment(\.closeModal) private var closeModal
     @Environment(\.modalMaxHeight) private var windowLimit
+    @Environment(\.modalMaxWidth) private var windowWidth
     @EnvironmentObject private var store: Store
     @EnvironmentObject private var nav: Navigation
     @EnvironmentObject private var toasts: ToastCenter
@@ -35,20 +40,29 @@ struct SettingsView: View {
 
     @AppStorage("fournotes.theme") private var themeRaw = ThemeChoice.system.rawValue
     @AppStorage(BriefStyle.storageKey) private var briefStyleRaw = BriefStyle.paragraph.rawValue
-    @AppStorage(AccentChoice.storageKey) private var accentRaw = AccentChoice.neutral.rawValue
 
-    /// The section showing, remembered between visits.
-    @AppStorage("fournotes.settings.section") private var current = "appearance"
+    /// The section being read; the list lights it up.
+    @State private var current = "appearance"
+    @State private var query = ""
+    /// While a click in the list scrolls the page, the list keeps the clicked section lit.
+    @State private var holdSpy = Date.distantPast
+    /// Where each section's top is, in the scrolling page.
+    @State private var tops: [String: CGFloat] = [:]
+    @State private var atEnd = false
     @State private var confirmWipe = false
-    @State private var wipeConfirmation = ""
+    @State private var confirmDeleteDrive = false
     /// Which of "On this Mac" / "In the cloud" / "Speech models" is unfolded.
     @State private var openGroup: String?
     /// Bumped by "Forget all keys" so the provider editors reload.
     @State private var keysGeneration = 0
     /// The Privacy Policy or Terms, open over Settings.
     @State private var legalDocument: LegalDocument?
-    @State private var confirmDisconnect = false
-    @State private var deleteDriveCopy = false
+    @State private var notifications: UNAuthorizationStatus?
+
+    /// `query` opens it already filtered, as if typed in "Find a setting".
+    init(query: String = "") {
+        _query = State(initialValue: query)
+    }
 
     private var settings: AppSettings { store.settings }
 
@@ -56,98 +70,66 @@ struct SettingsView: View {
         let id: String
         let icon: String
         let title: String
-        let summary: String
+        var description: String?
+        let keywords: String
     }
 
+    /// In the order they appear. The ids are the deep-link names (openSettings(section: "api"), …).
     private var sections: [Section] {
         var out = [
-            Section(id: "appearance", icon: "moon", title: "Appearance",
-                    summary: (ThemeChoice(rawValue: themeRaw) ?? .system).label
-                        + " · " + (AccentChoice(rawValue: accentRaw) ?? .neutral).label),
+            Section(id: "appearance", icon: "palette", title: "Appearance",
+                    description: "Changes apply straight away, on this Mac.",
+                    keywords: "theme look light dark paper system accent colour color"),
             Section(id: "today", icon: "today", title: "Today",
-                    summary: (BriefStyle(rawValue: briefStyleRaw) ?? .paragraph).label),
-            Section(id: "dock", icon: "collapseLeft", title: "Edge Dock", summary: dockSummary),
+                    keywords: "daily brief greeting paragraph point by point"),
+            Section(id: "api", icon: "sparkle", title: "AI and keys",
+                    keywords: "assistant api key keys openrouter opencode claude anthropic model free paid apple intelligence lm studio ollama local cloud speech whisper transcription"),
             Section(id: "general", icon: "settings", title: "General",
-                    summary: settings.currency + (settings.name.map { " · \($0)" } ?? "")),
+                    keywords: "name currency money voice replies speak notifications reminders setup first run"),
+            Section(id: "dock", icon: "collapseLeft", title: "Edge Dock",
+                    keywords: "dock edge handle mini apps sticky notes stickies screen"),
         ]
-        if sync.isAvailable { out.append(Section(id: "sync", icon: "cloud", title: "Sync", summary: syncSummary)) }
+        if sync.isAvailable {
+            out.append(Section(id: "sync", icon: "cloud", title: "Backup and sync",
+                               description: "Everything is saved on this Mac. Sync keeps a copy in your own Google Drive.",
+                               keywords: "google drive account sign in out connect disconnect"))
+        }
         out += [
-            Section(id: "api", icon: "key", title: "AI & API keys", summary: apiSummary),
-            Section(id: "privacy", icon: "shield", title: "Data & privacy", summary: dataSummary),
-            Section(id: "about", icon: "info", title: "About", summary: aboutSummary),
+            Section(id: "privacy", icon: "shield", title: "Data and privacy",
+                    keywords: "data privacy export import backup file sample delete erase local terms policy keys"),
+            Section(id: "about", icon: "info", title: "About",
+                    keywords: "version build commit update release notes coffee support ko-fi"),
         ]
         return out
     }
 
+    private func matches(_ section: Section, _ q: String) -> Bool {
+        let hay = "\(section.title) \(section.keywords)".lowercased()
+        return q.split(separator: " ").allSatisfy { hay.contains($0) }
+    }
+
     var body: some View {
-        let sections = sections
-        let shown = sections.first { $0.id == current } ?? sections[0]
-        HStack(spacing: 0) {
-            // The sections, as the kit's nav rows.
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Settings")
-                    .font(FN.display(28))
-                    .tracking(FN.displayTracking(28))
-                    .foregroundStyle(p.foreground)
-                    .padding(.horizontal, 12)
-                    .padding(.top, 6)
-                    .padding(.bottom, 16)
-                ForEach(sections) { section in
-                    SettingsNavRow(icon: section.icon, title: section.title, selected: section.id == shown.id,
-                                   badge: section.id == "about" && updates.available != nil) {
-                        withAnimation(Motion.standard) { current = section.id }
-                    }
-                }
-                Spacer(minLength: 12)
-                Text("Version \(AppVersion.short)")
-                    .font(FN.small)
-                    .foregroundStyle(p.textMuted)
-                    .padding(.horizontal, 12)
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        let visible = q.isEmpty ? sections : sections.filter { matches($0, q) }
+        ScrollViewReader { proxy in
+            HStack(spacing: 0) {
+                sidebar(visible, proxy: proxy)
+                Rectangle().fill(p.border).frame(width: 1)
+                page(visible, query: q)
             }
-            .padding(12)
-            .frame(width: 232, alignment: .topLeading)
-            .frame(maxHeight: .infinity, alignment: .top)
-            .background(p.sidebar)
-
-            Rectangle().fill(p.border).frame(width: 1)
-
-            VStack(spacing: 0) {
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(shown.title).font(FN.font(16, .medium)).foregroundStyle(p.foreground)
-                        if !shown.summary.isEmpty {
-                            Text(shown.summary).font(FN.small).foregroundStyle(p.textMuted).lineLimit(1)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    IconButton("x", size: 17, box: 32, help: "Close") {
-                        if let closeModal { closeModal() } else { dismiss() }
-                    }
-                }
-                .padding(.leading, 28)
-                .padding(.trailing, 12)
-                .frame(height: 64)
-                Rectangle().fill(p.borderSubtle).frame(height: 1)
-
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        content(for: shown.id)
-                        if shown.id == "about" { kofi }
-                    }
-                    .padding(.horizontal, 28)
-                    .padding(.vertical, 24)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .id(shown.id)
-                    .transition(.opacity.combined(with: .offset(y: 6)))
-                }
-                .scrollBounceBehavior(.basedOnSize)
+            .task {
+                // Opened at a section (a deep link): scroll to it.
+                guard current != visible.first?.id else { return }
+                holdSpy = Date().addingTimeInterval(0.8)
+                proxy.scrollTo(current, anchor: .top)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(p.surface)
         }
-        .frame(width: 860)
-        .frame(height: min(700, windowLimit ?? 700))
-        .sheet(item: $legalDocument) { LegalSheet(document: $0) }
+        .frame(width: min(1120, windowWidth ?? 1120))
+        .frame(height: min(800, windowLimit ?? 800))
+        .preference(key: ModalShapeKey.self, value: .surface)
+        .fnSheet(item: $legalDocument) { LegalSheet(document: $0) }
+        .fnSheet(isPresented: $confirmWipe) { wipeConfirmation }
+        .fnSheet(isPresented: $confirmDeleteDrive) { deleteDriveConfirmation }
         .onAppear {
             updates.markSeen()
             if let requested = nav.settingsSection {
@@ -155,16 +137,111 @@ struct SettingsView: View {
                 nav.settingsSection = nil
             }
         }
+        .task { notifications = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus }
+    }
+
+    // MARK: - The list
+
+    private func sidebar(_ visible: [Section], proxy: ScrollViewProxy) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Settings")
+                .font(FN.display(28))
+                .tracking(FN.displayTracking(28))
+                .foregroundStyle(p.foreground)
+                .padding(.horizontal, 12)
+                .accessibilityAddTraits(.isHeader)
+            FindField(text: $query)
+            VStack(spacing: 2) {
+                ForEach(visible) { section in
+                    SettingsNavRow(icon: section.icon, title: section.title, selected: section.id == current,
+                                   trailing: section.id == "sync" ? (sync.account != nil ? "On" : "Off") : nil,
+                                   badge: section.id == "about" && updates.available != nil) {
+                        jump(section.id, proxy: proxy)
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+            Text("Four Notes \(AppVersion.marketing)")
+                .font(FN.small)
+                .monospacedDigit()
+                .foregroundStyle(p.textMuted)
+                .padding(.horizontal, 12)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 24)
+        .frame(width: 260, alignment: .topLeading)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(p.sidebar)
+    }
+
+    private func jump(_ id: String, proxy: ScrollViewProxy) {
+        current = id
+        holdSpy = Date().addingTimeInterval(0.8)
+        withAnimation(Motion.reduce ? nil : Motion.standard) { proxy.scrollTo(id, anchor: .top) }
+    }
+
+    /// Lights up the section being read: the last one whose top has passed near the
+    /// top of the page, or the last one once the page is at its end.
+    private func spy(_ visible: [Section]) {
+        guard Date() >= holdSpy, let first = visible.first else { return }
+        var reading = first.id
+        for section in visible where (tops[section.id] ?? .infinity) <= 120 { reading = section.id }
+        if atEnd, let last = visible.last { reading = last.id }
+        if reading != current { current = reading }
+    }
+
+    // MARK: - The page
+
+    private func page(_ visible: [Section], query: String) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 40) {
+                if visible.isEmpty {
+                    Text("No settings match “\(self.query.trimmingCharacters(in: .whitespaces))”.")
+                        .font(FN.body)
+                        .foregroundStyle(p.textSecondary)
+                }
+                ForEach(visible) { section in
+                    SettingsSection(title: section.title, description: section.description) {
+                        content(for: section.id)
+                    }
+                    .id(section.id)
+                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named("settings-page")).minY } action: { top in
+                        tops[section.id] = top
+                        spy(visible)
+                    }
+                }
+            }
+            .frame(maxWidth: 700, alignment: .leading)
+            .padding(.leading, 48)
+            .padding(.trailing, 72)
+            .padding(.top, 32)
+            .padding(.bottom, 48)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .coordinateSpace(.named("settings-page"))
+        .scrollBounceBehavior(.basedOnSize)
+        .onScrollGeometryChange(for: Bool.self) { geo in
+            geo.contentOffset.y + geo.containerSize.height >= geo.contentSize.height - 4
+        } action: { _, end in
+            atEnd = end
+            spy(visible)
+        }
+        .overlay(alignment: .topTrailing) {
+            CloseButton { if let closeModal { closeModal() } else { dismiss() } }
+                .padding(20)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(p.surface)
     }
 
     @ViewBuilder
     private func content(for id: String) -> some View {
         switch id {
         case "today": todayBrief
-        case "dock": edgeDock
-        case "general": general
-        case "sync": syncSection
         case "api": apiKeys
+        case "general": general
+        case "dock": edgeDock
+        case "sync": syncSection
         case "privacy": privacy
         case "about": about
         default: appearance
@@ -173,398 +250,219 @@ struct SettingsView: View {
 
     // MARK: - Appearance
 
-    /// Each look drawn as a tiny window in its own colours, as in setup; then the
-    /// accent, spent on what's selected or active.
     private var appearance: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            SectionTitle("Theme")
-            themes
-                .padding(.top, -14)
-            VStack(alignment: .leading, spacing: 10) {
-                SectionTitle("Accent")
-                accents
-                Text("Neutral keeps the app in ink. A colour marks what's selected, the primary button and progress.")
-                    .font(FN.small)
+        let theme = ThemeChoice(rawValue: themeRaw) ?? .system
+        let hint: String = switch theme {
+        case .system: "Follows your Mac, currently \(scheme == .dark ? "dark" : "light")."
+        case .paper: "Warm paper and ink-brown text, whatever your Mac uses."
+        case .light, .dark: "Always \(theme.label.lowercased()), whatever your Mac uses."
+        }
+        return VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Theme").font(FN.bodyMedium).foregroundStyle(p.foreground)
+                    .padding(.bottom, 10)
+                ThemeCards()
+                Text("\(hint) Switch quickly with ⌘K, then “dark mode”.")
+                    .font(FN.font(13))
                     .foregroundStyle(p.textMuted)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 10)
             }
-        }
-    }
-
-    private var accents: some View {
-        HStack(spacing: 10) {
-            ForEach(AccentChoice.allCases, id: \.self) { choice in
-                let selected = accentRaw == choice.rawValue
-                Button { withAnimation(Motion.standard) { accentRaw = choice.rawValue } } label: {
-                    Circle()
-                        .fill(choice == .neutral ? p.foreground : choice.swatch)
-                        .frame(width: 26, height: 26)
-                        .overlay {
-                            if selected { Icon("check", size: 13, weight: 2.4).foregroundStyle(.white) }
-                        }
-                        .padding(3)
-                        .overlay(Circle().strokeBorder(selected ? p.borderStrong : .clear, lineWidth: 1.5))
-                        .contentShape(Circle())
+            SettingsGroup {
+                SettingsRow("Accent", description: "Used for what's selected or active") {
+                    AccentSwatches()
                 }
-                .buttonStyle(.fn)
-                .help(choice.label)
-                .accessibilityLabel(choice.label)
-                .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
-    }
-
-    private var themes: some View {
-        HStack(spacing: 12) {
-            ForEach(ThemeChoice.allCases, id: \.self) { choice in
-                let selected = themeRaw == choice.rawValue
-                Button { withAnimation(Motion.standard) { themeRaw = choice.rawValue } } label: {
-                    VStack(spacing: 8) {
-                        ThemePreview(choice: choice)
-                            .frame(height: 76)
-                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .strokeBorder(selected ? p.accent : p.border, lineWidth: selected ? 2 : 1))
-                        HStack(spacing: 5) {
-                            Icon(choice.icon, size: 12)
-                            Text(choice.label)
-                        }
-                        .font(FN.font(12.5, selected ? .medium : .regular))
-                        .foregroundStyle(selected ? p.foreground : p.textSecondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.fn)
-                .animation(Motion.standard, value: selected)
-                .accessibilityLabel(choice.label)
-                .accessibilityAddTraits(selected ? .isSelected : [])
-            }
-        }
-        .padding(.vertical, 4)
     }
 
     // MARK: - Today
 
     private var todayBrief: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("How the daily brief reads").font(FN.small).foregroundStyle(p.muted)
-            HStack(spacing: 8) {
-                ForEach(BriefStyle.allCases, id: \.self) { style in
-                    let selected = briefStyleRaw == style.rawValue
-                    Button { withAnimation(Motion.standard) { briefStyleRaw = style.rawValue } } label: {
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack(spacing: 6) {
-                                Icon(style.icon, size: 15)
-                                Text(style.label).font(FN.bodyMedium)
-                                if style == .paragraph {
-                                    Text("Compact").font(FN.font(10.5, .semibold))
-                                        .padding(.horizontal, 6).padding(.vertical, 2)
-                                        .background(p.accent.opacity(0.14), in: Capsule())
-                                }
-                            }
-                            .foregroundStyle(selected ? p.accent : p.text)
-                            Text(style.detail)
-                                .font(FN.small).foregroundStyle(p.muted)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
-                        .padding(12)
-                        .background(selected ? p.accent.opacity(0.1) : p.bg,
-                                    in: RoundedRectangle(cornerRadius: FN.radius, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: FN.radius, style: .continuous)
-                            .stroke(selected ? p.accent : p.line, lineWidth: 1))
-                        .contentShape(Rectangle())
-                        .scaleEffect(selected ? 1.01 : 1)
-                        .motion(selected, Motion.quick)
-                    }
-                    .buttonStyle(.fn)
-                    .accessibilityAddTraits(selected ? .isSelected : [])
-                }
+        let style = BriefStyle(rawValue: briefStyleRaw) ?? .paragraph
+        return SettingsGroup {
+            SettingsRow("Daily brief", description: "How the greeting sums up your day. \(style.detail)") {
+                SegmentedTabs(items: BriefStyle.allCases.map { ($0.rawValue, $0.label) },
+                              selection: $briefStyleRaw)
             }
         }
     }
 
-    // MARK: - Edge Dock
+    // MARK: - API keys and providers
 
-    private var dockSummary: String {
-        guard dock.isEnabled else { return "Off" }
-        let shown = MiniApp.allCases.count - dock.hidden.count
-        return "\(dock.edge == .right ? "Right" : "Left") edge · \(shown) mini apps"
-    }
-
-    private var edgeDock: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 3) {
-                Toggle("Show the edge dock", isOn: Binding(
-                    get: { dock.isEnabled },
-                    set: { value in if value != dock.isEnabled { dock.setEnabled(value) } }))
-                    .toggleStyle(.fnCheckbox)
-                    .font(FN.body)
-                Text("A handle on the edge of the screen, over any app, that opens a quick note, today's tasks, dictation and more. Click it, or press ⇧⌘. from Four Notes. Closing the window leaves it running.")
-                    .font(FN.small).foregroundStyle(p.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.leading, 20)
+    /// What answers right now and which kind is asked first stay in view; the
+    /// three sets of models fold away behind a row that says what each is set to.
+    private var apiKeys: some View {
+        let r = engine.readiness
+        return VStack(alignment: .leading, spacing: 16) {
+            SettingsGroup {
+                SettingsRow(r.route.label, description: "Photos and recordings are always read on this Mac.", leading: {
+                    Circle().fill(r.route == .unavailable ? p.warning : p.success).frame(width: 8, height: 8)
+                })
+                SettingsBlock(spacing: 6) {
+                    routeLine("sparkle", "Chat", r.chat)
+                    routeLine("scan", "Scanning", r.scanning)
+                    routeLine("mic", "Voice notes", r.voice)
+                    routeLine("chart", "Brief & review", r.summaries)
+                }
+                SettingsRow("Ask first", description: engine.priority == .localFirst
+                            ? "Stays on this Mac. The cloud is used only when you click “Ask …” under a reply."
+                            : "The cloud answers; this Mac steps in when it can't be reached.") {
+                    SegmentedTabs(items: AIEngine.Priority.allCases.map { ($0.rawValue, $0.label) },
+                                  selection: Binding(get: { engine.priority.rawValue },
+                                                     set: { engine.priority = AIEngine.Priority(rawValue: $0) ?? .localFirst }))
+                }
             }
 
-            Group {
-                labelled("Edge") {
-                    SegmentedTabs(items: [("right", "Right"), ("left", "Left")],
-                                  selection: Binding(get: { dock.edge == .right ? "right" : "left" },
-                                                     set: { dock.setEdge($0 == "right" ? .right : .left) }))
-                        .fixedSize()
-                }
+            modelGroup("local", icon: "monitor", title: "On this Mac", summary: engine.localSummary,
+                       description: "Private and free. A model server, when set up, is asked before Apple Intelligence.") {
+                ProviderSlotEditor(slot: .local).id(keysGeneration)
+            }
+            modelGroup("cloud", icon: "cloud", title: "In the cloud", summary: engine.cloudSummary,
+                       description: "Your own keys. They stay in your Keychain and go only to the provider, with each request.") {
+                CloudProviderTabs { anthropicKey }.id(keysGeneration)
+            }
+            modelGroup("speech", icon: "mic", title: "Speech models", summary: speech.summary,
+                       description: "Transcribe recordings on this Mac with Whisper, and tell who said what.") {
+                SpeechModelsSettings()
+            }
 
-                if dock.screens.count > 1 {
-                    labelled("Screen") {
-                        SelectMenu(options: dock.screens.map { ($0.id, $0.name) },
-                                   selection: Binding(get: { dock.screenId }, set: { dock.moveToScreen($0) }))
-                            .fixedSize()
+            SettingsGroup {
+                SettingsRow("Keys stay on this Mac",
+                            description: "In the Keychain, sent only to the provider with each request. Never synced or backed up; usage is billed to your provider account.") {
+                    KitButton(kind: .danger, title: "Forget all keys", small: true) {
+                        Keychain.clearAll()
+                        keysGeneration += 1
+                        engine.refresh()
+                        toasts.push("Keys and model settings removed from the Keychain.")
                     }
                 }
-
-                labelled("Mini apps") {
-                    LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading),
-                                        GridItem(.flexible(), alignment: .leading),
-                                        GridItem(.flexible(), alignment: .leading)],
-                              alignment: .leading, spacing: 6) {
-                        ForEach(MiniApp.allCases) { app in
-                            Toggle(app.title, isOn: Binding(
-                                get: { !dock.hidden.contains(app) },
-                                set: { shown in dock.setHidden(app, !shown) }))
-                                .toggleStyle(.fnCheckbox)
-                                .font(FN.body)
-                        }
-                    }
-                }
-
-                labelled("Arrangement") {
-                    HStack(spacing: 10) {
-                        Text("Drag a card by its title to move it, in either column.")
-                            .font(FN.small).foregroundStyle(p.muted)
-                        Spacer()
-                        SecondaryButton(title: "Reset layout") {
-                            withAnimation(Motion.standard) { dock.resetLayout() }
-                        }
-                        .disabled(dock.layout == MiniApp.defaultLayout)
-                        .opacity(dock.layout == MiniApp.defaultLayout ? 0.5 : 1)
-                    }
-                }
-
-                HStack(spacing: 8) {
-                    SecondaryButton(title: "Open the dock now", icon: "arrowUpRight") {
-                        if let closeModal { closeModal() } else { dismiss() }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { dock.open() }
-                    }
-                    Text("⇧⌘.").font(FN.small).foregroundStyle(p.faint)
-                }
-            }
-            .disabled(!dock.isEnabled)
-            .opacity(dock.isEnabled ? 1 : 0.5)
-
-            // Stickies stay on the edge whether the dock is on or not.
-            labelled("Sticky notes") {
-                HStack(spacing: 10) {
-                    Text(stickies.placements.isEmpty
-                         ? "Stick a note to the edge from its menu, the dock's quick note, or ⌃⌘N. Point at the dock's handle and it splits off as a bubble above or below it."
-                         : "\(stickies.placements.count) stuck. Point at the dock's handle and each splits off as a bubble above or below it; point at one for its title, click to open.")
-                        .font(FN.small).foregroundStyle(p.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Spacer()
-                    SecondaryButton(title: "Take all off") { stickies.unstickAll() }
-                        .disabled(stickies.placements.isEmpty)
-                        .opacity(stickies.placements.isEmpty ? 0.5 : 1)
-                }
             }
         }
     }
 
-    // MARK: - About
-
-    private var aboutSummary: String {
-        if let available = updates.available { return "Version \(available.version) is available" }
-        return "Version \(AppVersion.short)"
-    }
-
-    private var about: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline, spacing: 24) {
-                versionField("Version", AppVersion.marketing)
-                versionField("Build", AppVersion.build)
-                if let commit = AppVersion.commit { versionField("Commit", commit) }
-                Spacer()
-            }
-            .textSelection(.enabled)
-
-            HStack(spacing: 8) {
-                SecondaryButton(title: updates.state == .checking ? "Checking…" : "Check for updates") {
-                    updates.check()
+    /// A folded group of settings: a row that says what it's set to, and the
+    /// settings under it when opened.
+    private func modelGroup<Content: View>(_ id: String, icon: String, title: String, summary: String,
+                                           description: String, @ViewBuilder _ content: () -> Content) -> some View {
+        let isOpen = openGroup == id
+        let content = content()
+        return SettingsGroup {
+            Button { withAnimation(Motion.standard) { openGroup = isOpen ? nil : id } } label: {
+                SettingsRow(title, description: description) {
+                    Text(summary).font(FN.font(13)).foregroundStyle(p.textMuted).lineLimit(1)
+                    Icon("chevronDown", size: 16)
+                        .foregroundStyle(p.textMuted)
+                        .rotationEffect(.degrees(isOpen ? 0 : -90))
+                } leading: {
+                    SettingsTile(icon: icon)
                 }
-                .disabled(updates.state == .checking)
-                GhostButton(action: { NSWorkspace.shared.open(AppVersion.releasesPage) }) {
-                    Text("Release notes")
-                }
+                .contentShape(Rectangle())
             }
-            updateStatus
-            Toggle("Check for updates automatically, once a day", isOn: $updates.automatic)
-                .toggleStyle(.fnCheckbox)
-                .font(FN.body)
-        }
-    }
+            .buttonStyle(.fn)
+            .accessibilityLabel(title)
+            .accessibilityValue(summary)
+            .accessibilityHint(isOpen ? "Hide these settings" : "Show these settings")
 
-    private func availableLine(_ version: String, _ page: URL) -> some View {
-        HStack(spacing: 8) {
-            Circle().fill(p.danger).frame(width: 7, height: 7)
-            Text("Version \(version) is available.").font(FN.small).foregroundStyle(p.text)
-            Button("Install…") { nav.present(.update) }
-                .buttonStyle(.fn)
-                .font(FN.font(12, .medium))
-                .foregroundStyle(p.foreground)
-                .underline()
-        }
-    }
-
-    private func versionField(_ label: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(FN.small).foregroundStyle(p.muted)
-            Text(value).font(FN.bodyMedium).foregroundStyle(p.text).monospacedDigit()
-        }
-    }
-
-    @ViewBuilder
-    private var updateStatus: some View {
-        switch updates.state {
-        case .idle, .checking:
-            if let available = updates.available {
-                availableLine(available.version, available.page)
-            } else {
-                Text("Asks GitHub for the latest release. Nothing else is sent.")
-                    .font(FN.small).foregroundStyle(p.faint)
+            if isOpen {
+                SettingsBlock { content }
+                    .transition(.opacity.combined(with: .offset(y: -6)))
             }
-        case .upToDate:
-            Label { Text("You're on the latest version.") } icon: { Icon("check", size: 13) }
-                .font(FN.small).foregroundStyle(p.muted)
-        case .available(let version, let page):
-            availableLine(version, page)
-        case .failed(let message):
-            Text(message).font(FN.small).foregroundStyle(p.danger)
         }
     }
 
-    // MARK: - Sync
-
-    private var syncSummary: String {
-        guard sync.account != nil else { return "Off" }
-        switch sync.status {
-        case .syncing: return "Syncing…"
-        case .offline: return "Offline"
-        case .error: return "Needs attention"
-        case .idle, .synced: return sync.account?.email ?? "Google Drive"
-        }
-    }
-
-    private var syncSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Keep this Mac and the web app in step through your own Google Drive. Four Notes keeps one file in a private app folder there: you won't see it among your files, and no one else can read it. Scans, sample data and API keys stay on this Mac.")
-                .font(FN.small).foregroundStyle(p.muted)
+    private func routeLine(_ icon: String, _ label: String, _ value: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Icon(icon, size: 14).foregroundStyle(p.textMuted).padding(.top, 1)
+            Text(label).foregroundStyle(p.textSecondary).frame(width: 100, alignment: .leading)
+            Text(value).foregroundStyle(p.foreground)
                 .fixedSize(horizontal: false, vertical: true)
-
-            if let account = sync.account {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(account.email.map { "Connected as \($0)" } ?? "Connected to Google")
-                        .font(FN.bodyMedium).foregroundStyle(p.text)
-                    syncStatus
-                }
-                if confirmDisconnect {
-                    boxed {
-                        Text("Disconnect this Mac?").font(FN.bodyMedium).foregroundStyle(p.text)
-                        Text("Your data stays on this Mac either way.")
-                            .font(FN.small).foregroundStyle(p.muted)
-                        Toggle("Also delete the copy in Google Drive", isOn: $deleteDriveCopy)
-                            .toggleStyle(.fnCheckbox)
-                            .font(FN.body)
-                        HStack(spacing: 8) {
-                            PrimaryButton(title: "Disconnect", tone: deleteDriveCopy ? p.danger : nil) {
-                                let deleteCopy = deleteDriveCopy
-                                confirmDisconnect = false
-                                deleteDriveCopy = false
-                                Task { await sync.disconnect(deleteCopy: deleteCopy) }
-                            }
-                            GhostButton(action: { confirmDisconnect = false; deleteDriveCopy = false }) {
-                                Text("Cancel")
-                            }
-                        }
-                    }
-                    .transition(.opacity.combined(with: .offset(y: -8)))
-                } else {
-                    HStack(spacing: 8) {
-                        SecondaryButton(title: sync.status == .syncing ? "Syncing…" : "Sync now") { sync.syncNow() }
-                            .disabled(sync.status == .syncing)
-                        GhostButton(action: { confirmDisconnect = true }) { Text("Disconnect") }
-                    }
-                }
-            } else {
-                if let message = sync.message {
-                    Text(message).font(FN.small).foregroundStyle(p.danger)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                PrimaryButton(title: sync.connecting ? "Waiting for Google…" : "Connect Google",
-                              disabled: sync.connecting) {
-                    Task { await sync.connect() }
-                }
-            }
+            Spacer(minLength: 0)
         }
-        .animation(Motion.standard, value: confirmDisconnect)
+        .font(FN.font(13))
     }
 
-    @ViewBuilder
-    private var syncStatus: some View {
-        switch sync.status {
-        case .syncing:
-            Text("Syncing…").font(FN.small).foregroundStyle(p.muted)
-        case .offline:
-            Text("Offline. Sync will resume when this Mac is back online.").font(FN.small).foregroundStyle(p.muted)
-        case .error:
-            Text(sync.message ?? "Sync failed.").font(FN.small).foregroundStyle(p.danger)
-                .fixedSize(horizontal: false, vertical: true)
-        case .idle, .synced:
-            if let last = sync.lastSynced {
-                Text("Last synced \(last.formatted(.relative(presentation: .named)))")
-                    .font(FN.small).foregroundStyle(p.muted)
-            } else {
-                Text("Not synced yet.").font(FN.small).foregroundStyle(p.muted)
+    private var anthropicKey: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            CloudHeader(badge: "Paid", tone: .accent, title: "Anthropic key, best quality",
+                        link: ("Get a key", "https://console.anthropic.com/settings/keys"))
+            KeyField(item: .anthropicKey, showsLabel: false) { engine.refresh() }
+            HStack(alignment: .top, spacing: 12) {
+                labelled("Main model") {
+                    SelectMenu(options: AnthropicClient.userModels.map { ($0.id, $0.label) },
+                               selection: keychainBinding(.anthropicModel, default: AnthropicClient.defaultModel))
+                        .frame(maxWidth: .infinity)
+                }
+                labelled("Quick jobs model") {
+                    SelectMenu(options: AnthropicClient.userModels.map { ($0.id, $0.label) },
+                               selection: keychainBinding(.anthropicFastModel, default: AnthropicClient.defaultFastModel))
+                        .frame(maxWidth: .infinity)
+                }
             }
+            .padding(.top, 2)
+            SettingsHint("Needed for “Ideas from the web”.")
         }
+    }
+
+    private func keychainBinding(_ item: Keychain.Item, default fallback: String) -> Binding<String> {
+        Binding(
+            get: { Keychain.read(item).flatMap { $0.isEmpty ? nil : $0 } ?? fallback },
+            set: { Keychain.write(item, $0) })
     }
 
     // MARK: - General
 
     private var general: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            labelled("Your name (used in the daily brief)") {
-                CommittedField(placeholder: "Name", value: settings.name ?? "") { value in
+        SettingsGroup {
+            SettingsRow("Your name", description: "Used in the daily brief") {
+                CommittedField(placeholder: "", value: settings.name ?? "", boxed: true) { value in
                     let clean = value.trimmingCharacters(in: .whitespaces)
                     store.updateSettings { $0.name = clean.isEmpty ? nil : clean }
                 }
+                .frame(width: 224)
             }
-
-            labelled("Base currency") {
+            SettingsRow("Base currency", description: "Totals and budgets are counted in it") {
                 SelectMenu(options: currencyOptions.map { ($0, $0) },
-                           selection: Binding(get: { settings.currency }, set: { changeCurrency($0) }),
-                           width: 110)
+                           selection: Binding(get: { settings.currency }, set: { changeCurrency($0) }))
+                    .fixedSize()
             }
-
-            Toggle("Speak replies aloud in voice mode", isOn: Binding(
-                get: { settings.voiceReplies },
-                set: { value in store.updateSettings { $0.voiceReplies = value } }))
-                .toggleStyle(.fnCheckbox)
-                .font(FN.body)
-
-            SecondaryButton(title: "Run first-time setup again") {
-                // Dismiss and present in one turn and the second sheet never
-                // appears, so the wizard is handed to the next runloop turn.
-                nav.present(.onboarding)
+            SettingsRow("Speak replies aloud", description: "In voice mode, the assistant reads its answers out") {
+                Toggle("Speak replies aloud", isOn: Binding(
+                    get: { settings.voiceReplies },
+                    set: { value in store.updateSettings { $0.voiceReplies = value } }))
+                    .toggleStyle(.fnSwitch)
             }
+            SettingsRow("Notifications", description: notificationsHint) {
+                switch notifications {
+                case .notDetermined?:
+                    SecondaryButton(title: "Turn on", small: true) {
+                        Task {
+                            _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
+                            notifications = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+                        }
+                    }
+                case .denied?:
+                    StatusPill(text: "Blocked", tone: .muted, dot: false)
+                case nil:
+                    EmptyView()
+                default:
+                    StatusPill(text: "On", tone: .good)
+                }
+            }
+            SettingsRow("First-time setup", description: "Walk through the setup again. Nothing you have is changed") {
+                SecondaryButton(title: "Run setup again", small: true) {
+                    // Dismiss and present in one turn and the second sheet never
+                    // appears, so the wizard is handed to the next runloop turn.
+                    nav.present(.onboarding)
+                }
+            }
+        }
+    }
+
+    private var notificationsHint: String {
+        switch notifications {
+        case .denied?: return "Blocked in System Settings for Four Notes"
+        case .notDetermined?: return "Turn on to be reminded when tasks are due"
+        default: return "Reminders arrive when tasks are due"
         }
     }
 
@@ -583,175 +481,176 @@ struct SettingsView: View {
         toasts.push("Base currency is now \(currency). Budgets stay as numbers; adjust them if needed.")
     }
 
-    // MARK: - API keys and providers
+    // MARK: - Edge Dock
 
-    private var apiSummary: String { engine.route.label }
+    private var edgeDock: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            SettingsGroup {
+                SettingsRow("Show the edge dock",
+                            description: "A handle on the edge of the screen, over any app, that opens a quick note, today's tasks, dictation and more. Click it, or press ⇧⌘. from Four Notes. Closing the window leaves it running.") {
+                    Toggle("Show the edge dock", isOn: Binding(
+                        get: { dock.isEnabled },
+                        set: { value in if value != dock.isEnabled { dock.setEnabled(value) } }))
+                        .toggleStyle(.fnSwitch)
+                }
+                Group {
+                    SettingsRow("Edge", description: "Which side of the screen the handle sits on") {
+                        SegmentedTabs(items: [("right", "Right"), ("left", "Left")],
+                                      selection: Binding(get: { dock.edge == .right ? "right" : "left" },
+                                                         set: { dock.setEdge($0 == "right" ? .right : .left) }))
+                    }
+                    if dock.screens.count > 1 {
+                        SettingsRow("Screen") {
+                            SelectMenu(options: dock.screens.map { ($0.id, $0.name) },
+                                       selection: Binding(get: { dock.screenId }, set: { dock.moveToScreen($0) }))
+                                .fixedSize()
+                        }
+                    }
+                    SettingsBlock(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Mini apps").font(FN.body).foregroundStyle(p.foreground)
+                            SettingsHint("What the dock shows. Drag a card by its title to move it, in either column.")
+                        }
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: .leading), count: 3),
+                                  alignment: .leading, spacing: 8) {
+                            ForEach(MiniApp.allCases) { app in
+                                Toggle(app.title, isOn: Binding(
+                                    get: { !dock.hidden.contains(app) },
+                                    set: { shown in dock.setHidden(app, !shown) }))
+                                    .toggleStyle(.fnCheckbox)
+                                    .font(FN.body)
+                                    .foregroundStyle(p.foreground)
+                            }
+                        }
+                    }
+                    SettingsRow("Arrangement", description: "Put the cards back where they started") {
+                        SecondaryButton(title: "Reset layout", small: true) {
+                            withAnimation(Motion.standard) { dock.resetLayout() }
+                        }
+                        .disabled(dock.layout == MiniApp.defaultLayout)
+                    }
+                    SettingsRow("Open the dock now", description: "Or press ⇧⌘. from Four Notes") {
+                        SecondaryButton(title: "Open", icon: "arrowUpRight", small: true) {
+                            if let closeModal { closeModal() } else { dismiss() }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { dock.open() }
+                        }
+                    }
+                }
+                .disabled(!dock.isEnabled)
+                .opacity(dock.isEnabled ? 1 : 0.45)
+            }
 
-    /// The status and the priority stay in view; the two sets of models
-    /// fold away behind a row that says what each is set to.
-    private var apiKeys: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            routing
-            Divider().overlay(p.line)
-            prioritySection
-            VStack(spacing: 8) {
-                modelGroup("local", icon: "monitor", title: "On this Mac", summary: engine.localSummary) {
-                    Text("Private and free. A model server, when set up, is asked before Apple Intelligence.")
-                        .font(FN.small).foregroundStyle(p.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                    ProviderSlotEditor(slot: .local).id(keysGeneration)
-                }
-                modelGroup("cloud", icon: "cloud", title: "In the cloud", summary: engine.cloudSummary) {
-                    Text("Your own keys. They stay in your Keychain and go only to the provider, with each request.")
-                        .font(FN.small).foregroundStyle(p.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                    CloudProviderTabs { anthropicKey }.id(keysGeneration)
-                    Divider().overlay(p.line)
-                    forgetKeys
-                }
-                modelGroup("speech", icon: "mic", title: "Speech models", summary: speech.summary) {
-                    SpeechModelsSettings()
+            // Stickies stay on the edge whether the dock is on or not.
+            SettingsGroup {
+                SettingsRow("Sticky notes",
+                            description: stickies.placements.isEmpty
+                            ? "Stick a note to the edge from its menu, the dock's quick note, or ⌃⌘N. Point at the dock's handle and it splits off as a bubble above or below it."
+                            : "\(stickies.placements.count) stuck. Point at the dock's handle and each splits off as a bubble above or below it; point at one for its title, click to open.") {
+                    SecondaryButton(title: "Take all off", small: true) { stickies.unstickAll() }
+                        .disabled(stickies.placements.isEmpty)
                 }
             }
         }
     }
 
-    /// A folded group of settings inside a section: a row with a summary,
-    /// and the settings under it when opened.
-    private func modelGroup<Content: View>(_ id: String, icon: String, title: String, summary: String,
-                                           @ViewBuilder _ content: () -> Content) -> some View {
-        let isOpen = openGroup == id
-        return VStack(alignment: .leading, spacing: 0) {
-            Button { openGroup = isOpen ? nil : id } label: {
-                HStack(spacing: 10) {
-                    Icon(icon, size: 15).foregroundStyle(p.accent)
-                    Text(title).font(FN.bodyMedium).foregroundStyle(p.text)
-                    Spacer(minLength: 12)
-                    Text(summary).font(FN.small).foregroundStyle(p.faint).lineLimit(1)
-                    Icon("chevronDown", size: 13)
-                        .foregroundStyle(p.faint)
-                        .rotationEffect(.degrees(isOpen ? 0 : -90))
+    // MARK: - Sync
+
+    private var syncSection: some View {
+        SettingsGroup {
+            SettingsBlock {
+                if let account = sync.account {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 10) {
+                            GoogleG()
+                            Text(account.email ?? "Google Drive")
+                                .font(FN.bodyMedium).foregroundStyle(p.foreground)
+                                .lineLimit(1).truncationMode(.middle)
+                            StatusPill(text: syncLabel, tone: syncTone)
+                                .monospacedDigit()
+                        }
+                        SettingsHint("Syncing to a private app folder in your Google Drive, in step with the web app. Changes sync automatically a few seconds after you edit, and whenever you come back to the app. Scans, sample data and API keys stay on this Mac.",
+                                     tone: p.textSecondary)
+                        if sync.status == .error, let message = sync.message {
+                            SettingsHint(message, tone: p.danger)
+                        }
+                        HStack(spacing: 8) {
+                            SecondaryButton(title: sync.status == .syncing ? "Syncing…" : "Sync now", icon: "repeat") {
+                                sync.syncNow()
+                            }
+                            .disabled(sync.status == .syncing)
+                            SecondaryButton(title: "Disconnect") {
+                                Task { await sync.disconnect(deleteCopy: false) }
+                            }
+                            KitButton(kind: .danger, title: "Delete Drive copy") { confirmDeleteDrive = true }
+                        }
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Sync with your Google account").font(FN.bodyMedium).foregroundStyle(p.foreground)
+                            SettingsHint("Keep this Mac and the web app in step. Everything is saved in a private app folder in your own Google Drive that only Four Notes can open. What's already on this Mac is uploaded when you connect. Scans, sample data and API keys stay on this Mac.",
+                                         tone: p.textSecondary)
+                        }
+                        GoogleButton(label: sync.connecting ? "Waiting for Google…" : "Continue with Google",
+                                     disabled: sync.connecting) {
+                            Task { await sync.connect() }
+                        }
+                        HStack(spacing: 0) {
+                            Text("By connecting you agree to the ")
+                            legalLink(.terms, "Terms")
+                            Text(" and ")
+                            legalLink(.privacy, "Privacy Policy")
+                            Text(".")
+                        }
+                        .font(FN.small)
+                        .foregroundStyle(p.textMuted)
+                        if let message = sync.message {
+                            SettingsHint(message, tone: p.danger)
+                        }
+                    }
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .contentShape(Rectangle())
             }
+        }
+    }
+
+    private var syncLabel: String {
+        let time = sync.lastSynced.map { ", " + $0.formatted(date: .omitted, time: .shortened) } ?? ""
+        switch sync.status {
+        case .syncing: return "Syncing…"
+        case .offline: return "Offline"
+        case .error: return "Sync error"
+        case .synced: return "Synced" + time
+        case .idle: return sync.lastSynced == nil ? "Not synced yet" : "Synced" + time
+        }
+    }
+
+    private var syncTone: StatusPill.Tone {
+        switch sync.status {
+        case .synced: return .good
+        case .error: return .bad
+        case .offline: return .warn
+        case .idle: return sync.lastSynced == nil ? .muted : .good
+        case .syncing: return .muted
+        }
+    }
+
+    private func legalLink(_ document: LegalDocument, _ title: String) -> some View {
+        Button(title) { legalDocument = document }
             .buttonStyle(.fn)
-            .accessibilityLabel(title)
-            .accessibilityValue(summary)
-            .accessibilityHint(isOpen ? "Hide these settings" : "Show these settings")
-
-            if isOpen {
-                Divider().overlay(p.line)
-                VStack(alignment: .leading, spacing: 12) { content() }
-                    .padding(12)
-                    .transition(.opacity.combined(with: .offset(y: -6)))
-            }
-        }
-        .animation(Motion.standard, value: isOpen)
-        .background(p.bg, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(p.line, lineWidth: 1))
+            .underline()
     }
 
-    /// Which kind of model is asked first.
-    private var prioritySection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Ask first").font(FN.bodyMedium).foregroundStyle(p.text)
-            SegmentedTabs(items: AIEngine.Priority.allCases.map { ($0.rawValue, $0.label) },
-                          selection: Binding(get: { engine.priority.rawValue },
-                                             set: { engine.priority = AIEngine.Priority(rawValue: $0) ?? .localFirst }))
-                .fixedSize()
-            Text(engine.priority == .localFirst
-                 ? "Stays on this Mac. The cloud is used only when you tap “Ask …” under a reply."
-                 : "The cloud answers; this Mac steps in when it can't be reached.")
-                .font(FN.small).foregroundStyle(p.muted)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    /// What answers each kind of request right now.
-    private var routing: some View {
-        let r = engine.readiness
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Text("How requests are answered").font(FN.bodyMedium).foregroundStyle(p.text)
-                Spacer()
-                StatusPill(text: r.route.label,
-                           tone: r.route == .unavailable ? .warn : .good)
-            }
-            VStack(alignment: .leading, spacing: 5) {
-                routeLine("sparkle", "Chat", r.chat)
-                routeLine("scan", "Scanning", r.scanning)
-                routeLine("mic", "Voice notes", r.voice)
-                routeLine("chart", "Brief & review", r.summaries)
-            }
-            Text("Photos and recordings are always read on this Mac.")
-                .font(FN.small).foregroundStyle(p.muted)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private func routeLine(_ icon: String, _ label: String, _ value: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Icon(icon, size: 13).foregroundStyle(p.faint).padding(.top, 2)
-            Text(label).font(FN.small).foregroundStyle(p.muted).frame(width: 92, alignment: .leading)
-            Text(value).font(FN.small).foregroundStyle(p.text)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
-        }
-    }
-
-    private var anthropicKey: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Claude").font(FN.bodyMedium).foregroundStyle(p.text)
-            Text("Paid, and the most accurate. Needed for “Ideas from the web”.")
-                .font(FN.small).foregroundStyle(p.muted)
-                .fixedSize(horizontal: false, vertical: true)
-
-            KeyField(item: .anthropicKey) { engine.refresh() }
-
-            HStack(spacing: 12) {
-                labelled("Model") {
-                    SelectMenu(options: AnthropicClient.userModels.map { ($0.id, $0.label) },
-                               selection: keychainBinding(.anthropicModel, default: AnthropicClient.defaultModel))
-                        .fixedSize()
-                }
-                labelled("Brief & review") {
-                    SelectMenu(options: AnthropicClient.userModels.map { ($0.id, $0.label) },
-                               selection: keychainBinding(.anthropicFastModel, default: AnthropicClient.defaultFastModel))
-                        .fixedSize()
-                }
-            }
-
-            Button("Get a key at console.anthropic.com") {
-                if let url = URL(string: "https://console.anthropic.com/settings/keys") {
-                    NSWorkspace.shared.open(url)
-                }
-            }
-            .buttonStyle(.fn)
-            .font(FN.small)
-            .foregroundStyle(p.accent)
-        }
-    }
-
-    private func keychainBinding(_ item: Keychain.Item, default fallback: String) -> Binding<String> {
-        Binding(
-            get: { Keychain.read(item).flatMap { $0.isEmpty ? nil : $0 } ?? fallback },
-            set: { Keychain.write(item, $0) })
-    }
-
-    private var forgetKeys: some View {
-        GhostButton(tone: p.danger, action: {
-            Keychain.clearAll()
-            keysGeneration += 1
-            engine.refresh()
-            toasts.push("Keys and model settings removed from the Keychain.")
+    private var deleteDriveConfirmation: some View {
+        TypeToConfirm(title: "Delete Drive copy?", confirmLabel: "Delete Drive copy", onConfirm: {
+            Task { await sync.disconnect(deleteCopy: true) }
         }) {
-            Text("Forget all keys")
+            Text("This permanently deletes the copy of your notes, tasks and spending stored in \(Text(sync.account?.email ?? "your").font(FN.bodyMedium))'s Google Drive, and disconnects Google on this Mac.")
+            Text("Data on this Mac is kept. Other devices keep their data too, but will stop syncing until they connect again.")
+                .foregroundStyle(p.textSecondary)
         }
     }
 
-    // MARK: - Data & privacy
+    // MARK: - Data and privacy
 
     private var counts: (notes: Int, tasks: Int, transactions: Int) {
         (store.all.notes.filter { $0.deletedAt == nil }.count,
@@ -759,145 +658,100 @@ struct SettingsView: View {
          store.all.transactions.filter { $0.deletedAt == nil }.count)
     }
 
-    private var dataSummary: String {
-        let c = counts
-        return "\(plural(c.notes, "note")) · \(plural(c.tasks, "task")) · \(plural(c.transactions, "transaction"))"
-    }
-
     private func plural(_ n: Int, _ word: String) -> String { "\(n) \(word)\(n == 1 ? "" : "s")" }
 
     private var privacy: some View {
         let c = counts
         return VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 8) {
+            HStack(spacing: 0) {
                 statTile("Notes", c.notes)
+                Rectangle().fill(p.borderSubtle).frame(width: 1)
                 statTile("Tasks", c.tasks)
+                Rectangle().fill(p.borderSubtle).frame(width: 1)
                 statTile("Transactions", c.transactions)
             }
+            .fixedSize(horizontal: false, vertical: true)
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(p.border, lineWidth: 1))
 
-            VStack(alignment: .leading, spacing: 12) {
+            SettingsGroup {
                 ForEach(PRIVACY_POINTS, id: \.title) { point in
-                    HStack(alignment: .top, spacing: 10) {
-                        Icon(point.icon, size: 16).foregroundStyle(p.muted).padding(.top, 2)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(point.title).font(FN.bodyMedium).foregroundStyle(p.text)
-                            Text(point.text)
-                                .font(FN.small).foregroundStyle(p.muted)
-                                .fixedSize(horizontal: false, vertical: true)
+                    SettingsRow(point.title, description: point.text, leading: { SettingsTile(icon: point.icon) })
+                }
+                SettingsBlock {
+                    HStack(spacing: 0) {
+                        Text("Full details in the ")
+                        legalLink(.privacy, "Privacy Policy").foregroundStyle(p.foreground)
+                        Text(" and the ")
+                        legalLink(.terms, "Terms of Service").foregroundStyle(p.foreground)
+                        Text(". Questions? ")
+                        Button(LegalDocument.contact) {
+                            if let url = URL(string: "mailto:\(LegalDocument.contact)") { NSWorkspace.shared.open(url) }
                         }
+                        .buttonStyle(.fn)
+                        .foregroundStyle(p.foreground)
+                        .underline()
                     }
+                    .font(FN.font(13))
+                    .foregroundStyle(p.textSecondary)
                 }
             }
 
-            legalLinks
-
-            boxed {
-                Text("Sample data").font(FN.bodyMedium).foregroundStyle(p.text)
-                Text("A few example notes, tasks and transactions to try things out. They stay on this Mac and can be removed in one click.")
-                    .font(FN.small).foregroundStyle(p.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 8) {
-                    SecondaryButton(title: "Load sample data") { store.loadSamples() }
+            SettingsGroup {
+                SettingsRow("Sample data", description: "A few example notes, tasks and transactions to try things out. They stay on this Mac and can be removed in one click.") {
                     if store.hasSamples {
-                        SecondaryButton(title: "Remove sample data") { store.clearSamples() }
+                        SecondaryButton(title: "Remove sample data", small: true) { store.clearSamples() }
+                    } else {
+                        SecondaryButton(title: "Explore with sample data", small: true) { store.loadSamples() }
                     }
                 }
-            }
-
-            boxed {
-                Text("Backup").font(FN.bodyMedium).foregroundStyle(p.text)
-                Text("Save everything to a file, or restore from one. When importing, the newer version of each item is kept. The file is the same format as the web app's export.")
-                    .font(FN.small).foregroundStyle(p.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 8) {
-                    SecondaryButton(title: "Export backup", icon: "download", action: exportBackup)
-                    SecondaryButton(title: "Import backup", action: importBackup)
-                    SecondaryButton(title: "Show data file") {
+                SettingsRow("Backup file", description: "Save everything to a file, or restore from one. When importing, the newer version of each item is kept. The file is the same format as the web app's export.") {
+                    SecondaryButton(title: "Export", icon: "download", small: true, action: exportBackup)
+                    SecondaryButton(title: "Import", small: true, action: importBackup)
+                }
+                SettingsRow("Data file", description: "Everything you add is kept in one file on this Mac.") {
+                    SecondaryButton(title: "Show in Finder", small: true) {
                         NSWorkspace.shared.activateFileViewerSelecting([Persistence.shared.location])
                     }
                 }
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Danger zone").font(FN.bodyMedium).foregroundStyle(p.danger)
-                Text("Erase all notes, tasks, spending, settings and saved API keys from this Mac. This can't be undone.")
-                    .font(FN.small).foregroundStyle(p.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-                if confirmWipe {
-                    Text("Type **delete** to confirm.").font(FN.small).foregroundStyle(p.muted)
-                    HStack(spacing: 8) {
-                        BoxedField(placeholder: "delete", text: $wipeConfirmation)
-                        PrimaryButton(title: "Delete everything", tone: p.danger,
-                                      disabled: wipeConfirmation.lowercased() != "delete") {
-                            store.eraseEverything()
-                            Keychain.clearAll()
-                            confirmWipe = false
-                            wipeConfirmation = ""
-                            toasts.push("All local data deleted.")
-                        }
-                        GhostButton(action: { confirmWipe = false; wipeConfirmation = "" }) {
-                            Text("Cancel")
-                        }
-                    }
-                    .transition(.opacity.combined(with: .offset(y: -8)))
-                } else {
-                    SecondaryButton(title: "Delete all local data") { confirmWipe = true }
+                SettingsRow("Local data", description: "Erase all notes, tasks, spending, settings and saved API keys from this Mac. A Google Drive copy, if you have one, isn't touched. This can't be undone.") {
+                    KitButton(kind: .danger, title: "Delete all local data", small: true) { confirmWipe = true }
                 }
             }
-            .animation(Motion.standard, value: confirmWipe)
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .overlay(RoundedRectangle(cornerRadius: FN.radius, style: .continuous)
-                .stroke(p.danger.opacity(0.45), lineWidth: 1))
         }
     }
 
-    /// The full Privacy Policy and Terms, opened over Settings.
-    private var legalLinks: some View {
-        HStack(spacing: 4) {
-            Text("Full details:").foregroundStyle(p.muted)
-            ForEach(Array(LegalDocument.allCases.enumerated()), id: \.element.id) { index, document in
-                if index > 0 { Text("·").foregroundStyle(p.faint) }
-                Button(document.title) { legalDocument = document }
-                    .buttonStyle(.fn)
-                    .foregroundStyle(p.accent)
-                    .underline()
-            }
-            Text("· Questions?").foregroundStyle(p.muted)
-            Button(LegalDocument.contact) {
-                if let url = URL(string: "mailto:\(LegalDocument.contact)") { NSWorkspace.shared.open(url) }
-            }
-            .buttonStyle(.fn)
-            .foregroundStyle(p.accent)
+    private var wipeConfirmation: some View {
+        let c = counts
+        return TypeToConfirm(title: "Delete all local data?", confirmLabel: "Delete everything", onConfirm: {
+            store.eraseEverything()
+            Keychain.clearAll()
+            toasts.push("All local data deleted.")
+        }) {
+            Text("This permanently erases from this Mac: \(plural(c.notes, "note")), \(plural(c.tasks, "task")), \(plural(c.transactions, "transaction")), your settings and budgets, and any saved API keys.")
+            Text("\(sync.account != nil ? "The copy in your Google Drive is not touched. " : "")It can't be undone. Export a backup first if you might need it.")
+                .foregroundStyle(p.textSecondary)
         }
-        .font(FN.small)
     }
 
     private func statTile(_ label: String, _ n: Int) -> some View {
-        VStack(spacing: 1) {
-            Text("\(n)").font(.system(size: 18, weight: .semibold)).monospacedDigit()
+        VStack(alignment: .leading, spacing: 4) {
+            Text("\(n)")
+                .font(FN.display(28))
+                .tracking(FN.displayTracking(28))
+                .monospacedDigit()
                 .contentTransition(.numericText())
-                .foregroundStyle(p.text)
-            Text(label).font(FN.small).foregroundStyle(p.muted)
+                .foregroundStyle(p.foreground)
+            Text(label).font(FN.font(13)).foregroundStyle(p.textMuted).lineLimit(1)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
-        .background(p.hover, in: RoundedRectangle(cornerRadius: FN.radius, style: .continuous))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
         .motion(n, Motion.data)
     }
 
-    @ViewBuilder
-    private func boxed<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) { content() }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .overlay(RoundedRectangle(cornerRadius: FN.radius, style: .continuous)
-                .stroke(p.line, lineWidth: 1))
-    }
-
     private func labelled<Content: View>(_ label: String, @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(label).font(FN.small).foregroundStyle(p.muted)
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label).font(FN.font(13)).foregroundStyle(p.textSecondary)
             content()
         }
     }
@@ -940,36 +794,157 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Support
+    // MARK: - About
 
-    private var kofi: some View {
-        HStack(spacing: 12) {
-            Icon("coffee", size: 20)
-                .foregroundStyle(Color.hex(0xFF5E5B))
-                .frame(width: 40, height: 40)
-                .background(Color.hex(0xFF5E5B).opacity(0.15), in: Circle())
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Enjoying Four Notes?").font(FN.bodyMedium).foregroundStyle(p.text)
-                Text("Four Notes is free. If it helps you, a coffee keeps it going.")
-                    .font(FN.small).foregroundStyle(p.muted)
+    private var about: some View {
+        SettingsGroup {
+            SettingsRow("Version", description: "Four Notes asks GitHub for a newer release; nothing else is sent.") {
+                Text(AppVersion.short)
+                    .font(FN.body).monospacedDigit()
+                    .foregroundStyle(p.textSecondary)
+                    .textSelection(.enabled)
             }
-            Spacer()
-            Button {
-                if let url = URL(string: KOFI_URL) { NSWorkspace.shared.open(url) }
-            } label: {
-                HStack(spacing: 6) {
-                    Icon("coffee", size: 16)
-                    Text("Buy me a coffee").font(FN.bodyMedium)
+            if let commit = AppVersion.commit {
+                SettingsRow("Commit") {
+                    Text(commit)
+                        .font(FN.body).monospacedDigit()
+                        .foregroundStyle(p.textSecondary)
+                        .textSelection(.enabled)
                 }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 14)
-                .frame(height: 32)
-                .background(Color.hex(0xFF5E5B), in: Capsule())
             }
-            .buttonStyle(.fn)
+            SettingsRow("Updates", description: updateLine.text) {
+                if let available = updates.available {
+                    PrimaryButton(title: "Install \(available.version)…", small: true) { nav.present(.update) }
+                } else {
+                    SecondaryButton(title: updates.state == .checking ? "Checking…" : "Check for updates", small: true) {
+                        updates.check()
+                    }
+                    .disabled(updates.state == .checking)
+                }
+                KitButton(kind: .plain, title: "Release notes", small: true) {
+                    NSWorkspace.shared.open(AppVersion.releasesPage)
+                }
+            }
+            SettingsRow("Check automatically", description: "Once a day") {
+                Toggle("Check for updates automatically", isOn: $updates.automatic)
+                    .toggleStyle(.fnSwitch)
+            }
+            SettingsRow("Enjoying Four Notes?", description: "Four Notes is free. If it helps you, a coffee keeps it going.") {
+                SecondaryButton(title: "Buy me a coffee", icon: "coffee") {
+                    if let url = URL(string: KOFI_URL) { NSWorkspace.shared.open(url) }
+                }
+            } leading: {
+                SettingsTile(icon: "coffee")
+            }
         }
-        .padding(14)
-        .background(p.surfaceMuted, in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
+    }
+
+    /// What the last check found, said under "Updates".
+    private var updateLine: (text: String, tone: Color?) {
+        switch updates.state {
+        case .idle, .checking:
+            if let available = updates.available { return ("Version \(available.version) is available.", nil) }
+            return ("You're on version \(AppVersion.marketing), build \(AppVersion.build).", nil)
+        case .upToDate:
+            return ("You're on the latest version.", nil)
+        case .available(let version, _):
+            return ("Version \(version) is available.", nil)
+        case .failed(let message):
+            return (message, p.danger)
+        }
+    }
+}
+
+// MARK: - Pieces
+
+/// A provider's header in the cloud tabs: a badge, what the key is, and where to get one.
+struct CloudHeader: View {
+    enum Tone { case accent, success }
+    @Environment(\.palette) private var p
+    let badge: String
+    var tone: Tone = .accent
+    let title: String
+    let link: (String, String)
+
+    var body: some View {
+        HStack(spacing: 8) {
+            StatusPill(text: badge, tone: tone == .success ? .good : .accent, dot: false)
+            Text(title).font(FN.font(13)).foregroundStyle(p.textSecondary)
+            Spacer(minLength: 8)
+            ExternalLink(title: link.0, address: link.1)
+        }
+    }
+}
+
+/// An underlined link that opens a web page, with an arrow after it.
+struct ExternalLink: View {
+    @Environment(\.palette) private var p
+    @State private var hovering = false
+    let title: String
+    let address: String
+
+    var body: some View {
+        Button { if let url = URL(string: address) { NSWorkspace.shared.open(url) } } label: {
+            HStack(spacing: 4) {
+                Text(title)
+                    .underline(color: hovering ? p.foreground : p.borderStrong)
+                Icon("arrowUpRight", size: 14)
+            }
+            .font(FN.font(13))
+            .foregroundStyle(p.foreground)
+        }
+        .buttonStyle(.fn)
+        .onHover { hovering = $0 }
+    }
+}
+
+/// "Find a setting": the kit's field with a search glyph.
+private struct FindField: View {
+    @Environment(\.palette) private var p
+    @Binding var text: String
+    @FocusState private var focused: Bool
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Icon("search", size: 16).foregroundStyle(p.textMuted)
+            TextField("Find a setting", text: $text)
+                .textFieldStyle(.plain)
+                .font(FN.body)
+                .foregroundStyle(p.foreground)
+                .focused($focused)
+        }
+        .padding(.leading, 12)
+        .padding(.trailing, 12)
+        .frame(height: 36)
+        .background(p.surface, in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous)
+            .strokeBorder(focused || hovering ? p.borderStrong : p.border, lineWidth: 1))
+        .onHover { hovering = $0 }
+        .motion(focused || hovering, Motion.quick)
+        .accessibilityLabel("Find a setting")
+    }
+}
+
+/// The round close button at the dialog's corner.
+private struct CloseButton: View {
+    @Environment(\.palette) private var p
+    @State private var hovering = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Icon("x", size: 18)
+                .foregroundStyle(hovering ? p.foreground : p.textSecondary)
+                .frame(width: 40, height: 40)
+                .background(p.surfaceMuted, in: Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.fn)
+        .onHover { hovering = $0 }
+        .motion(hovering, Motion.quick)
+        .help("Close settings")
+        .accessibilityLabel("Close settings")
     }
 }
 
@@ -977,39 +952,56 @@ struct SettingsView: View {
 struct KeyField: View {
     @Environment(\.palette) private var p
     let item: Keychain.Item
+    /// Says what the key is above the field; off where a header already does.
+    var showsLabel = true
     var onChange: () -> Void = {}
     @State private var value = ""
     @State private var editing = false
+    @State private var stored = ""
+    @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(item.label).font(FN.small).foregroundStyle(p.muted)
+        VStack(alignment: .leading, spacing: 6) {
+            if showsLabel {
+                Text(item.label).font(FN.font(13)).foregroundStyle(p.textSecondary)
+            }
             HStack(spacing: 8) {
+                Group {
+                    if editing {
+                        SecureField("Paste your key", text: $value)
+                            .textFieldStyle(.plain)
+                            .focused($focused)
+                            .onSubmit(commit)
+                    } else {
+                        Text(stored.isEmpty ? "Not set" : Keychain.mask(stored))
+                            .foregroundStyle(stored.isEmpty ? p.textMuted : p.foreground)
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                // The kit's `.field`, with the key in monospace.
+                .font(.system(size: 12, design: .monospaced))
+                .padding(.horizontal, 14)
+                .frame(height: 36)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(p.surface, in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous)
+                    .strokeBorder(focused ? p.borderStrong : p.border, lineWidth: 1))
+
                 if editing {
-                    SecureField("Paste your key", text: $value)
-                        .textFieldStyle(.plain)
-                        .font(FN.body)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .overlay(RoundedRectangle(cornerRadius: FN.radiusSmall, style: .continuous)
-                            .stroke(p.line, lineWidth: 1))
-                        .onSubmit(commit)
-                    SecondaryButton(title: "Save", action: commit)
+                    KitButton(kind: .plain, title: "Cancel", small: true) { editing = false; value = "" }
+                    SecondaryButton(title: "Save", small: true, action: commit)
                 } else {
-                    Text(stored.isEmpty ? "Not set" : Keychain.mask(stored))
-                        .font(FN.body)
-                        .foregroundStyle(stored.isEmpty ? p.faint : p.text)
-                    Spacer()
-                    GhostButton(action: { editing = true; value = "" }) {
-                        Text(stored.isEmpty ? "Add" : "Replace")
+                    KitButton(kind: .plain, title: stored.isEmpty ? "Add" : "Replace", small: true) {
+                        editing = true
+                        value = ""
+                        focused = true
                     }
                     if !stored.isEmpty {
-                        GhostButton(tone: p.danger, action: {
+                        KitButton(kind: .danger, title: "Remove", small: true) {
                             Keychain.write(item, nil)
                             refresh()
                             onChange()
-                        }) {
-                            Text("Remove")
                         }
                     }
                 }
@@ -1017,8 +1009,6 @@ struct KeyField: View {
         }
         .onAppear(perform: refresh)
     }
-
-    @State private var stored = ""
 
     private func refresh() { stored = Keychain.read(item) ?? "" }
 
@@ -1038,6 +1028,7 @@ private struct SettingsNavRow: View {
     let icon: String
     let title: String
     let selected: Bool
+    var trailing: String?
     var badge = false
     let action: () -> Void
 
@@ -1047,16 +1038,19 @@ private struct SettingsNavRow: View {
                 Icon(icon, size: 16)
                     .foregroundStyle(selected ? p.accent : (hovering ? p.foreground : p.textSecondary))
                 Text(title)
-                    .font(FN.font(13, selected ? .medium : .regular))
+                    .font(FN.font(14, selected ? .medium : .regular))
                     .foregroundStyle(selected || hovering ? p.foreground : p.textSecondary)
                     .lineLimit(1)
                 Spacer(minLength: 0)
                 if badge { Circle().fill(p.danger).frame(width: 7, height: 7) }
+                if let trailing {
+                    Text(trailing).font(FN.small).foregroundStyle(p.textMuted)
+                }
             }
             .padding(.horizontal, 12)
-            .frame(height: 34)
+            .frame(height: 36)
             .background(selected ? p.accentSubtle : (hovering ? p.hover : .clear),
-                        in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
+                        in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.fn)

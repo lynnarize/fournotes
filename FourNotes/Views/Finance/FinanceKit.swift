@@ -170,6 +170,7 @@ struct SegmentedTabs: View {
     @Environment(\.palette) private var p
     @Environment(\.colorScheme) private var scheme
     @Namespace private var raised
+    @State private var hovered: String?
     let items: [(id: String, label: String)]
     @Binding var selection: String
     var alert: String?
@@ -180,10 +181,10 @@ struct SegmentedTabs: View {
                 let on = selection == item.id
                 Button { withAnimation(Motion.standard) { selection = item.id } } label: {
                     Text(item.label)
-                        .font(FN.font(12, on ? .medium : .regular))
-                        .foregroundStyle(on ? p.foreground : p.textSecondary)
-                        .padding(.horizontal, 11)
-                        .frame(height: 24)
+                        .font(FN.font(13, on ? .medium : .regular))
+                        .foregroundStyle(on || hovered == item.id ? p.foreground : p.textSecondary)
+                        .padding(.horizontal, 12)
+                        .frame(height: 30)
                         .background {
                             if on {
                                 Capsule()
@@ -202,6 +203,7 @@ struct SegmentedTabs: View {
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.fn)
+                .onHover { hovered = $0 ? item.id : (hovered == item.id ? nil : hovered) }
                 .accessibilityAddTraits(on ? .isSelected : [])
             }
         }

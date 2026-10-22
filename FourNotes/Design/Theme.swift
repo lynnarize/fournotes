@@ -237,21 +237,23 @@ struct PaletteProvider<Content: View>: View {
         content()
             .environment(\.palette, palette)
             .tint(palette.accent)
+            // The web sets all text a little tight (body letter-spacing -0.01em, at 14px).
+            // Headings set their own.
+            .tracking(-0.14)
     }
 }
 
 // MARK: - Type scale
 
 enum FN {
-    /// The web app sets text in Inter; on macOS the system font is the native match.
-    /// Weights stay at regular and medium, as on the web: hierarchy comes from size and
-    /// colour, not bold. Heavier weights asked for are drawn as medium.
+    /// Inter, as on the web. Weights stay at regular and medium: hierarchy comes from
+    /// size and colour, not bold. Heavier weights asked for are drawn as medium.
     static func font(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
-        .system(size: size, weight: [.regular, .light, .thin, .ultraLight].contains(weight) ? weight : .medium)
+        Font(Typeface.text.font(size, medium: ![.regular, .light, .thin, .ultraLight].contains(weight)))
     }
-    /// Headings of 30pt and up (Geist on the web): regular weight. Pair with
+    /// Headings of 30pt and up, in Geist at regular weight, as on the web. Pair with
     /// `.tracking(FN.displayTracking(size))` for the web's tight -0.03em.
-    static func display(_ size: CGFloat) -> Font { .system(size: size, weight: .regular) }
+    static func display(_ size: CGFloat) -> Font { Font(Typeface.display.font(size, medium: false)) }
     static func displayTracking(_ size: CGFloat) -> CGFloat { -0.03 * size }
     /// Kept for the views that still ask for it: the redesign has no serif, so this is
     /// the display face (medium below 30pt, where the serif marked a card's title).
@@ -260,8 +262,8 @@ enum FN {
     }
     static let title = display(34)
     static let sectionTitle = font(15, .medium)
-    static let body = font(13)                // text-sm
-    static let bodyMedium = font(13, .medium)
+    static let body = font(14)                // text-sm
+    static let bodyMedium = font(14, .medium)
     static let small = font(12)               // text-xs
     static let tiny = font(11)
 
@@ -275,6 +277,50 @@ enum FN {
     static let cardRadius: CGFloat = 26
     /// max-w-[1500px] from the web shell.
     static let maxContentWidth: CGFloat = 1500
+}
+
+// MARK: - Typefaces
+
+/// The web app's faces (next/font): Inter for text and controls, Geist for headings.
+/// Bundled in Resources/Fonts from the web build, as variable fonts with the latin
+/// subset the web serves (SIL Open Font License, Inter-OFL.txt and Geist-OFL.txt
+/// there); anything they don't cover falls back to the system font, as in a browser.
+enum Typeface {
+    case text, display
+
+    private var family: String { self == .text ? "Inter" : "Geist" }
+
+    /// Registered for this process on first use.
+    private static let registered: Bool = {
+        for url in Bundle.main.urls(forResourcesWithExtension: "woff2", subdirectory: nil) ?? [] {
+            CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+        }
+        return true
+    }()
+
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var cache: [String: CTFont] = [:]
+
+    /// The face at a size, regular (400) or medium (500), or the system font should
+    /// the bundled one ever be missing.
+    func font(_ size: CGFloat, medium: Bool) -> CTFont {
+        _ = Self.registered
+        let key = "\(family)-\(size)-\(medium)"
+        Self.lock.lock()
+        defer { Self.lock.unlock() }
+        if let font = Self.cache[key] { return font }
+        let attributes: [CFString: Any] = [
+            kCTFontFamilyNameAttribute: family,
+            // The weight axis ('wght').
+            kCTFontVariationAttribute: [0x7767_6874: medium ? 500 : 400],
+        ]
+        var font = CTFontCreateWithFontDescriptor(CTFontDescriptorCreateWithAttributes(attributes as CFDictionary), size, nil)
+        if CTFontCopyFamilyName(font) as String != family {
+            font = NSFont.systemFont(ofSize: size, weight: medium ? .medium : .regular) as CTFont
+        }
+        Self.cache[key] = font
+        return font
+    }
 }
 
 // MARK: - Color helpers

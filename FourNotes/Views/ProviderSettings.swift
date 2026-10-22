@@ -33,7 +33,7 @@ struct ProviderSlotEditor: View {
                 detected
             }
             labelled(slot == .local ? "Or choose by hand" : title) {
-                TextMenu(title: chosen?.name ?? "None", help: "Choose a \(title.lowercased())") {
+                SelectField(title: chosen?.name ?? "None", help: "Choose a \(title.lowercased())") {
                     [.item("None", checked: chosen == nil) { choose(nil) }, .divider]
                         + choices.map { provider in
                             .item(provider.name, checked: provider.id == providerId) { choose(provider) }
@@ -56,24 +56,20 @@ struct ProviderSlotEditor: View {
                     HStack(spacing: 8) {
                         BoxedField(placeholder: chosen.modelHint, text: $model) { save() }
                         if !models.isEmpty {
-                            TextMenu(title: "Choose", help: "Models \(chosen.name) offers") { modelEntries }
+                            SelectField(title: "Choose", help: "Models \(chosen.name) offers") { modelEntries }
                         }
                     }
                 }
                 HStack(spacing: 8) {
-                    SecondaryButton(title: "Save") { save() }
-                    SecondaryButton(title: "Test") { Task { await test() } }
-                    if let page = chosen.keyPage, let url = URL(string: page) {
-                        Button("Get a \(chosen.name) key") { NSWorkspace.shared.open(url) }
-                            .buttonStyle(.fn)
-                            .font(FN.small)
-                            .foregroundStyle(p.accent)
+                    SecondaryButton(title: "Save", small: true) { save() }
+                    SecondaryButton(title: "Test", small: true) { Task { await test() } }
+                    if let page = chosen.keyPage {
+                        ExternalLink(title: "Get a \(chosen.name) key", address: page)
                             .padding(.leading, 4)
                     }
                 }
                 if let status {
-                    Text(status).font(FN.small).foregroundStyle(p.muted)
-                        .fixedSize(horizontal: false, vertical: true)
+                    SettingsHint(status, tone: p.textSecondary)
                         .transition(.opacity.combined(with: .offset(y: 4)))
                 }
             }
@@ -93,12 +89,11 @@ struct ProviderSlotEditor: View {
         let found = LocalServers.Kind.allCases.filter {
             servers.status[$0]?.installed == true || servers.status[$0]?.running == true
         }
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Found on this Mac").font(FN.small).foregroundStyle(p.muted)
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Found on this Mac").font(FN.font(13)).foregroundStyle(p.textSecondary)
             if found.isEmpty {
-                Text(servers.status.isEmpty ? "Looking…"
-                     : "No model server found. LM Studio and Ollama are free to install.")
-                    .font(FN.small).foregroundStyle(p.faint)
+                SettingsHint(servers.status.isEmpty ? "Looking…"
+                             : "No model server found. LM Studio and Ollama are free to install.")
                 if !servers.status.isEmpty {
                     HStack(spacing: 12) {
                         linkButton("Get LM Studio", "https://lmstudio.ai")
@@ -108,8 +103,7 @@ struct ProviderSlotEditor: View {
             }
             ForEach(found) { kind in serverRow(kind) }
             if let error = servers.lastError {
-                Text(error).font(FN.small).foregroundStyle(p.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+                SettingsHint(error, tone: p.textSecondary)
             }
         }
     }
@@ -120,37 +114,34 @@ struct ProviderSlotEditor: View {
         let working = servers.working.contains(kind)
         return HStack(spacing: 10) {
             Circle()
-                .fill(state.running ? p.ok : p.faint)
+                .fill(state.running ? p.success : p.textMuted)
                 .frame(width: 8, height: 8)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(kind.name).font(FN.bodyMedium).foregroundStyle(p.text)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(kind.name).font(FN.body).foregroundStyle(p.foreground)
                 Text(working ? (state.running ? "Stopping…" : "Starting…")
                      : state.running ? "Running · \(state.models.count) model\(state.models.count == 1 ? "" : "s")"
                      : "Stopped")
-                    .font(FN.small).foregroundStyle(p.muted)
+                    .font(FN.font(13)).foregroundStyle(p.textMuted)
             }
             Spacer(minLength: 8)
             if inUse {
                 StatusPill(text: "In use", tone: .good, dot: false)
             } else if state.running, !state.models.isEmpty {
-                SecondaryButton(title: "Use") { use(kind) }
+                SecondaryButton(title: "Use", small: true) { use(kind) }
             }
-            SecondaryButton(title: state.running ? "Stop" : "Start") {
+            SecondaryButton(title: state.running ? "Stop" : "Start", small: true) {
                 Task { state.running ? await servers.stop(kind) : await servers.start(kind) }
             }
             .disabled(working)
-            .opacity(working ? 0.5 : 1)
         }
-        .padding(.horizontal, 10)
+        .padding(.leading, 14)
+        .padding(.trailing, 8)
         .padding(.vertical, 8)
-        .background(p.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous).strokeBorder(p.border, lineWidth: 1))
     }
 
     private func linkButton(_ title: String, _ address: String) -> some View {
-        Button(title) { if let url = URL(string: address) { NSWorkspace.shared.open(url) } }
-            .buttonStyle(.fn)
-            .font(FN.small)
-            .foregroundStyle(p.accent)
+        ExternalLink(title: title, address: address)
     }
 
     /// Fills in the server, its address and a chat model — no typing.
@@ -165,8 +156,8 @@ struct ProviderSlotEditor: View {
     }
 
     private func labelled<Content: View>(_ label: String, @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(label).font(FN.small).foregroundStyle(p.muted)
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label).font(FN.font(13)).foregroundStyle(p.textSecondary)
             content()
         }
     }

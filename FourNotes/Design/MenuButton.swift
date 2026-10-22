@@ -211,6 +211,21 @@ struct SelectMenu<Value: Hashable>: View {
     }
 }
 
+/// The same bordered dropdown, for a menu of its own: a model list with headers,
+/// or one narrowed by what's typed.
+struct SelectField: View {
+    let title: String
+    var width: CGFloat?
+    var help: String?
+    let entries: () -> [MenuEntry]
+
+    var body: some View {
+        MenuButton(help: help, entries: entries) {
+            SelectLabel(title: title, width: width)
+        }
+    }
+}
+
 private struct SelectLabel: View {
     @Environment(\.palette) private var p
     @Environment(\.menuIsOpen) private var open
@@ -227,11 +242,12 @@ private struct SelectLabel: View {
         }
         .font(FN.body)
         .foregroundStyle(p.foreground)
-        .padding(.leading, 12)
-        .padding(.trailing, 10)
+        // The kit's `select.field`: 36pt tall, the chevron in its 32pt of right padding.
+        .padding(.leading, 14)
+        .padding(.trailing, 12)
         .frame(width: width)
         .frame(minWidth: 72)
-        .frame(height: 30)
+        .frame(height: 36)
         .background(p.surface, in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous)
             .strokeBorder(open || (hovering && enabled) ? p.borderStrong : p.border, lineWidth: 1))
@@ -270,8 +286,24 @@ extension EnvironmentValues {
     @Entry var closeModal: CloseModalAction?
     /// The tallest a dialog may be, from the window's height.
     @Entry var modalMaxHeight: CGFloat?
+    /// The widest a dialog may be, from the window's width.
+    @Entry var modalMaxWidth: CGFloat?
     /// True for a menu button's label while its menu is showing.
     @Entry var menuIsOpen = false
+}
+
+/// How a dialog sits in the window, as on the web: the kit's `Modal`, a panel a
+/// tenth of the way down, or a big surface in the middle (Settings).
+enum ModalShape: Equatable, Sendable {
+    case panel, surface
+}
+
+/// Set by a dialog's content to pick its shape: `.preference(key: ModalShapeKey.self, value: .surface)`.
+struct ModalShapeKey: PreferenceKey {
+    static let defaultValue = ModalShape.panel
+    static func reduce(value: inout ModalShape, nextValue: () -> ModalShape) {
+        if nextValue() == .surface { value = .surface }
+    }
 }
 
 /// Closes the dialog a view is in; call it like a function.
@@ -452,9 +484,12 @@ private struct ModalLayer: View {
     let size: CGSize
     @State private var shown = false
     @State private var id = UUID()
+    @State private var shape = ModalShape.panel
 
     var body: some View {
-        ZStack(alignment: .top) {
+        let surface = shape == .surface
+        let radius = surface ? FN.radiusSurface : FN.radiusPanel
+        ZStack(alignment: surface ? .center : .top) {
             Color.black.opacity(0.3)
                 .ignoresSafeArea()
                 .contentShape(Rectangle())
@@ -464,17 +499,22 @@ private struct ModalLayer: View {
 
             content
                 .environment(\.closeModal, CloseModalAction(run: close))
-                .environment(\.modalMaxHeight, max(200, size.height * 0.8))
+                .environment(\.modalMaxHeight, surface ? max(200, size.height - 48) : max(200, size.height * 0.8))
+                .environment(\.modalMaxWidth, max(320, size.width - (surface ? 48 : 32)))
+                .onPreferenceChange(ModalShapeKey.self) { shape = $0 }
                 .background(p.surface)
-                .clipShape(RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous)
+                .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .strokeBorder(p.border, lineWidth: 1))
                 .shadow(color: p.shadow, radius: 5, y: 2)
                 .shadow(color: p.shadowStrong, radius: 24, y: 10)
-                .scaleEffect(shown || Motion.reduce ? 1 : 0.97, anchor: .top)
+                // The web's fn-dialog-in: up 10pt and from 97%.
+                .scaleEffect(shown || Motion.reduce ? 1 : 0.97, anchor: surface ? .center : .top)
+                .offset(y: shown || Motion.reduce ? 0 : 10)
                 .opacity(shown ? 1 : 0)
-                .padding(.top, max(16, size.height * 0.1))
-                .padding(.horizontal, 16)
+                .padding(.top, surface ? 24 : max(16, size.height * 0.1))
+                .padding(.bottom, surface ? 24 : 0)
+                .padding(.horizontal, surface ? 24 : 16)
                 .accessibilityAddTraits(.isModal)
         }
         .frame(width: size.width, height: size.height)

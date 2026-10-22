@@ -11,29 +11,27 @@ struct SpeechModelsSettings: View {
     @State private var confirmDelete: SpeechModels.Pack?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Transcribe recordings on this Mac with Whisper, and tell who said what. Downloaded once from Hugging Face, then they work offline and nothing you record leaves this Mac.")
-                .font(FN.small).foregroundStyle(p.muted)
-                .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 16) {
+            SettingsHint("Downloaded once from Hugging Face, then they work offline and nothing you record leaves this Mac.")
 
             ForEach(SpeechModels.packs) { pack in
                 PackRow(pack: pack, status: models.status(pack), confirmDelete: $confirmDelete)
-                if pack.id != SpeechModels.packs.last?.id { Divider().overlay(p.line) }
+                if pack.id != SpeechModels.packs.last?.id { Rectangle().fill(p.borderSubtle).frame(height: 1) }
             }
 
             if models.isInstalled(SpeechModels.whisper) {
-                Divider().overlay(p.line)
-                Toggle(isOn: $models.useForRecordings) {
+                Rectangle().fill(p.borderSubtle).frame(height: 1)
+                HStack(spacing: 16) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Use Whisper for recordings").font(FN.body).foregroundStyle(p.text)
-                        Text(models.useForRecordings
+                        Text("Use Whisper for recordings").font(FN.body).foregroundStyle(p.foreground)
+                        SettingsHint(models.useForRecordings
                              ? "Recordings are transcribed with Whisper\(models.isInstalled(SpeechModels.speakers) ? ", speakers told apart" : ""). Apple's recognizer still shows the words live."
                              : "Apple's speech recognizer transcribes recordings.")
-                            .font(FN.small).foregroundStyle(p.faint)
-                            .fixedSize(horizontal: false, vertical: true)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Toggle("Use Whisper for recordings", isOn: $models.useForRecordings)
+                        .toggleStyle(.fnSwitch)
                 }
-                .toggleStyle(.switch)
             }
         }
         .confirmationDialog(
@@ -60,45 +58,41 @@ private struct PackRow: View {
     @Binding var confirmDelete: SpeechModels.Pack?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 10) {
-                Icon(pack.icon, size: 15).foregroundStyle(p.accent).padding(.top, 1)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 16) {
+                SettingsTile(icon: pack.icon)
                 VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text(pack.name).font(FN.bodyMedium).foregroundStyle(p.text)
+                    HStack(spacing: 8) {
+                        Text(pack.name).font(FN.body).foregroundStyle(p.foreground)
                         if status.phase == .installed {
-                            Text("Installed").font(FN.tiny).foregroundStyle(p.success)
-                                .padding(.horizontal, 6).padding(.vertical, 1)
-                                .background(p.successSubtle, in: Capsule())
+                            StatusPill(text: "Installed", tone: .good)
                         }
                     }
-                    Text("\(pack.detail) \(SpeechModels.size(status.total ?? pack.approxBytes)).")
-                        .font(FN.small).foregroundStyle(p.faint)
-                        .fixedSize(horizontal: false, vertical: true)
+                    SettingsHint("\(pack.detail) \(SpeechModels.size(status.total ?? pack.approxBytes)).")
                 }
                 Spacer(minLength: 12)
                 buttons
             }
 
             if showsProgress {
-                VStack(alignment: .leading, spacing: 5) {
-                    ProgressBar(ratio: status.phase == .verifying || status.phase == .preparing ? 1 : status.fraction,
-                                tone: status.phase == .paused ? p.textMuted : p.accent)
+                // As the web's on-device download: an 8pt bar on the muted surface.
+                VStack(alignment: .leading, spacing: 10) {
+                    ProgressBar(ratio: status.phase == .verifying || status.phase == .preparing ? 1 : max(0.02, status.fraction),
+                                tone: status.phase == .paused ? p.textMuted : p.accent, height: 8, track: p.surfaceMuted)
                     Text(progressLine)
-                        .font(FN.small).monospacedDigit().foregroundStyle(p.textMuted)
+                        .font(FN.font(13)).monospacedDigit().foregroundStyle(p.textSecondary)
                         .accessibilityLabel(progressLine)
                 }
-                .padding(.leading, 25)
                 .transition(.opacity)
             }
 
             if case .failed(let message) = status.phase {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Icon("warning", size: 13).foregroundStyle(p.danger)
-                    Text(message).font(FN.small).foregroundStyle(p.danger)
-                        .fixedSize(horizontal: false, vertical: true)
+                HStack(alignment: .top, spacing: 6) {
+                    Icon("warning", size: 15).padding(.top, 1)
+                    Text(message).fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.leading, 25)
+                .font(FN.font(13))
+                .foregroundStyle(p.danger)
             }
         }
         .animation(Motion.standard, value: status.phase)
@@ -117,21 +111,23 @@ private struct PackRow: View {
         HStack(spacing: 6) {
             switch status.phase {
             case .notInstalled:
-                PrimaryButton(title: "Download", icon: "download") { models.download(pack) }
+                SecondaryButton(title: "Download", icon: "download", small: true) { models.download(pack) }
             case .listing, .downloading:
-                SecondaryButton(title: "Pause") { models.pause(pack) }
-                GhostButton(action: { models.cancel(pack) }) { Text("Cancel") }
+                SecondaryButton(title: "Pause", small: true) { models.pause(pack) }
+                KitButton(kind: .plain, title: "Cancel", small: true) { models.cancel(pack) }
             case .paused:
-                PrimaryButton(title: "Resume") { models.download(pack) }
-                GhostButton(action: { models.cancel(pack) }) { Text("Cancel") }
+                SecondaryButton(title: "Resume", small: true) { models.download(pack) }
+                KitButton(kind: .plain, title: "Cancel", small: true) { models.cancel(pack) }
             case .failed:
-                PrimaryButton(title: status.received > 0 ? "Resume" : "Try again") { models.download(pack) }
-                GhostButton(action: { models.cancel(pack) }) { Text("Cancel") }
+                SecondaryButton(title: status.received > 0 ? "Resume" : "Try again", small: true) { models.download(pack) }
+                KitButton(kind: .plain, title: "Cancel", small: true) { models.cancel(pack) }
             case .verifying, .preparing:
                 EmptyView()
             case .installed:
-                GhostButton(action: { NSWorkspace.shared.activateFileViewerSelecting([models.folder(pack)]) }) { Text("Show in Finder") }
-                SecondaryButton(title: "Delete") { confirmDelete = pack }
+                KitButton(kind: .plain, title: "Show in Finder", small: true) {
+                    NSWorkspace.shared.activateFileViewerSelecting([models.folder(pack)])
+                }
+                KitButton(kind: .danger, title: "Delete", small: true) { confirmDelete = pack }
             }
         }
         .fixedSize()

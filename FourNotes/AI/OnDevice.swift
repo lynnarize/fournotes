@@ -146,7 +146,7 @@ enum OnDevice {
         ]
         return CaptureResult(
             kind: .receipt,
-            reply: "Read it on this Mac and filed it under Finance as \(merchant) "
+            reply: "Read it on this Mac and filed it under Money as \(merchant) "
                 + "\(Money.format(abs(amount), ctx.currency)).",
             actions: AITools.decodeActions([action]))
     }

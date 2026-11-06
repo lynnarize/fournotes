@@ -1,9 +1,9 @@
 import SwiftUI
 
-// The sidebar, after Arc, as on the web (src/components/Sidebar.tsx): the space
-// switcher with the mark, a search field that opens ⌘K, the four places with their
-// counts, then capture (Scan, Record) and Settings, and a last line saying where the
-// data lives.
+// The sidebar sits on the frame and holds places only, as on the web
+// (src/components/Sidebar.tsx): the tabs, recent notes and spaces, with Settings and sync at
+// its foot. Starting something lives in the toolbar's omnibar. It's drawn with the frame's
+// palette (see Palette.onFrame).
 
 struct SidebarView: View {
     @Environment(\.palette) private var p
@@ -29,14 +29,14 @@ struct SidebarView: View {
         ]
     }
 
+    /// The newest notes, one click from anywhere.
+    private var recent: [Note] {
+        Array(store.liveNotes.filter { !$0.title.isEmpty }.sorted { $0.updatedAt > $1.updatedAt }.prefix(3))
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            spaceSwitcher
-
-            searchField
-
-            // The four places. The count gives way to a menu of quick actions while a
-            // row is in use.
+        VStack(alignment: .leading, spacing: 0) {
+            // The places. The count gives way to a menu of quick actions while a row is in use.
             let counts = counts
             VStack(spacing: 2) {
                 ForEach(Tab.allCases) { tab in
@@ -44,109 +44,65 @@ struct SidebarView: View {
                 }
             }
 
-            Spacer(minLength: 0)
+            if !recent.isEmpty {
+                sectionLabel("Recent")
+                VStack(spacing: 2) {
+                    ForEach(recent) { note in
+                        NavRow(icon: "note", title: note.title) {
+                            nav.selectedNoteId = note.id
+                            nav.tab = .notes
+                        }
+                    }
+                }
+            }
 
-            VStack(alignment: .leading, spacing: 12) {
+            // Shared spaces are only there once signed in.
+            if !store.spaces.isEmpty {
+                sectionLabel("Spaces")
+                VStack(spacing: 2) {
+                    NavRow(icon: "users", title: "Personal", selected: store.currentSpaceId == nil) { store.switchSpace(nil) }
+                    ForEach(store.spaces) { space in
+                        NavRow(icon: "users", title: space.name, selected: store.currentSpaceId == space.id) {
+                            store.switchSpace(space.id)
+                        }
+                    }
+                }
+            }
+
+            Spacer(minLength: 16)
+
+            VStack(alignment: .leading, spacing: 4) {
                 // A local model server holds a model in memory until it's stopped.
                 ForEach(servers.running) { kind in
                     ServerRunningRow(kind: kind)
                         .transition(.opacity.combined(with: .offset(y: 6)))
                 }
-
-                // Capture, side by side.
-                HStack(spacing: 8) {
-                    CaptureButton(icon: "scan", title: "Scan", help: "Scan a receipt, note or e-wallet screenshot",
-                                  disabled: assistant.busy != nil) {
-                        assistant.pickAndScan()
-                    }
-                    CaptureButton(icon: assistant.recording ? "stop" : "mic",
-                                  title: assistant.recording ? "Stop" : "Record",
-                                  help: assistant.recording ? "Stop recording" : "Record a voice note",
-                                  tone: assistant.recording ? p.danger : nil,
-                                  disabled: assistant.busy != nil && !assistant.recording) {
-                        assistant.recording ? assistant.stopRecording() : assistant.startRecording()
-                    }
-                }
-
                 NavRow(icon: "settings", title: "Settings", shortcut: "⌘,",
                        badge: updates.hasUnseenUpdate ? "A new version is available" : nil) {
                     // With a new version waiting, open where it can be downloaded.
                     if updates.hasUnseenUpdate { nav.openSettings(section: "about") } else { nav.present(.settings) }
                 }
+                // Where the data lives.
+                SyncStatusRow(sync: AppModel.shared.sync.isAvailable ? AppModel.shared.sync : nil)
             }
-
-            // Where the data lives.
-            SyncStatusRow(sync: AppModel.shared.sync.isAvailable ? AppModel.shared.sync : nil)
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 14)
-        .padding(.bottom, 14)
-        .frame(width: 248, alignment: .leading)
-        .background(p.sidebar)
+        .padding(.top, 2)
+        .padding(.bottom, 4)
+        .frame(width: 236, alignment: .leading)
         .animation(Motion.standard, value: servers.running)
         .entrance()
         .task { servers.startWatching() }
         .onDisappear { servers.stopWatching() }
     }
 
-    // MARK: - Who and where
-
-    private var spaceLabel: String {
-        store.currentSpaceId.flatMap { id in store.spaces.first { $0.id == id }?.name } ?? "Personal"
-    }
-
-    /// The space switcher: the mark, "Four Notes" and the space showing, with spaces,
-    /// search and settings behind it.
-    private var spaceSwitcher: some View {
-        MenuButton(help: "Switch space") {
-            var entries: [MenuEntry] = []
-            if !store.spaces.isEmpty {
-                entries.append(.header("Space"))
-                entries.append(.item("Personal", checked: store.currentSpaceId == nil) { store.switchSpace(nil) })
-                entries += store.spaces.map { space in
-                    .item(space.name, checked: store.currentSpaceId == space.id) { store.switchSpace(space.id) }
-                }
-                entries.append(.divider)
-            }
-            entries += [
-                .item("Search or add…", icon: "search") { nav.present(.palette) },
-                .item("Settings…", icon: "settings") { nav.present(.settings) },
-            ]
-            return entries
-        } label: {
-            HoverRow(cornerRadius: FN.radiusControl) { hovering in
-                HStack(spacing: 10) {
-                    Logo(size: 30)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("Four Notes")
-                            .font(FN.bodyMedium)
-                            .foregroundStyle(p.foreground)
-                            .lineLimit(1)
-                        Text(spaceLabel)
-                            .font(FN.small)
-                            .foregroundStyle(p.textMuted)
-                            .lineLimit(1)
-                    }
-                    Spacer(minLength: 4)
-                    Icon("chevronsUpDown", size: 16)
-                        .foregroundStyle(hovering ? p.foreground : p.textMuted)
-                }
-                .padding(.leading, 6)
-                .padding(.trailing, 10)
-                .frame(height: 48)
-                .contentShape(Rectangle())
-            }
-        }
-        .accessibilityLabel("Four Notes, \(spaceLabel)")
-    }
-
-    /// A field that opens search and quick add (⌘K).
-    private var searchField: some View {
-        Button { nav.present(.palette) } label: {
-            SearchFieldBody()
-        }
-        .buttonStyle(.fn)
-        .accessibilityLabel("Search or add")
+    private func sectionLabel(_ title: String) -> some View {
+        Text(title)
+            .font(FN.font(12, .semibold))
+            .tracking(0.36)
+            .foregroundStyle(p.textMuted)
+            .padding(.horizontal, 12)
+            .padding(.top, 20)
+            .padding(.bottom, 6)
     }
 
     // MARK: - Tab actions
@@ -191,36 +147,6 @@ struct SidebarView: View {
 
 // MARK: - Rows
 
-/// The search field's look: a hairline field with the shortcut at its end.
-private struct SearchFieldBody: View {
-    @Environment(\.palette) private var p
-    @State private var hovering = false
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Icon("search", size: 16)
-            Text("Search or add").font(FN.body).lineLimit(1)
-            Spacer(minLength: 4)
-            Text("⌘K")
-                .font(FN.small)
-                .foregroundStyle(p.textSecondary)
-                .padding(.horizontal, 8)
-                .frame(height: 22)
-                .background(p.surfaceMuted, in: Capsule())
-        }
-        .foregroundStyle(p.textMuted)
-        .padding(.leading, 12)
-        .padding(.trailing, 6)
-        .frame(height: 36)
-        .background(p.surface, in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous)
-            .strokeBorder(hovering ? p.borderStrong : p.border, lineWidth: 1))
-        .contentShape(Rectangle())
-        .onHover { hovering = $0 }
-        .motion(hovering, Motion.quick)
-    }
-}
-
 /// One place: icon and name, its count, and a "…" menu. The kit's nav row: the open
 /// one on the accent wash, its icon in the accent.
 private struct TabRow: View {
@@ -239,16 +165,12 @@ private struct TabRow: View {
 
         ZStack(alignment: .trailing) {
             Button { nav.tab = tab } label: {
-                HStack(spacing: 10) {
-                    Icon(tab.sidebarIcon, size: 16)
-                        .foregroundStyle(selected ? p.accent : (hovering ? p.foreground : p.textSecondary))
+                HStack(spacing: 12) {
+                    Icon(tab.sidebarIcon, size: 18)
+                        .foregroundStyle(selected ? p.accent : p.textSecondary)
                     Text(tab.title)
-                        .font(FN.font(14, selected ? .medium : .regular))
-                        .foregroundStyle(selected || hovering ? p.foreground : p.textSecondary)
-                    if tab == .finance {
-                        // Still being shaped: said plainly beside its name.
-                        Badge(text: "Beta")
-                    }
+                        .font(FN.font(15, .medium))
+                        .foregroundStyle(p.foreground)
                     Spacer(minLength: 4)
                     if hasNew {
                         Circle()
@@ -273,9 +195,9 @@ private struct TabRow: View {
                     }
                 }
                 .padding(.horizontal, 12)
-                .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+                .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
                 .background(selected ? p.accentSubtle : (hovering ? p.hover : .clear),
-                            in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .contentShape(Rectangle())
             }
             .buttonStyle(.fn)
@@ -306,12 +228,14 @@ private struct NavRow: View {
     var shortcut: String?
     /// Puts a small dot on the icon; the text says why, for VoiceOver and the tooltip.
     var badge: String?
+    var selected = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
-                Icon(icon, size: 16)
+            HStack(spacing: 12) {
+                Icon(icon, size: 18)
+                    .foregroundStyle(p.textSecondary)
                     .overlay(alignment: .topTrailing) {
                         if badge != nil {
                             Circle()
@@ -323,17 +247,17 @@ private struct NavRow: View {
                         }
                     }
                     .animation(Motion.standard, value: badge != nil)
-                Text(title).font(FN.body)
+                Text(title).font(FN.font(15, .medium)).lineLimit(1)
                 Spacer(minLength: 0)
                 if let shortcut {
                     Text(shortcut).font(FN.small).foregroundStyle(p.textMuted)
                 }
             }
-            .foregroundStyle(hovering ? p.foreground : p.textSecondary)
+            .foregroundStyle(p.foreground)
             .padding(.horizontal, 12)
-            .frame(height: 36)
-            .background(hovering ? p.hover : .clear,
-                        in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
+            .frame(height: 40)
+            .background(selected || hovering ? p.hover : .clear,
+                        in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.fn)
@@ -346,38 +270,6 @@ private struct NavRow: View {
 }
 
 /// Half of the capture row: the kit's secondary button, at regular weight.
-private struct CaptureButton: View {
-    @Environment(\.palette) private var p
-    @State private var hovering = false
-    let icon: String
-    let title: String
-    let help: String
-    var tone: Color?
-    var disabled = false
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Icon(icon, size: 16)
-                Text(title).font(FN.body).lineLimit(1)
-            }
-            .foregroundStyle(tone ?? p.foreground)
-            .frame(maxWidth: .infinity, minHeight: 36)
-            .background(hovering ? p.surfaceMuted : p.surface, in: Capsule())
-            .overlay(Capsule().strokeBorder(p.border, lineWidth: 1))
-            .contentShape(Capsule())
-            .motion(hovering, Motion.quick)
-        }
-        .buttonStyle(.fn)
-        .disabled(disabled)
-        .opacity(disabled ? 0.45 : 1)
-        .help(help)
-        .accessibilityLabel(help)
-        .onHover { hovering = $0 && !disabled }
-    }
-}
-
 /// "LM Studio is running" with a Stop button, while a local server is on.
 private struct ServerRunningRow: View {
     @Environment(\.palette) private var p
@@ -399,7 +291,7 @@ private struct ServerRunningRow: View {
                 .foregroundStyle(p.danger)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(p.dangerSubtle, in: Capsule())
+                .background(p.dangerSubtle, in: Capsule(style: .circular))
                 .disabled(working)
         }
         .padding(.horizontal, 12)
@@ -416,8 +308,8 @@ extension Tab {
         switch self {
         case .today: return "today"
         case .notes: return "note"
-        case .todo: return "todo"
-        case .finance: return "finance"
+        case .todo: return "calendar"
+        case .finance: return "wallet"
         case .transcribe: return "wave"
         case .library: return "book"
         }

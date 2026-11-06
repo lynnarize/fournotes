@@ -129,7 +129,7 @@ struct StatusPill: View {
         .foregroundStyle(c.fg)
         .padding(.horizontal, 8)
         .frame(height: 22)
-        .background(c.bg, in: Capsule())
+        .background(c.bg, in: Capsule(style: .circular))
         .animation(Motion.standard, value: text)
         .fixedSize()
     }
@@ -190,7 +190,7 @@ struct SegmentedTabs: View {
                         .frame(height: 30)
                         .background {
                             if on {
-                                Capsule()
+                                Capsule(style: .circular)
                                     .fill(scheme == .dark ? p.surfaceRaised : p.surface)
                                     .shadow(color: .black.opacity(0.06), radius: 1, y: 1)
                                     .matchedGeometryEffect(id: "segment", in: raised)
@@ -203,7 +203,7 @@ struct SegmentedTabs: View {
                             }
                         }
                         .animation(Motion.standard, value: alert == item.id && !on)
-                        .contentShape(Capsule())
+                        .contentShape(Capsule(style: .circular))
                 }
                 .buttonStyle(.fn)
                 .onHover { hovered = $0 ? item.id : (hovered == item.id ? nil : hovered) }
@@ -211,7 +211,7 @@ struct SegmentedTabs: View {
             }
         }
         .padding(3)
-        .background(p.surfaceMuted, in: Capsule())
+        .background(p.surfaceMuted, in: Capsule(style: .circular))
     }
 }
 

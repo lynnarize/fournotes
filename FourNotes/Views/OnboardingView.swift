@@ -127,8 +127,8 @@ struct OnboardingView: View {
                     .foregroundStyle(p.accentForeground)
                     .padding(.horizontal, 20)
                     .frame(height: 44)
-                    .background(p.accent, in: Capsule())
-                    .contentShape(Capsule())
+                    .background(p.accent, in: Capsule(style: .circular))
+                    .contentShape(Capsule(style: .circular))
                 }
                 .buttonStyle(.fn)
                 .keyboardShortcut(.defaultAction)
@@ -246,8 +246,8 @@ struct OnboardingView: View {
                         .foregroundStyle(p.accentForeground)
                         .padding(.horizontal, 24)
                         .frame(height: 50)
-                        .background(p.accent, in: Capsule())
-                        .contentShape(Capsule())
+                        .background(p.accent, in: Capsule(style: .circular))
+                        .contentShape(Capsule(style: .circular))
                     }
                     .buttonStyle(.fn)
                     .keyboardShortcut(.defaultAction)
@@ -257,9 +257,9 @@ struct OnboardingView: View {
                             .foregroundStyle(p.foreground)
                             .padding(.horizontal, 22)
                             .frame(height: 50)
-                            .background(p.surface, in: Capsule())
-                            .overlay(Capsule().strokeBorder(p.borderStrong, lineWidth: 1))
-                            .contentShape(Capsule())
+                            .background(p.surface, in: Capsule(style: .circular))
+                            .overlay(Capsule(style: .circular).strokeBorder(p.borderStrong, lineWidth: 1))
+                            .contentShape(Capsule(style: .circular))
                     }
                     .buttonStyle(.fn)
                 }
@@ -313,7 +313,7 @@ struct OnboardingView: View {
                         .foregroundStyle(p.success)
                         .padding(.horizontal, 12)
                         .frame(height: 32)
-                        .background(p.successSubtle, in: Capsule())
+                        .background(p.successSubtle, in: Capsule(style: .circular))
                     }
                     // `.field .field-lg`
                     SecureField("", text: $keyDraft, prompt: Text("Anthropic key (optional), sk-ant-…").foregroundStyle(p.textMuted))
@@ -322,8 +322,8 @@ struct OnboardingView: View {
                         .foregroundStyle(p.foreground)
                         .padding(.horizontal, 16)
                         .frame(height: 44)
-                        .background(p.surface, in: Capsule())
-                        .overlay(Capsule().strokeBorder(p.border, lineWidth: 1))
+                        .background(p.surface, in: Capsule(style: .circular))
+                        .overlay(Capsule(style: .circular).strokeBorder(p.border, lineWidth: 1))
                         .onSubmit(primary)
                     Text("Prefer OpenRouter, OpenAI or a model on this Mac? Add it in \(Text("Settings, AI and keys").font(FN.font(13, .medium)).foregroundStyle(p.foreground)).")
                         .font(FN.font(13))
@@ -751,8 +751,8 @@ private struct WelcomePicture: View {
 
     var body: some View {
         let rows: [(icon: String, title: String, detail: String, trailing: String, faded: Bool)] = [
-            ("finance", "Kopi Kenangan", "Finance, food and drink", Money.format(25_000, "IDR"), false),
-            ("todo", "Pay the electricity bill", "To-Do, reminder set", "Tomorrow, 9:00", false),
+            ("finance", "Kopi Kenangan", "Money, food and drink", Money.format(25_000, "IDR"), false),
+            ("todo", "Pay the electricity bill", "Planner, reminder set", "Tomorrow, 9:00", false),
             ("note", "Singapore trip", "Notes, flights on the 12th, hotel near Bugis", "Yesterday", true),
         ]
         VStack(alignment: .leading, spacing: 14) {
@@ -997,7 +997,7 @@ private struct BriefTiles: View {
                             .foregroundStyle(p.accent)
                             .padding(.horizontal, 8)
                             .frame(height: 20)
-                            .background(p.accentSubtle, in: Capsule())
+                            .background(p.accentSubtle, in: Capsule(style: .circular))
                     }
                     Spacer(minLength: 0)
                     Circle()
@@ -1050,7 +1050,7 @@ private struct BriefTiles: View {
                 let lit = beat % 4 == i
                 HStack(spacing: 9) {
                     Text(row.0).font(FN.font(10)).foregroundStyle(lit ? p.accent : p.textMuted).frame(width: 12)
-                    Capsule().fill(lit ? p.accent : p.controlTrack).frame(width: row.1, height: 5)
+                    Capsule(style: .circular).fill(lit ? p.accent : p.controlTrack).frame(width: row.1, height: 5)
                 }
                 .offset(x: lit ? 3 : 0)
             }
@@ -1061,7 +1061,7 @@ private struct BriefTiles: View {
 /// Everything the app does, around its mark.
 private struct FeatureOrbit: View {
     @Environment(\.palette) private var p
-    private let items = [("note", "Notes"), ("todo", "To-Do"), ("finance", "Finance"), ("scan", "Scan"), ("mic", "Voice"), ("search", "Search")]
+    private let items = [("note", "Notes"), ("todo", "Planner"), ("finance", "Money"), ("scan", "Scan"), ("mic", "Voice"), ("search", "Search")]
     private let r: CGFloat = 124
 
     var body: some View {
@@ -1110,8 +1110,8 @@ private struct CelebrationRow: View {
                 .foregroundStyle(p.foreground)
                 .padding(.horizontal, 22)
                 .frame(minHeight: 50)
-                .background(p.surface, in: Capsule())
-                .overlay(Capsule().strokeBorder(p.border, lineWidth: 1))
+                .background(p.surface, in: Capsule(style: .circular))
+                .overlay(Capsule(style: .circular).strokeBorder(p.border, lineWidth: 1))
                 .arrive(0.35)
             HStack(spacing: 12) {
                 ForEach(["note", "todo", "today"], id: \.self) { tile($0) }
@@ -1208,7 +1208,7 @@ private struct EdgeDockDemo: View {
                 .position(x: 150, y: size.height / 2 + 8)
 
             let shape = EdgeTabShape(geometry)
-            shape.fill(style.materialSolid)
+            shape.fill(style.frame)
                 .shadow(color: .black.opacity(open ? 0.3 : 0.18), radius: open ? 16 : 4, y: open ? 6 : 1)
             shape.stroke(style.hair, lineWidth: 1)
 
@@ -1262,9 +1262,9 @@ private struct EdgeDockDemo: View {
             }
             .padding(8)
             VStack(alignment: .leading, spacing: 7) {
-                Capsule().fill(s.ink.opacity(0.55)).frame(width: 90, height: 6)
+                Capsule(style: .circular).fill(s.ink.opacity(0.55)).frame(width: 90, height: 6)
                 ForEach([150, 170, 128, 160, 100], id: \.self) { w in
-                    Capsule().fill(s.faint.opacity(0.35)).frame(width: CGFloat(w), height: 4)
+                    Capsule(style: .circular).fill(s.faint.opacity(0.35)).frame(width: CGFloat(w), height: 4)
                 }
             }
             .padding(.horizontal, 14)
@@ -1430,7 +1430,7 @@ private struct LevelBars: View {
             HStack(spacing: 2) {
                 ForEach(0..<16, id: \.self) { i in
                     let wave = active ? (0.35 + 0.65 * abs(sin(t * 5.2 + Double(i) * 0.7) * cos(t * 2.1 + Double(i) * 0.3))) : 0.12
-                    Capsule()
+                    Capsule(style: .circular)
                         .fill(active ? tint.opacity(0.5 + 0.5 * Double(i) / 16) : idle.opacity(0.5))
                         .frame(width: 2.5, height: max(2.5, 16 * wave))
                 }

@@ -160,7 +160,7 @@ private struct FNSwitch: View {
     var body: some View {
         let on = configuration.isOn
         Button { withAnimation(Motion.standard) { configuration.isOn.toggle() } } label: {
-            Capsule()
+            Capsule(style: .circular)
                 .fill(on ? p.accent : p.controlTrack)
                 .frame(width: 44, height: 26)
                 .overlay(alignment: on ? .trailing : .leading) {
@@ -173,7 +173,7 @@ private struct FNSwitch: View {
                         .padding(3)
                 }
                 .opacity(enabled ? 1 : 0.45)
-                .contentShape(Capsule())
+                .contentShape(Capsule(style: .circular))
         }
         .buttonStyle(.plain)
         .accessibilityRepresentation {

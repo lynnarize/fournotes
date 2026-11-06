@@ -144,9 +144,9 @@ struct TaskPanel: View {
                 .foregroundStyle(p.foreground)
                 .frame(maxWidth: .infinity)
                 .frame(height: 32)
-                .background(p.surface, in: Capsule())
-                .overlay(Capsule().strokeBorder(p.border, lineWidth: 1))
-                .contentShape(Capsule())
+                .background(p.surface, in: Capsule(style: .circular))
+                .overlay(Capsule(style: .circular).strokeBorder(p.border, lineWidth: 1))
+                .contentShape(Capsule(style: .circular))
         }
         .buttonStyle(.fn)
     }

@@ -85,10 +85,10 @@ private struct RecipesLabel: View {
         .foregroundStyle(p.foreground)
         .padding(.horizontal, 14)
         .frame(height: 36)
-        .background(lit ? p.surfaceMuted : p.surface, in: Capsule())
-        .overlay(Capsule().strokeBorder(p.border, lineWidth: 1))
+        .background(lit ? p.surfaceMuted : p.surface, in: Capsule(style: .circular))
+        .overlay(Capsule(style: .circular).strokeBorder(p.border, lineWidth: 1))
         .motion(lit, Motion.quick)
-        .contentShape(Capsule())
+        .contentShape(Capsule(style: .circular))
         .onHover { hovering = $0 }
     }
 }

@@ -5,6 +5,8 @@ import SwiftUI
 // table whose rows open to edit and split.
 
 struct FinanceView: View {
+    /// The window is too narrow for the page and the side sheet together.
+    @State private var narrow = false
     @Environment(\.palette) private var p
     @EnvironmentObject private var store: Store
     @EnvironmentObject private var nav: Navigation
@@ -52,32 +54,45 @@ struct FinanceView: View {
     }
 
     private func page(scrollTo: @escaping (String) -> Void) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            header
-                .padding(.top, -8)
-                .padding(.bottom, 24)
+        HStack(alignment: .top, spacing: 12) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    PageHead(title: "Money") { header }
 
-            FinanceDashboard(
-                month: month, summary: summary, summarizing: summarizing,
-                onSummarize: { Task { await summarize() } },
-                onBudgets: { showBudgets = true },
-                onOpenTransactions: { scrollTo("transactions") },
-                onOpenTransaction: { id in openId = id; scrollTo("transactions") },
-                onAddIncome: {
-                    // The add bar switches to Income and waits for the amount.
-                    newCategory = "Income"
-                    scrollTo("add")
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { merchantFocused = true }
-                })
+                    dashboard(scrollTo: scrollTo)
 
-            addBar
-                .id("add")
-                .padding(.top, 24)
+                    addBar
+                        .id("add")
+                        .padding(.top, 24)
 
-            transactionsSection
-                .id("transactions")
-                .padding(.top, 24)
+                    transactionsSection
+                        .id("transactions")
+                        .padding(.top, 24)
+
+                    // No room for the side sheet: what it holds goes under the page.
+                    if narrow {
+                        dashboard(side: true, scrollTo: scrollTo).padding(.top, 32)
+                    }
+                }
+                .padding(.horizontal, 32)
+                .padding(.top, 28)
+                .padding(.bottom, 32)
+            }
+            .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
+            .paper(p)
+
+            if !narrow {
+                ScrollView {
+                    dashboard(side: true, scrollTo: scrollTo)
+                        .padding(.horizontal, 22)
+                        .padding(.vertical, 24)
+                }
+                .frame(width: 380)
+                .frame(maxHeight: .infinity)
+                .paper(p)
+            }
         }
+        .onGeometryChange(for: Bool.self, of: { $0.size.width < 1060 }) { narrow = $0 }
         .onAppear { if newCurrency.isEmpty { newCurrency = cur } }
         // The review is rewritten each time Finance opens after the month's
         // spending changed, or on a new day.
@@ -115,8 +130,8 @@ struct FinanceView: View {
                             .foregroundStyle(p.accentForeground)
                             .frame(maxWidth: .infinity)
                             .frame(height: 44)
-                            .background(p.accent, in: Capsule())
-                            .contentShape(Capsule())
+                            .background(p.accent, in: Capsule(style: .circular))
+                            .contentShape(Capsule(style: .circular))
                     }
                     .buttonStyle(.fn)
                 }
@@ -126,10 +141,25 @@ struct FinanceView: View {
         .fnSheet(isPresented: $showReport) { ReportView() }
     }
 
+    private func dashboard(side: Bool = false, scrollTo: @escaping (String) -> Void) -> some View {
+        FinanceDashboard(
+            month: month, summary: summary, summarizing: summarizing,
+            onSummarize: { Task { await summarize() } },
+            onBudgets: { showBudgets = true },
+            onOpenTransactions: { scrollTo("transactions") },
+            onOpenTransaction: { id in openId = id; scrollTo("transactions") },
+            onAddIncome: {
+                // The add bar switches to Income and waits for the amount.
+                newCategory = "Income"
+                scrollTo("add")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { merchantFocused = true }
+            },
+            side: side)
+    }
+
     // MARK: - Header
 
-    /// Under the page title (which carries the Beta badge): the month, scanning, and the
-    /// rest of Finance's actions.
+    /// Beside the page title: the month, scanning, and the rest of Money's actions.
     private var header: some View {
         HStack(spacing: 10) {
             Spacer(minLength: 0)
@@ -144,8 +174,8 @@ struct FinanceView: View {
                 MonthStep(icon: "chevron", help: "Next month") { month = FinanceMath.shiftMonth(month, by: 1) }
             }
             .frame(height: 36)
-            .background(p.surface, in: Capsule())
-            .overlay(Capsule().strokeBorder(p.border, lineWidth: 1))
+            .background(p.surface, in: Capsule(style: .circular))
+            .overlay(Capsule(style: .circular).strokeBorder(p.border, lineWidth: 1))
 
             SecondaryButton(title: "Scan receipt", icon: "scan") { assistant.pickAndScan() }
 

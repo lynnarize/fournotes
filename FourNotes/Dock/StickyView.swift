@@ -168,8 +168,8 @@ private struct StickyBubbleFace: View {
             .padding(.trailing, 14)
             .opacity(Double(max(0, (stretch - 0.55) / 0.45)))
         }
-        .overlay(Capsule().strokeBorder(d.hair, lineWidth: 1))
-        .contentShape(Capsule())
+        .overlay(Capsule(style: .circular).strokeBorder(d.hair, lineWidth: 1))
+        .contentShape(Capsule(style: .circular))
         .onTapGesture { dock.openSticky(id) }
         .help(title)
         .accessibilityElement()
@@ -599,8 +599,8 @@ private struct OpenInAppButton: View {
             .foregroundStyle(paper.text.opacity(hovering ? 1 : 0.85))
             .padding(.horizontal, 8)
             .frame(height: 26)
-            .background(paper.text.opacity(hovering ? 0.07 : 0), in: Capsule())
-            .contentShape(Capsule())
+            .background(paper.text.opacity(hovering ? 0.07 : 0), in: Capsule(style: .circular))
+            .contentShape(Capsule(style: .circular))
             .onHover { hovering = $0 }
             .animation(Motion.quick, value: hovering)
         }

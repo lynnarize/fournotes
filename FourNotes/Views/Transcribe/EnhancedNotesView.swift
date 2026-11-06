@@ -57,7 +57,7 @@ struct EnhancedNotesView: View {
                             .foregroundStyle(open == id ? p.accent : p.textMuted)
                             .padding(.horizontal, 7)
                             .frame(height: 22)
-                            .background(open == id ? p.accentSubtle : p.surfaceMuted, in: Capsule())
+                            .background(open == id ? p.accentSubtle : p.surfaceMuted, in: Capsule(style: .circular))
                     }
                     .buttonStyle(.fn)
                     .opacity(hovered == id || open == id ? 1 : 0)

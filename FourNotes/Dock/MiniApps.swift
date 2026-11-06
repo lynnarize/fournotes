@@ -148,7 +148,7 @@ struct TasksMini: View {
         let done = Glance.doneToday(todos)
 
         DockCard(title: "Today", accessory: AnyView(
-            DockRoundButton(icon: "arrowUpRight", help: "Open To-Do") { dock.showApp { $0.tab = .todo } }
+            DockRoundButton(icon: "arrowUpRight", help: "Open Planner") { dock.showApp { $0.tab = .todo } }
         )) {
             VStack(alignment: .leading, spacing: 10) {
                 DockSegments(selection: $mode, options: [(.due, "Due"), (.anytime, "Anytime")])
@@ -282,6 +282,8 @@ struct TranscribeMini: View {
     @Environment(\.dock) private var d
     @State private var notice: String?
     @State private var organizing = false
+    /// Opened from the drawer's microphone: it starts listening straight away.
+    var autoStart = false
 
     var body: some View {
         DockCard(title: "Transcribe", accessory: AnyView(accessory), footerVisible: showsActions, spacing: 12) {
@@ -347,6 +349,7 @@ struct TranscribeMini: View {
                                   action: save)
             }
         }
+        .onAppear { if autoStart && !t.isActive { start() } }
     }
 
     /// While listening: what's being said, and what can be done with it.
@@ -744,7 +747,7 @@ struct BillsMini: View {
         let items = Glance.upcoming(todos: store.liveTodos, transactions: store.liveTransactions,
                                     currency: currency, limit: 4)
         DockCard(title: "Coming up", accessory: AnyView(
-            DockRoundButton(icon: "arrowUpRight", help: "Open Finance") { dock.showApp { $0.tab = .finance } }
+            DockRoundButton(icon: "arrowUpRight", help: "Open Money") { dock.showApp { $0.tab = .finance } }
         ), spacing: 6) {
             VStack(alignment: .leading, spacing: 0) {
                 if items.isEmpty {
@@ -834,6 +837,8 @@ struct AskMini: View {
     @State private var askedId: UUID?
     /// Sent, not yet seen in the conversation.
     @State private var pending: (text: String, after: Int)?
+    /// Typed into the drawer's input: sent as soon as this opens.
+    var firstQuestion: String?
 
     private static let suggestions = ["What's due this week?", "Food spend this month?", "Remind me to stretch at 4pm"]
 
@@ -865,6 +870,11 @@ struct AskMini: View {
             .animation(Motion.standard, value: assistant.busy)
             .animation(Motion.standard, value: reply?.id)
             .onChange(of: assistant.messages.count) { _, count in track(count) }
+            .task(id: firstQuestion) {
+                guard let firstQuestion else { return }
+                draft = firstQuestion
+                send()
+            }
         }
     }
 
@@ -1008,7 +1018,7 @@ struct AskMini: View {
                                 .padding(.leading, 7)
                                 .padding(.trailing, 9)
                                 .frame(height: 24)
-                                .overlay(Capsule().strokeBorder(d.hair, lineWidth: 1))
+                                .overlay(Capsule(style: .circular).strokeBorder(d.hair, lineWidth: 1))
                                 .frame(maxWidth: 220, alignment: .leading)
                             }
                             .buttonStyle(.fn)
@@ -1101,9 +1111,9 @@ private struct FlowChip: View {
                 .foregroundStyle(hovering ? d.text : d.secondary)
                 .padding(.horizontal, 10)
                 .frame(height: 26)
-                .background(hovering ? d.fill : .clear, in: Capsule())
-                .overlay(Capsule().strokeBorder(d.hair, lineWidth: 1))
-                .contentShape(Capsule())
+                .background(hovering ? d.fill : .clear, in: Capsule(style: .circular))
+                .overlay(Capsule(style: .circular).strokeBorder(d.hair, lineWidth: 1))
+                .contentShape(Capsule(style: .circular))
         }
         .buttonStyle(.fn)
         .onHover { hovering = $0 }

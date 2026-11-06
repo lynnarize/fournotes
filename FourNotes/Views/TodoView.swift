@@ -12,6 +12,9 @@ private let DONE_SHOWN = 30
 private let COLUMN_MIN: CGFloat = 250
 
 /// What the board shows: everything, or one kind of task.
+/// How the Planner shows things, remembered per Mac.
+private enum PlannerMode: String, CaseIterable { case day, list, board }
+
 private enum BoardFilter: String, CaseIterable {
     case all, week, repeating, bills, linked
 
@@ -96,6 +99,9 @@ struct TodoView: View {
     @State private var boardWidth: CGFloat = 0
     @State private var filter: BoardFilter = .all
 
+    @AppStorage("fournotes.planner.view") private var viewRaw = PlannerMode.day.rawValue
+    @State private var dayOffset = 0
+    private var view: PlannerMode { PlannerMode(rawValue: viewRaw) ?? .day }
     private var live: [Todo] { store.liveTodos }
     private var openTodo: Todo? { live.first { $0.id == openId } }
 
@@ -112,22 +118,34 @@ struct TodoView: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 16) {
+        HStack(alignment: .top, spacing: 12) {
             if !(expanded && openTodo != nil) {
-                VStack(alignment: .leading, spacing: 0) {
-                    toolbar
-
-                    if live.isEmpty {
-                        EmptyStart(
-                            title: "Nothing to do yet",
-                            hint: "Press New, or ask the assistant — it understands dates, reminders and repeats.",
-                            prompts: ["Remind me to pay rent every month on the 5th at 9am",
-                                      "Call the dentist tomorrow at 10am"])
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        head
+                        if live.isEmpty {
+                            EmptyStart(
+                                title: "Nothing to do yet",
+                                hint: "Press New, or ask the assistant — it understands dates, reminders and repeats.",
+                                prompts: ["Remind me to pay rent every month on the 5th at 9am",
+                                          "Call the dentist tomorrow at 10am"])
+                        }
+                        switch view {
+                        case .day:
+                            PlannerDay(todos: live, offset: $dayOffset, openId: openId, onOpen: show, onToggle: toggle)
+                        case .list:
+                            PlannerList(todos: live, openId: openId, onOpen: show, onToggle: toggle)
+                        case .board:
+                            filters
+                            board
+                        }
                     }
-
-                    board
+                    .padding(.horizontal, 32)
+                    .padding(.top, 28)
+                    .padding(.bottom, 32)
                 }
-                .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+                .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .paper(p)
                 .transition(.opacity)
             }
 
@@ -139,8 +157,9 @@ struct TodoView: View {
                     // A's reminder suggestion stays on screen for task B, and a
                     // new task's title field never takes focus.
                     .id(todo.id)
-                    .frame(width: expanded ? nil : 420)
-                    .frame(maxWidth: expanded ? .infinity : nil)
+                    .frame(width: expanded ? nil : 400)
+                    .frame(maxWidth: expanded ? .infinity : nil, maxHeight: .infinity)
+                    .paper(p)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
@@ -154,33 +173,46 @@ struct TodoView: View {
         }
     }
 
-    /// "2 open, 1 done this week", New, and the filters.
-    private var toolbar: some View {
+    private func toggle(_ todo: Todo) {
+        move(todo.id, to: todo.done ? .todo : .done)
+    }
+
+    /// The title, the date or how much is open, the view, and New.
+    private var head: some View {
         let weekAgo = Date().addingTimeInterval(-7 * 86_400)
         let doneThisWeek = live.filter { $0.done && (DateKit.date($0.completedAt).map { $0 >= weekAgo } ?? false) }.count
-        return VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 12) {
-                Text("\(live.filter { !$0.done }.count) open, \(doneThisWeek) done this week")
-                    .font(FN.font(16))
-                    .monospacedDigit()
-                    .foregroundStyle(p.textSecondary)
-                Spacer()
-                PrimaryButton(title: "New task", icon: "plus") { create(.todo) }
+        let day = Calendar.current.date(byAdding: .day, value: dayOffset, to: Date()) ?? Date()
+        let date = day.formatted(.dateTime.weekday(.wide).month(.wide).day().year())
+        return PageHead(title: "Planner",
+                        sub: view == .day ? (dayOffset == 0 ? "Today, \(date)" : date)
+                            : "\(live.filter { !$0.done }.count) open, \(doneThisWeek) done this week") {
+            HStack(spacing: 8) {
+                if view == .day {
+                    if dayOffset != 0 { SecondaryButton(title: "Today") { dayOffset = 0 }.fixedSize() }
+                    IconButton("chevronLeft", size: 18, box: 34, help: "Previous day") { dayOffset -= 1 }
+                    IconButton("chevron", size: 18, box: 34, help: "Next day") { dayOffset += 1 }
+                }
+                SegmentedTabs(items: PlannerMode.allCases.map { ($0.rawValue, $0.rawValue.capitalized) },
+                              selection: Binding(get: { view.rawValue },
+                                                 set: { if let v = PlannerMode(rawValue: $0) { viewRaw = v.rawValue } }))
+                PrimaryButton(title: "New task", icon: "plus") { create(.todo) }.fixedSize()
             }
-            if !live.isEmpty {
-                HStack(spacing: 8) {
-                    ForEach(BoardFilter.allCases, id: \.self) { f in
-                        PillButton(title: f.label, selected: filter == f) {
-                            withAnimation(Motion.standard) { filter = f }
-                        }
+        }
+    }
+
+    @ViewBuilder
+    private var filters: some View {
+        if !live.isEmpty {
+            HStack(spacing: 8) {
+                ForEach(BoardFilter.allCases, id: \.self) { f in
+                    PillButton(title: f.label, selected: filter == f) {
+                        withAnimation(Motion.standard) { filter = f }
                     }
                 }
             }
+            .padding(.bottom, 20)
         }
-        .padding(.top, -8)
-        .padding(.bottom, 20)
     }
-
 
     /// The three columns share the width, never narrower than COLUMN_MIN;
     /// past that the row scrolls sideways. One layout for both cases: it used
@@ -514,7 +546,7 @@ private struct TodoCard: View {
         .foregroundStyle(p.textSecondary)
         .padding(.horizontal, 8)
         .frame(height: 24)
-        .background(p.surfaceMuted, in: Capsule())
+        .background(p.surfaceMuted, in: Capsule(style: .circular))
     }
 }
 

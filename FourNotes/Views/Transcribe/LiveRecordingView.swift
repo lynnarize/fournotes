@@ -94,8 +94,8 @@ private struct LiveStatus: View {
         HStack(spacing: 6) {
             Text(label).font(FN.small).foregroundStyle(p.textMuted)
             ZStack(alignment: .leading) {
-                Capsule().fill(p.surfaceMuted)
-                Capsule().fill(p.accent).frame(width: max(3, 56 * CGFloat(level)))
+                Capsule(style: .circular).fill(p.surfaceMuted)
+                Capsule(style: .circular).fill(p.accent).frame(width: max(3, 56 * CGFloat(level)))
                     .animation(.linear(duration: 0.1), value: level)
             }
             .frame(width: 56, height: 5)
@@ -120,7 +120,7 @@ private struct StopButton: View {
             .foregroundStyle(.white)
             .padding(.horizontal, 14)
             .frame(height: 32)
-            .background(p.danger, in: Capsule())
+            .background(p.danger, in: Capsule(style: .circular))
         }
         .buttonStyle(.fn)
         .disabled(recorder.status != .recording)

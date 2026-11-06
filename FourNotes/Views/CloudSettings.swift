@@ -78,20 +78,20 @@ struct CloudProviderTabs<Claude: View>: View {
                     .frame(height: 30)
                     .background {
                         if on {
-                            Capsule()
+                            Capsule(style: .circular)
                                 .fill(scheme == .dark ? p.surfaceRaised : p.surface)
                                 .shadow(color: .black.opacity(0.06), radius: 1, y: 1)
                                 .matchedGeometryEffect(id: "tab", in: raised)
                         }
                     }
-                    .contentShape(Capsule())
+                    .contentShape(Capsule(style: .circular))
                 }
                 .buttonStyle(.fn)
                 .accessibilityAddTraits(on ? .isSelected : [])
             }
         }
         .padding(3)
-        .background(p.surfaceMuted, in: Capsule())
+        .background(p.surfaceMuted, in: Capsule(style: .circular))
     }
 
     // MARK: - OpenRouter

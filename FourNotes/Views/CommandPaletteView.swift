@@ -271,12 +271,12 @@ struct CommandPaletteView: View {
                         nav.open(ChangeLink(kind: .notes, id: n.id))
                     })
                 case .todo(let t, _):
-                    out.append(Item(id: t.id, group: "To-Do", icon: "todo", label: t.title,
+                    out.append(Item(id: t.id, group: "Planner", icon: "todo", label: t.title,
                                     hint: t.done ? "Done" : Fmt.due(t.dueAt)) {
                         nav.open(ChangeLink(kind: .todos, id: t.id))
                     })
                 case .transaction(let t, _):
-                    out.append(Item(id: t.id, group: "Finance", icon: "finance", label: t.merchant,
+                    out.append(Item(id: t.id, group: "Money", icon: "finance", label: t.merchant,
                                     hint: "\(Money.format(t.amount, t.currency)) · \(t.date)") {
                         nav.open(ChangeLink(kind: .transactions, id: t.id))
                     })
@@ -292,8 +292,8 @@ struct CommandPaletteView: View {
         var commands: [Item] = [
             Item(id: "go-today", group: "Go to", icon: "today", label: "Today", hint: nil) { nav.tab = .today },
             Item(id: "go-notes", group: "Go to", icon: "note", label: "Notes", hint: nil) { nav.tab = .notes },
-            Item(id: "go-todo", group: "Go to", icon: "todo", label: "To-Do", hint: nil) { nav.tab = .todo },
-            Item(id: "go-finance", group: "Go to", icon: "finance", label: "Finance", hint: nil) { nav.tab = .finance },
+            Item(id: "go-todo", group: "Go to", icon: "todo", label: "Planner", hint: nil) { nav.tab = .todo },
+            Item(id: "go-finance", group: "Go to", icon: "finance", label: "Money", hint: nil) { nav.tab = .finance },
             Item(id: "go-library", group: "Go to", icon: "book", label: "Library", hint: nil) { nav.tab = .library },
             Item(id: "new-note", group: "Create", icon: "plus", label: "New note", hint: "n …") {
                 let n = store.addNote { $0.title = "" }

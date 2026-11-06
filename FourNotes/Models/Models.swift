@@ -8,14 +8,16 @@ import Foundation
 /// (Library), and Finance last. As on the web (src/components/Sidebar.tsx).
 /// `transcribe` is the Meetings page; the raw values are saved, so they don't change.
 enum Tab: String, CaseIterable, Codable, Identifiable {
-    case today, transcribe, notes, todo, library, finance
+    // Today, then calendar and tasks together, then meetings, notes, money and the library.
+    // The raw values stay the pages' old names, as they're kept in storage and links.
+    case today, todo, transcribe, notes, finance, library
     var id: String { rawValue }
     var title: String {
         switch self {
         case .today: return "Today"
         case .notes: return "Notes"
-        case .todo: return "To-Do"
-        case .finance: return "Finance"
+        case .todo: return "Planner"
+        case .finance: return "Money"
         case .transcribe: return "Meetings"
         case .library: return "Library"
         }

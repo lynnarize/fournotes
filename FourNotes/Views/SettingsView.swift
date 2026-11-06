@@ -23,6 +23,7 @@ private let PRIVACY_POINTS: [(icon: String, title: String, text: String)] = [
 
 struct SettingsView: View {
     @ObservedObject private var dock = EdgeDock.shared
+    @AppStorage(Palette.frameKey) private var frameRaw = "ink"
     @ObservedObject private var stickies = EdgeStickies.shared
     @ObservedObject private var updates = UpdateCheck.shared
     @ObservedObject private var sync = AppModel.shared.sync
@@ -275,6 +276,9 @@ struct SettingsView: View {
                     .padding(.top, 10)
             }
             SettingsGroup {
+                SettingsRow("Frame", description: "What's around the sheets. Dark themes keep the ink frame.") {
+                    SegmentedTabs(items: [("ink", "Ink"), ("light", "Light")], selection: $frameRaw)
+                }
                 SettingsRow("Accent", description: "Used for what's selected or active") {
                     AccentSwatches()
                 }
@@ -515,12 +519,12 @@ struct SettingsView: View {
                     }
                     SettingsBlock(spacing: 10) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Mini apps").font(FN.body).foregroundStyle(p.foreground)
-                            SettingsHint("What the dock shows. Drag a card by its title to move it, in either column.")
+                            Text("Sections").font(FN.body).foregroundStyle(p.foreground)
+                            SettingsHint("What the drawer shows under the input.")
                         }
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: .leading), count: 3),
                                   alignment: .leading, spacing: 8) {
-                            ForEach(MiniApp.allCases) { app in
+                            ForEach([MiniApp.tasks, .bills, .spend]) { app in
                                 Toggle(app.title, isOn: Binding(
                                     get: { !dock.hidden.contains(app) },
                                     set: { shown in dock.setHidden(app, !shown) }))
@@ -529,12 +533,6 @@ struct SettingsView: View {
                                     .foregroundStyle(p.foreground)
                             }
                         }
-                    }
-                    SettingsRow("Arrangement", description: "Put the cards back where they started") {
-                        SecondaryButton(title: "Reset layout", small: true) {
-                            withAnimation(Motion.standard) { dock.resetLayout() }
-                        }
-                        .disabled(dock.layout == MiniApp.defaultLayout)
                     }
                     SettingsRow("Open the dock now", description: "Or press ⇧⌘. from Four Notes") {
                         SecondaryButton(title: "Open", icon: "arrowUpRight", small: true) {

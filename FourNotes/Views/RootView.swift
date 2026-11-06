@@ -1,7 +1,7 @@
 import SwiftUI
 
-// The app shell: sidebar, the four views, and the chat dock.
-// Ported from src/app/page.tsx.
+// The app shell: the ink frame (toolbar and sidebar) around the sheets, the views on them,
+// and the chat dock. Ported from src/app/page.tsx.
 
 struct RootView: View {
     @Environment(\.palette) private var p
@@ -9,28 +9,39 @@ struct RootView: View {
     @EnvironmentObject private var nav: Navigation
     @EnvironmentObject private var assistant: Assistant
     @ObservedObject private var updates = UpdateCheck.shared
+    @State private var sidebarOpen = true
 
     var body: some View {
-        HStack(spacing: 0) {
+        VStack(spacing: 0) {
             if !focused {
-                SidebarView()
-                    .transition(.move(edge: .leading).combined(with: .opacity))
-                    .zIndex(1)
-                Rectangle().fill(p.border).frame(width: 1).zIndex(1)
+                ToolbarView(sidebarOpen: $sidebarOpen)
+                    .environment(\.palette, p.onFrame)
+                    .transition(.move(edge: .top).combined(with: .opacity))
             }
-            // Clipped, so a pane sliding out to the left (the notes list in
-            // focus mode) goes behind the sidebar instead of across it.
-            main.clipped()
+            HStack(spacing: 12) {
+                if !focused && sidebarOpen {
+                    SidebarView()
+                        .environment(\.palette, p.onFrame)
+                        .transition(.move(edge: .leading).combined(with: .opacity))
+                        .zIndex(1)
+                }
+                // Clipped, so a pane sliding out goes behind the sidebar instead of across it.
+                main.clipped()
+            }
+            .padding(.horizontal, focused ? 0 : 12)
+            .padding(.bottom, focused ? 0 : 12)
         }
+        // The toolbar sits in the hidden title bar, level with the traffic lights. The note
+        // editor keeps clear of them when it has the whole window.
+        .padding(.top, focused ? 28 : 0)
+        .ignoresSafeArea(.container, edges: .top)
         .animation(Motion.screen, value: focused)
-        // The page colour reaches up under the hidden title bar, which has no colour of
-        // its own: `main` is clipped at the safe area, so without this the strip above
-        // every page showed the window's white. As on the web, no wash behind Today.
-        .background(p.bg.ignoresSafeArea())
+        .animation(Motion.screen, value: sidebarOpen)
+        .background((focused ? p.bg : p.frame).ignoresSafeArea())
         // Pages scroll to the top edge cleanly, with no blur or fade laid over
         // the first lines.
         .scrollEdgeEffectHidden(true, for: .top)
-        .frame(minWidth: 900, minHeight: 600)
+        .frame(minWidth: 1040, minHeight: 640)
         .overlay { paletteOverlay }
         .animation(Motion.quick, value: nav.sheet == .palette)
         // First-run setup takes the whole window, not a sheet.
@@ -121,85 +132,30 @@ struct RootView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(p.bg)
         .entrance(delay: 0.03)
     }
 
+    /// Every view lays out its own sheets, each scrolling on its own.
     @ViewBuilder
     private var content: some View {
-        // Notes fills the window (its list and editor scroll on their own);
-        // other tabs scroll the page.
-        if nav.tab == .transcribe {
-            // A list of talks beside the open one, as Notes has it.
-            TranscribeView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if nav.tab == .library {
-            // Sources beside the open one, as Transcribe has it.
-            LibraryView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if nav.tab == .notes {
-            // Notes is a pair of panes running edge to edge — list, then
-            // editor — with its title inside the list, as in the reference.
-            NotesView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if nav.tab == .today, store.ready {
-            // Today scrolls itself: the page beside its cards, the conversation
-            // opening as a card in the page.
-            TodayView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    header
-                    tabContent
-                }
-                // md:px-8 and pb-24, as on the web.
-                .padding(.horizontal, 32)
-                .padding(.bottom, 96)
-                .frame(maxWidth: FN.maxContentWidth)
-                .frame(maxWidth: .infinity)
-            }
-        }
-    }
-
-    /// Every tab: same width, same side padding, same title position.
-    /// Today's big greeting stands in for the title.
-    @ViewBuilder
-    private var header: some View {
-        if nav.tab != .today {
-            HStack(spacing: 12) {
-                Text(nav.tab.title)
-                    .font(FN.display(36))
-                    .tracking(FN.displayTracking(36))
-                    .foregroundStyle(p.foreground)
-                if nav.tab == .finance {
-                    // Still being shaped: said plainly beside its name.
-                    StatusPill(text: "Beta", tone: .accent, dot: false)
-                }
-                if let space = store.spaceName {
-                    Chip(tone: nil) {
-                        Icon("users", size: 12)
-                        Text(space)
-                    }
-                }
-            }
-            .padding(.top, 32)
-            .padding(.bottom, 24)
-        }
-    }
-
-    @ViewBuilder
-    private var tabContent: some View {
         if !store.ready {
-            Text("Loading…").font(FN.body).foregroundStyle(p.muted)
+            Text("Loading…")
+                .font(FN.body)
+                .foregroundStyle(p.muted)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .paper(p)
         } else {
-            switch nav.tab {
-            case .today: TodayView()
-            case .notes: EmptyView()
-            case .todo: TodoView()
-            case .finance: FinanceView()
-            case .transcribe, .library: EmptyView()
+            Group {
+                switch nav.tab {
+                case .today: TodayView()
+                case .notes: NotesView()
+                case .todo: TodoView()
+                case .finance: FinanceView()
+                case .transcribe: TranscribeView()
+                case .library: LibraryView()
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }

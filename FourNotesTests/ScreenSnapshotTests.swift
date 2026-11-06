@@ -50,11 +50,19 @@ struct ScreenSnapshotTests {
         }
     }
 
+    @Test("The edge dock's drawer")
+    func edgeDrawer() throws {
+        for dark in [false, true] {
+            let style: DockStyle = dark ? .dark : .light
+            try render(EdgeDrawer(dock: .shared).environment(\.dock, style).background(style.frame), name: "edge-drawer",
+                       dark: dark, size: CGSize(width: DockGeometry.drawerWidth, height: DockGeometry.drawerMaxHeight))
+        }
+    }
+
     @Test("Finance, the whole page")
     func financePage() throws {
         for dark in [false, true] {
-            try render(ScrollView { FinanceView().padding(.horizontal, 32) }, name: "finance-page", dark: dark,
-                       size: CGSize(width: 1032, height: 2000))
+            try render(FinanceView(), name: "finance-page", dark: dark, size: CGSize(width: 1280, height: 1400))
         }
     }
 

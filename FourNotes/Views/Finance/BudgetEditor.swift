@@ -110,7 +110,7 @@ struct CategoryEditor: View {
                     .foregroundStyle(custom ? p.text : p.muted)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(p.hover, in: Capsule())
+                    .background(p.hover, in: Capsule(style: .circular))
                     .transition(.scale(scale: 0.85).combined(with: .opacity))
                 }
             }

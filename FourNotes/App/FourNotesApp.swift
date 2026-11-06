@@ -121,7 +121,7 @@ struct FourNotesApp: App {
             .preferredColorScheme(theme.colorScheme)
             .background(OpenWindowCapture())
         }
-        .defaultSize(width: 1180, height: 780)
+        .defaultSize(width: 1360, height: 860)
         // No title bar. It held nothing but the app's name, and macOS 26 tints
         // it and draws a scroll-edge effect under it whenever a page scrolls
         // beneath — a band across the top that flickered in and out while

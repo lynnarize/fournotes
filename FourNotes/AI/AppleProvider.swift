@@ -190,7 +190,7 @@ struct AppleProvider {
         let lines = actions.map { action -> String in
             switch action {
             case let .createTodo(title, _, dueAt, _, _, _, rrule, bill, _):
-                var parts = ["Added “\(title)” to To-Do"]
+                var parts = ["Added “\(title)” to the Planner"]
                 if let dueAt { parts.append(Fmt.due(dueAt)) }
                 if let rrule { parts.append(Recurrence.label(rrule).lowercased()) }
                 if let bill { parts.append("bill \(money(bill.amount))") }

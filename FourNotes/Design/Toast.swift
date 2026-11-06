@@ -67,8 +67,8 @@ struct ToastStack: View {
                                 .foregroundStyle(p.foreground)
                                 .padding(.horizontal, 12)
                                 .frame(height: 32)
-                                .background(p.surfaceMuted, in: Capsule())
-                                .contentShape(Capsule())
+                                .background(p.surfaceMuted, in: Capsule(style: .circular))
+                                .contentShape(Capsule(style: .circular))
                         }
                         .buttonStyle(.fn)
                         .padding(.vertical, -4)

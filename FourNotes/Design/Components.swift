@@ -126,7 +126,7 @@ struct Chip<Content: View>: View {
             .foregroundStyle(tone ?? p.textSecondary)
             .padding(.horizontal, 8)
             .frame(minHeight: 20)
-            .background(tone.map { $0.opacity(0.12) } ?? p.surfaceMuted, in: Capsule())
+            .background(tone.map { $0.opacity(0.12) } ?? p.surfaceMuted, in: Capsule(style: .circular))
             // One line, truncated when there is no room — the chip used to
             // insist on its full width and spill out of whatever held it.
             .lineLimit(1)
@@ -154,7 +154,7 @@ struct Badge: View {
             .foregroundStyle(tone ?? p.accent)
             .padding(.horizontal, 6)
             .frame(height: 20)
-            .background(subtle ?? p.accentSubtle, in: Capsule())
+            .background(subtle ?? p.accentSubtle, in: Capsule(style: .circular))
             .fixedSize()
     }
 }
@@ -203,9 +203,9 @@ struct PillButton: View {
             .padding(.leading, 12)
             .padding(.trailing, regular ? 14 : 12)
             .frame(height: regular ? 36 : 32)
-            .background(selected ? p.accentSubtle : (hovering ? p.hover : .clear), in: Capsule())
-            .overlay(Capsule().strokeBorder(selected ? p.accent : p.border, lineWidth: 1))
-            .contentShape(Capsule())
+            .background(selected ? p.accentSubtle : (hovering ? p.hover : .clear), in: Capsule(style: .circular))
+            .overlay(Capsule(style: .circular).strokeBorder(selected ? p.accent : p.border, lineWidth: 1))
+            .contentShape(Capsule(style: .circular))
         }
         .buttonStyle(.fn)
         .onHover { hovering = $0 }
@@ -263,7 +263,7 @@ struct GhostButton<Label: View>: View {
                 .foregroundStyle(tone ?? (hovering ? p.foreground : p.textSecondary))
                 .padding(.horizontal, 10)
                 .frame(minHeight: 28)
-                .background(hovering ? p.hover : .clear, in: Capsule())
+                .background(hovering ? p.hover : .clear, in: Capsule(style: .circular))
                 .motion(hovering, Motion.quick)
                 .contentShape(Rectangle())
         }
@@ -303,11 +303,11 @@ struct KitButton: View {
             .foregroundStyle(foreground(lit))
             .padding(.horizontal, small ? 12 : large ? 20 : 14)
             .frame(height: small ? 32 : large ? 44 : 36)
-            .background(background(lit), in: Capsule())
-            .overlay { if kind == .secondary { Capsule().strokeBorder(p.border, lineWidth: 1) } }
+            .background(background(lit), in: Capsule(style: .circular))
+            .overlay { if kind == .secondary { Capsule(style: .circular).strokeBorder(p.border, lineWidth: 1) } }
             .opacity(off ? 0.45 : 1)
             .motion(lit, Motion.quick)
-            .contentShape(Capsule())
+            .contentShape(Capsule(style: .circular))
         }
         .buttonStyle(.fn)
         .disabled(disabled)
@@ -420,8 +420,8 @@ struct ProgressBar: View {
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
-                Capsule().fill(track ?? p.controlTrack)
-                Capsule().fill(tone)
+                Capsule(style: .circular).fill(track ?? p.controlTrack)
+                Capsule(style: .circular).fill(tone)
                     .frame(width: max(0, min(1, ratio)) * geo.size.width)
                     .motion(ratio, Motion.data)
             }
@@ -608,7 +608,7 @@ struct NumberStepper: View {
             step("plus", 1)
         }
         .frame(height: 28)
-        .overlay(Capsule().strokeBorder(p.border, lineWidth: 1))
+        .overlay(Capsule(style: .circular).strokeBorder(p.border, lineWidth: 1))
         .accessibilityElement()
         .accessibilityValue("\(value)")
         .accessibilityAdjustableAction { direction in

@@ -7,10 +7,146 @@ import SwiftUI
 
 private func cardHead(_ title: String, _ p: Palette) -> some View {
     Text(title)
-        .font(FN.font(16, .medium))
-        .foregroundStyle(p.foreground)
+        .font(FN.font(13, .semibold))
+        .foregroundStyle(p.textMuted)
         .lineLimit(1)
         .frame(maxWidth: .infinity, alignment: .leading)
+}
+
+/// A block on a side sheet: no card, a hairline above it.
+private struct GlanceBlock<Content: View>: View {
+    @Environment(\.palette) private var p
+    /// The insets the content was written for inside a card, taken back out.
+    var padding: CGFloat = 8
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        content()
+            .padding(.horizontal, padding == 8 ? -12 : 0)
+            .padding(.top, padding == 8 ? 2 : 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .overlay(alignment: .top) { Rectangle().fill(p.border).frame(height: 1) }
+    }
+}
+
+// MARK: - The summary
+
+/// The summary: one line for the day, then only what needs you, each with one button. Written
+/// from your own data, so it's there at once. With the assistant's summary on (Settings →
+/// Today), its lines take the rows' place.
+struct TodaySummary: View {
+    @Environment(\.palette) private var p
+    @EnvironmentObject private var nav: Navigation
+    @ObservedObject private var calendar = MeetingCalendar.shared
+    let tasks: [Todo]
+    let alerts: [String]
+    var written: AnyView?
+
+    private struct Row: Identifiable {
+        let id: String
+        let icon: String
+        let tone: Color
+        let wash: Color
+        let title: String
+        let meta: String
+        let action: String
+        let run: () -> Void
+    }
+
+    private static let words = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]
+    private func count(_ n: Int, _ one: String) -> String {
+        "\(n < Self.words.count ? Self.words[n] : String(n)) \(one)\(n == 1 ? "" : "s")"
+    }
+
+    private func rows(now: Date) -> [Row] {
+        var out: [Row] = []
+        if calendar.access == .allowed, let next = NextMeeting.pick(calendar.meetings, now: now),
+           Calendar.current.isDateInToday(next.shown.start) {
+            let m = next.shown
+            out.append(Row(id: "meeting", icon: "wave", tone: p.danger, wash: p.dangerSubtle,
+                           title: "\(m.title) at \(Fmt.time(m.start))", meta: m.detail, action: "Prepare") {
+                nav.assistantDraft = "Prepare me for \(m.title): "
+            })
+        }
+        if let task = tasks.first {
+            out.append(Row(id: "task", icon: "todo", tone: p.textSecondary, wash: p.surfaceMuted,
+                           title: task.title.isEmpty ? "Untitled task" : task.title,
+                           meta: DateKit.date(task.dueAt).map { Fmt.due(DateKit.iso($0)) } ?? "", action: "Start") {
+                nav.open(ChangeLink(kind: .todos, id: task.id))
+            })
+        }
+        if let alert = alerts.first {
+            let parts = alert.split(separator: "(", maxSplits: 1).map { $0.trimmingCharacters(in: CharacterSet(charactersIn: " )")) }
+            out.append(Row(id: "money", icon: "wallet", tone: p.warning, wash: p.warningSubtle,
+                           title: parts.first ?? alert, meta: parts.count > 1 ? parts[1] : "", action: "Review") {
+                nav.tab = .finance
+            })
+        }
+        return out
+    }
+
+    var body: some View {
+        let now = Date()
+        let rows = rows(now: now)
+        let meetings = calendar.access == .allowed
+            ? calendar.meetings.filter { Calendar.current.isDateInToday($0.start) && $0.end >= now }.count : 0
+        let parts = [meetings > 0 ? count(meetings, "meeting") : nil, tasks.isEmpty ? nil : count(tasks.count, "task")].compactMap { $0 }
+        let load = meetings + tasks.count
+        let line = load == 0 ? "A clear day." : "\(load <= 6 ? "A light day" : "A full day"): \(parts.joined(separator: ", "))."
+
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Icon("sparkle", size: 14)
+                Text("Summary").font(FN.font(12.5, .bold))
+            }
+            .foregroundStyle(p.ai)
+            .padding(.horizontal, 10)
+            .frame(height: 26)
+            .background(p.aiSubtle, in: Capsule(style: .circular))
+
+            Text("\(Text(line).foregroundStyle(p.foreground))\(Text(tail(rows.count)).foregroundStyle(p.textMuted))")
+                .font(FN.font(28, .semibold))
+                .tracking(-0.56)
+                .lineSpacing(4)
+                .padding(.top, 14)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let written {
+                written.padding(.top, 16)
+            } else {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(rows) { row($0) }
+                }
+                .padding(.top, 16)
+            }
+        }
+    }
+
+    /// " Three things need you."
+    private func tail(_ n: Int) -> String {
+        guard n > 0 else { return "" }
+        let things = count(n, "thing")
+        return " \(things.prefix(1).uppercased())\(things.dropFirst()) \(n == 1 ? "needs" : "need") you."
+    }
+
+    private func row(_ r: Row) -> some View {
+        HStack(spacing: 14) {
+            Icon(r.icon, size: 18)
+                .foregroundStyle(r.tone)
+                .frame(width: 34, height: 34)
+                .background(r.wash, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(r.title).font(FN.font(16, .medium)).foregroundStyle(p.foreground).lineLimit(1)
+                if !r.meta.isEmpty {
+                    Text(r.meta).font(FN.font(13.5)).foregroundStyle(p.textMuted).lineLimit(1)
+                }
+            }
+            Spacer(minLength: 8)
+            SecondaryButton(title: r.action, small: true, action: r.run).fixedSize()
+        }
+        .padding(10)
+        .padding(.horizontal, -10)
+    }
 }
 
 // MARK: - Next meeting
@@ -88,7 +224,7 @@ struct NextMeetingCard: View {
     private func card<Trailing: View, Content: View>(@ViewBuilder _ trailing: () -> Trailing,
                                                      @ViewBuilder content: () -> Content) -> some View {
         let trailing = trailing(), content = content()
-        return Card(padding: 8) {
+        return GlanceBlock {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 8) {
                     cardHead("Next meeting", p)
@@ -222,11 +358,11 @@ struct DueTodayCard: View {
 
     var body: some View {
         let shown = Array(tasks.prefix(5))
-        Card(padding: 8) {
+        GlanceBlock {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 8) {
                     cardHead("Due today", p)
-                    HeadLink(title: "All tasks") { nav.tab = .todo }
+                    HeadLink(title: "Planner") { nav.tab = .todo }
                 }
                 .padding(.horizontal, 12)
                 .padding(.top, 12)
@@ -417,15 +553,15 @@ struct SpentTodayCard: View {
                 : "\(todays.count) \(todays.count == 1 ? "purchase" : "purchases") today"
         }()
 
-        Card(padding: 20) {
+        GlanceBlock(padding: 20) {
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
                     cardHead("Spent today", p)
-                    HeadLink(title: "Finance") { nav.tab = .finance }
+                    HeadLink(title: "Money") { nav.tab = .finance }
                 }
                 Text(Money.format(total, cur))
-                    .font(FN.display(28))
-                    .tracking(FN.displayTracking(28))
+                    .font(FN.display(34))
+                    .tracking(FN.displayTracking(34))
                     .monospacedDigit()
                     .foregroundStyle(p.foreground)
                     .contentTransition(.numericText())
@@ -470,11 +606,11 @@ struct QuickNotesCard: View {
 
     var body: some View {
         let shown = Array(quickNotes.prefix(3))
-        Card(padding: 8) {
+        GlanceBlock {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 8) {
                     cardHead("Quick notes", p)
-                    Text("Today's go into the brief").font(FN.small).foregroundStyle(p.textMuted)
+                    Text("Today's go into the summary").font(FN.small).foregroundStyle(p.textMuted)
                 }
                 .padding(.horizontal, 12)
                 .padding(.top, 12)
@@ -491,7 +627,7 @@ struct QuickNotesCard: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
                     .frame(minHeight: 40)
-                    .background(p.surfaceMuted, in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
+                    .background(p.surface, in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous)
                         .strokeBorder(focused ? p.borderStrong : p.border, lineWidth: 1))
                     .motion(focused, Motion.quick)
@@ -505,7 +641,7 @@ struct QuickNotesCard: View {
 
                 if quickNotes.count > shown.count {
                     HeadLink(title: "All notes") { nav.tab = .notes }
-                        .padding(.horizontal, 8)
+                        .padding(.horizontal, 12)
                 }
             }
         }
@@ -601,8 +737,8 @@ struct QuietLabel: View {
         .foregroundStyle(hovering || open ? p.foreground : p.textMuted)
         .padding(.horizontal, 12)
         .frame(height: 32)
-        .background(hovering || open ? p.hover : .clear, in: Capsule())
-        .contentShape(Capsule())
+        .background(hovering || open ? p.hover : .clear, in: Capsule(style: .circular))
+        .contentShape(Capsule(style: .circular))
         .onHover { hovering = $0 }
         .motion(hovering, Motion.quick)
     }

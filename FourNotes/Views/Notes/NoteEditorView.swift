@@ -765,7 +765,7 @@ struct NoteEditorView: View {
                     }
                 }
                 .buttonStyle(.fn)
-                .help("Open in To-Do")
+                .help("Open in Planner")
             }
             ForEach(linkedTxs) { tx in
                 Button { nav.open(ChangeLink(kind: .transactions, id: tx.id)) } label: {
@@ -775,7 +775,7 @@ struct NoteEditorView: View {
                     }
                 }
                 .buttonStyle(.fn)
-                .help("Open in Finance")
+                .help("Open in Money")
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -864,7 +864,7 @@ struct NoteEditorView: View {
         .padding(.leading, 10)
         .padding(.trailing, 4)
         .frame(height: 26)
-        .background(p.surfaceMuted, in: Capsule())
+        .background(p.surfaceMuted, in: Capsule(style: .circular))
         .transition(.scale(scale: 0.9).combined(with: .opacity))
     }
 
@@ -880,7 +880,7 @@ struct NoteEditorView: View {
                     .foregroundStyle(hovering ? p.foreground : p.textMuted)
                     .padding(.horizontal, 10)
                     .frame(height: 26)
-                    .overlay(Capsule().strokeBorder(p.borderStrong, style: StrokeStyle(lineWidth: 1, dash: [3, 2])))
+                    .overlay(Capsule(style: .circular).strokeBorder(p.borderStrong, style: StrokeStyle(lineWidth: 1, dash: [3, 2])))
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.fn)

@@ -335,7 +335,7 @@ struct CreateTodoArgs {
 
 struct CreateTodoTool: Tool {
     let name = "create_todo"
-    let description = "Add a task or reminder to the To-Do tab — anything the user wants to do or be reminded of, with or without a time. Repeating bills (rent, internet, subscriptions) too."
+    let description = "Add a task or reminder to the Planner — anything the user wants to do or be reminded of, with or without a time. Repeating bills (rent, internet, subscriptions) too."
     let recorder: ActionRecorder
     let turn: TurnContext
 
@@ -441,7 +441,7 @@ struct AddTransactionArgs {
 
 struct AddTransactionTool: Tool {
     let name = "add_transaction"
-    let description = "Record money spent or received in the Finance tab, including pasted e-wallet and bank notifications."
+    let description = "Record money spent or received in the Money tab, including pasted e-wallet and bank notifications."
     let recorder: ActionRecorder
     let turn: TurnContext
 

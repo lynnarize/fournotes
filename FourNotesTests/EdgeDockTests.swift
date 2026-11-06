@@ -250,3 +250,39 @@ struct DockPointerTests {
         #expect(point.y == 10)
     }
 }
+
+@Suite("The edge drawer's one input")
+struct EdgeCaptureTests {
+    @Test("Nothing typed reads as nothing")
+    func empty() {
+        #expect(EdgeCapture.read("   ") == nil)
+    }
+
+    @Test("A question is asked", arguments: ["what's left today?", "How much on food", "when is rent due"])
+    func question(_ text: String) {
+        #expect(EdgeCapture.read(text) == .ask)
+    }
+
+    @Test("An amount is spending", arguments: ["kopi kenangan 38k", "lunch rp 25.000", "parkir 5rb"])
+    func spending(_ text: String) {
+        guard case .spend(let spend) = EdgeCapture.read(text) else {
+            Issue.record("\(text) wasn't read as spending")
+            return
+        }
+        #expect(spend.amount > 0)
+    }
+
+    @Test("A day or a time is a task")
+    func task() {
+        guard case .task(let title, _) = EdgeCapture.read("call Budi fri 9am") else {
+            Issue.record("not read as a task")
+            return
+        }
+        #expect(title.lowercased().contains("budi"))
+    }
+
+    @Test("Anything else is a note")
+    func note() {
+        #expect(EdgeCapture.read("the blue notebook she liked") == .note)
+    }
+}

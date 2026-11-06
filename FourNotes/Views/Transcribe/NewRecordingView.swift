@@ -156,9 +156,9 @@ struct NewRecordingView: View {
                         .font(FN.font(13))
                         .padding(.horizontal, 12)
                         .frame(height: 32)
-                        .background(on ? p.accentSubtle : p.surface, in: Capsule())
-                        .overlay(Capsule().strokeBorder(on ? p.accent : p.border, lineWidth: 1))
-                        .contentShape(Capsule())
+                        .background(on ? p.accentSubtle : p.surface, in: Capsule(style: .circular))
+                        .overlay(Capsule(style: .circular).strokeBorder(on ? p.accent : p.border, lineWidth: 1))
+                        .contentShape(Capsule(style: .circular))
                     }
                     .buttonStyle(.fn)
                     .frame(maxWidth: 240, alignment: .leading)

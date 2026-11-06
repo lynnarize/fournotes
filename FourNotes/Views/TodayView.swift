@@ -104,28 +104,33 @@ struct TodayView: View {
         // Computed once per render and handed down: each of these walks the
         // whole transaction list, and `alerts` walks it three times.
         let alerts = alerts
-        ScrollView {
-            let layout = narrow ? AnyLayout(VStackLayout(alignment: .leading, spacing: 32))
-                                : AnyLayout(HStackLayout(alignment: .top, spacing: 40))
-            layout {
-                mainColumn(alerts)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                VStack(spacing: 16) {
-                    NextMeetingCard()
-                    DueTodayCard(tasks: tasks, upcoming: upcoming, focus: focus)
-                    SpentTodayCard(yesterdayTotal: yesterdayTotal)
-                    QuickNotesCard(quickNotes: quickNotes)
+        HStack(alignment: .top, spacing: 12) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 32) {
+                    mainColumn(alerts)
+                    if narrow { glance }
                 }
-                .frame(width: narrow ? nil : 340)
-                .frame(maxWidth: narrow ? .infinity : nil)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 32)
+                .padding(.top, 28)
+                .padding(.bottom, 32)
             }
-            .frame(maxWidth: 1180)
-            .padding(.horizontal, 32)
-            .padding(.top, nav.todayChat ? 40 : 72)
-            .padding(.bottom, 48)
-            .frame(maxWidth: .infinity)
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
+            .paper(p)
+
+            if !narrow {
+                ScrollView {
+                    glance
+                        .padding(.horizontal, 22)
+                        .padding(.vertical, 24)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .frame(width: 380)
+                .frame(maxHeight: .infinity)
+                .paper(p)
+            }
         }
-        .scrollBounceBehavior(.basedOnSize)
         .onGeometryChange(for: Bool.self, of: { $0.size.width < 920 }) { narrow = $0 }
         .task {
             while !Task.isCancelled {
@@ -155,30 +160,41 @@ struct TodayView: View {
 
     /// The date, the greeting, the brief (until a conversation takes its place), and
     /// the assistant.
+    /// At a glance: on the side sheet, or under the page when the window is narrow.
+    private var glance: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("At a glance")
+                .font(FN.font(24, .bold))
+                .tracking(-0.6)
+                .foregroundStyle(p.foreground)
+            NextMeetingCard()
+            DueTodayCard(tasks: tasks, upcoming: upcoming, focus: focus)
+            SpentTodayCard(yesterdayTotal: yesterdayTotal)
+            QuickNotesCard(quickNotes: quickNotes)
+        }
+    }
+
     private func mainColumn(_ alerts: [String]) -> some View {
         VStack(alignment: .leading, spacing: 24) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(Self.dateLine(now))
-                    .font(FN.font(14))
-                    .foregroundStyle(p.textSecondary)
+            VStack(alignment: .leading, spacing: 6) {
                 Text("\(Fmt.greeting(now))\(firstName.map { ", \($0)" } ?? "")")
-                    .font(FN.display(52))
-                    .tracking(FN.displayTracking(52))
+                    .font(FN.display(40))
+                    .tracking(FN.displayTracking(40))
                     .foregroundStyle(p.foreground)
                     .lineLimit(2)
                     .minimumScaleFactor(0.7)
+                Text(Self.dateLine(now))
+                    .font(FN.font(15))
+                    .foregroundStyle(p.textMuted)
             }
 
             if !nav.todayChat {
                 VStack(alignment: .leading, spacing: 16) {
                     if isEmptyApp {
                         emptyPrompt
-                    } else if briefStyle == .paragraph {
-                        paragraph(alerts)
                     } else {
-                        pointByPoint(alerts)
+                        TodaySummary(tasks: tasks, alerts: alerts, written: briefStyle == .points ? AnyView(pointByPoint(alerts)) : nil)
                     }
-                    if !isEmptyApp { briefControls }
                     if let briefError, briefStyle == .points {
                         Text(briefError)
                             .font(FN.font(13))
@@ -186,7 +202,7 @@ struct TodayView: View {
                             .transition(.opacity)
                     }
                 }
-                .frame(maxWidth: 600, alignment: .leading)
+                .frame(maxWidth: 920, alignment: .leading)
                 .transition(.opacity.combined(with: .offset(y: -6)))
             }
 

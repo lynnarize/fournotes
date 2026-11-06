@@ -236,15 +236,15 @@ enum BriefStyle: String, CaseIterable, Sendable {
 
     var label: String {
         switch self {
-        case .paragraph: return "One paragraph"
-        case .points: return "Point by point"
+        case .paragraph: return "From your data"
+        case .points: return "From the assistant"
         }
     }
 
     var detail: String {
         switch self {
-        case .paragraph: return "Your day told as a short story. Click an underlined phrase for the details."
-        case .points: return "The written brief, then each task and heads-up on its own line."
+        case .paragraph: return "One line for the day, then only what needs you. There at once, with no model."
+        case .points: return "The same line, then the assistant's own words on what matters today."
         }
     }
 

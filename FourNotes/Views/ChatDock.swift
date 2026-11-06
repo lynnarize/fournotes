@@ -323,7 +323,7 @@ struct OnDeviceMark: View {
         .foregroundStyle(p.faint)
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
-        .background(p.hover, in: Capsule())
+        .background(p.hover, in: Capsule(style: .circular))
         .help(origin == .onDeviceFallback
               ? "The cloud model didn’t answer, so \(name ?? "this Mac") replied here. Nothing left this Mac."
               : "Answered by \(name ?? "Apple Intelligence") on this Mac. Nothing left this Mac.")
@@ -347,7 +347,7 @@ struct CloudMark: View {
         .foregroundStyle(p.faint)
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
-        .background(p.hover, in: Capsule())
+        .background(p.hover, in: Capsule(style: .circular))
         .help("Answered by \(name) in the cloud, because you asked for it.")
         .accessibilityLabel("Answered by \(name) in the cloud")
     }
@@ -412,12 +412,12 @@ private struct AskPill: View {
             .padding(.trailing, 16)
             .frame(height: 44)
             .background {
-                Capsule().fill(p.surface)
+                Capsule(style: .circular).fill(p.surface)
                     .shadow(color: p.shadowStrong, radius: 24, y: 10)
                     .shadow(color: p.shadow, radius: 5, y: 2)
             }
-            .overlay(Capsule().strokeBorder(p.border, lineWidth: 1))
-            .contentShape(Capsule())
+            .overlay(Capsule(style: .circular).strokeBorder(p.border, lineWidth: 1))
+            .contentShape(Capsule(style: .circular))
         }
         .buttonStyle(.fn)
         .onHover { hovering = $0 }
@@ -463,7 +463,7 @@ struct TypingDots: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(p.hover.opacity(0.6), in: Capsule())
+        .background(p.hover.opacity(0.6), in: Capsule(style: .circular))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label ?? "Thinking")
     }

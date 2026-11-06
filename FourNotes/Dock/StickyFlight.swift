@@ -72,7 +72,7 @@ struct StickyFlightView: View {
                     .font(.system(size: 12, weight: .semibold))
                     .lineLimit(2)
                 ForEach(0..<3, id: \.self) { i in
-                    Capsule().frame(width: [86, 100, 62][i], height: 3).opacity(0.35)
+                    Capsule(style: .circular).frame(width: [86, 100, 62][i], height: 3).opacity(0.35)
                 }
             }
             .foregroundStyle(paper.text)

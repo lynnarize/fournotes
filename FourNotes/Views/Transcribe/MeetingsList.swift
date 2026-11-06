@@ -241,7 +241,7 @@ private struct NowLine: View {
             .foregroundStyle(p.accent)
             .padding(.horizontal, 10)
             .frame(height: 24)
-            .background(p.accentSubtle, in: Capsule())
+            .background(p.accentSubtle, in: Capsule(style: .circular))
             .fixedSize()
             Rectangle().fill(p.accent.opacity(0.35)).frame(height: 1)
         }

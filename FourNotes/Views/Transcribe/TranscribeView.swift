@@ -41,12 +41,7 @@ struct TranscribeView: View {
 
     var body: some View {
         let detail = detail
-        HStack(alignment: .top, spacing: 0) {
-            listColumn(selected: detail)
-                .frame(width: 330)
-                .background(p.background)
-                .zIndex(1)
-            Rectangle().fill(p.border).frame(width: 1).zIndex(1)
+        HStack(alignment: .top, spacing: 12) {
             Group {
                 switch detail {
                 case .new:
@@ -64,12 +59,17 @@ struct TranscribeView: View {
                     emptyDetail
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .transition(.opacity.combined(with: .offset(x: 8)))
+            .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
+            .paper(p)
+            .transition(.opacity.combined(with: .offset(x: -8)))
+            listColumn(selected: detail)
+                .frame(width: 340)
+                .frame(maxHeight: .infinity)
+                .paper(p)
+                .zIndex(1)
         }
         .frame(maxHeight: .infinity)
         .animation(Motion.screen, value: detail)
-        .background(p.bg)
         .task { recorder.resumeInterrupted() }
         .task(id: nav.focus) {
             guard let link = nav.consumeFocus([.talks]) else { return }
@@ -99,8 +99,8 @@ struct TranscribeView: View {
                         .padding(.leading, 10)
                         .padding(.trailing, 14)
                         .frame(height: 36)
-                        .background(p.surface, in: Capsule())
-                        .overlay(Capsule().strokeBorder(p.border, lineWidth: 1))
+                        .background(p.surface, in: Capsule(style: .circular))
+                        .overlay(Capsule(style: .circular).strokeBorder(p.border, lineWidth: 1))
                     }
                     .buttonStyle(.fn)
                     .help("Go to the recording")

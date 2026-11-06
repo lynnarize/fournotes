@@ -80,132 +80,142 @@ struct FinanceDashboard: View {
         return v.map { sum += $0; return sum }
     }
 
+    /// The main sheet, or what's coming up on the side sheet.
+    var side = false
+    @State private var trends = false
+
     var body: some View {
         let spent = FinanceMath.spend(monthTxs, cur)
-        VStack(alignment: .leading, spacing: 24) {
-            kpis(spent)
-            review
-                .padding(.top, -4)
-            HStack(alignment: .top, spacing: 16) {
-                trendCard(spent)
-                    .frame(maxWidth: .infinity)
-                categoryCard(spent)
-                    .frame(width: 320)
+        if side {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Coming up")
+                    .font(FN.font(24, .bold))
+                    .tracking(-0.6)
+                    .foregroundStyle(p.foreground)
+                upcomingCard
+                splitsCard
+                budgetsCard
             }
-            .fixedSize(horizontal: false, vertical: true)
-            cardsGrid
+        } else {
+            VStack(alignment: .leading, spacing: 24) {
+                pulse
+                numbers(spent)
+                review
+                    .padding(.top, -4)
+                if trends {
+                    HStack(alignment: .top, spacing: 16) {
+                        trendCard(spent)
+                            .frame(maxWidth: .infinity)
+                        categoryCard(spent)
+                            .frame(width: 320)
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                    .transition(.opacity.combined(with: .offset(y: -6)))
+                }
+            }
+            .animation(Motion.standard, value: trends)
         }
     }
 
-    // MARK: - The month in four numbers
+    /// Numbers first: one number, what it's made of, and the chart one click away.
+    private func numbers(_ spent: Double) -> some View {
+        let byCat = Insights.spendByCategory(monthTxs, cur).filter { $0.value > 0 }
+            .sorted { $0.value > $1.value }.map { ($0.key, $0.value) }
+        return VStack(alignment: .leading, spacing: 0) {
+            Text(Money.format(spent, cur))
+                .font(FN.display(52))
+                .tracking(FN.displayTracking(52))
+                .monospacedDigit()
+                .foregroundStyle(p.foreground)
+            Text(isCurrent ? "Spent so far" : "Spent in \(Self.monthName(month))")
+                .font(FN.font(15))
+                .foregroundStyle(p.textMuted)
+                .padding(.top, 8)
+            if spent > 0 {
+                GeometryReader { geo in
+                    HStack(spacing: 2) {
+                        ForEach(Array(byCat.enumerated()), id: \.offset) { i, c in
+                            Rectangle()
+                                .fill(p.finSeries[i % p.finSeries.count])
+                                .frame(width: max(2, (geo.size.width - CGFloat(byCat.count - 1) * 2) * c.1 / spent))
+                        }
+                    }
+                }
+                .frame(height: 10)
+                .background(p.surfaceMuted)
+                .clipShape(Capsule(style: .circular))
+                .padding(.top, 16)
+                ForEach(Array(byCat.prefix(4).enumerated()), id: \.offset) { i, c in
+                    HStack(spacing: 10) {
+                        RoundedRectangle(cornerRadius: 3).fill(p.finSeries[i % p.finSeries.count]).frame(width: 10, height: 10)
+                        Text(c.0).font(FN.font(14.5)).foregroundStyle(p.foreground).lineLimit(1)
+                        Spacer(minLength: 8)
+                        Text(Money.format(c.1, cur)).font(FN.font(14.5, .semibold)).monospacedDigit().foregroundStyle(p.foreground)
+                        Text("\(Int((c.1 / spent * 100).rounded()))%").font(FN.font(14.5)).monospacedDigit().foregroundStyle(p.textMuted)
+                            .frame(width: 38, alignment: .trailing)
+                    }
+                    .padding(.top, 8)
+                }
+            }
+            Button { trends.toggle() } label: {
+                HStack(spacing: 10) {
+                    Icon("chart", size: 16)
+                    Text("Trends").font(FN.font(14, .semibold))
+                    Spacer()
+                    Text(trends ? "Hide" : "By day, month and year").font(FN.font(14, .medium)).foregroundStyle(p.textMuted)
+                }
+                .foregroundStyle(p.textSecondary)
+                .padding(.horizontal, 14)
+                .frame(height: 46)
+                .background(p.surface, in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous).strokeBorder(p.border, lineWidth: 1))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.fn)
+            .padding(.top, 14)
+        }
+    }
 
-    private func kpis(_ spent: Double) -> some View {
-        let prevSpent = FinanceMath.spend(prevTxs, cur)
+    // MARK: - The month in one sentence
+
+    /// The month as one sentence of counted chips.
+    private var pulse: some View {
         let income = FinanceMath.income(monthTxs, cur)
         // Today's pace: the budget left spread over the days left, or your usual day.
         let budgetTotal = store.settings.budgets.values.reduce(0, +)
         let spentToday = FinanceMath.spend(live.filter { $0.date == today }, cur)
         let before = FinanceMath.spend(monthTxs.filter { $0.date < today }, cur)
-        let daysLeft = days - dayOfMonth + 1
         let allowance = budgetTotal > 0
-            ? max(0, (budgetTotal - before) / Double(daysLeft))
+            ? max(0, (budgetTotal - before) / Double(days - dayOfMonth + 1))
             : before / Double(max(1, dayOfMonth - 1))
         let left = allowance - spentToday
-        let hasPace = allowance > 0 || budgetTotal > 0
-        let openThisMonth = monthTxs.filter { ($0.splits ?? []).contains { !$0.settled } }.count
-
-        return HStack(spacing: 0) {
-            kpi(isCurrent ? "Spent so far" : "Spent", Money.format(spent, cur)) {
-                let text = deltaText(spent, prevSpent)
-                if !text.isEmpty {
-                    HStack(alignment: .top, spacing: 4) {
-                        if prevSpent > 0 {
-                            Icon("arrowUpRight", size: 14).rotationEffect(.degrees(spent < prevSpent ? 90 : 0))
-                        }
-                        Text(text)
-                    }
-                }
+        return HStack(spacing: 8) {
+            Text(isCurrent ? "This month" : Self.monthName(month)).font(FN.font(16, .medium)).foregroundStyle(p.foreground)
+            if isCurrent && allowance > 0 {
+                pulseChip(left >= 0 ? "\(Money.format(left, cur)) left for today" : "\(Money.format(-left, cur)) over today's pace",
+                          red: left < 0)
             }
-            divider
-            if isCurrent {
-                if hasPace {
-                    kpi("Left for today", Money.format(max(0, left), cur)) {
-                        if left >= 0 {
-                            Text("Of a \(Money.format(allowance, cur)) daily pace")
-                        } else {
-                            Text("\(Money.format(-left, cur)) over today's pace").foregroundStyle(p.danger)
-                        }
-                    }
-                } else {
-                    kpi("Spent today", Money.format(spentToday, cur)) {
-                        InlineLink(title: "Set a budget for a daily pace", action: onBudgets)
-                    }
-                }
-            } else {
-                kpi("Daily average", Money.format(spent / Double(max(1, dayOfMonth)), cur)) {
-                    Text("Over \(Self.plural(dayOfMonth, "day"))")
-                }
+            if income > 0 { pulseChip("\(Money.format(income, cur)) income") } else {
+                Button(action: onAddIncome) { pulseChip("Add income") }.buttonStyle(.fn)
             }
-            divider
-            kpi("Income", Money.format(income, cur)) {
-                if income == 0 {
-                    InlineLink(title: "Add income to see what you save", action: onAddIncome)
-                } else if income >= spent {
-                    Text("You kept \(Money.format(income - spent, cur))")
-                } else {
-                    Text("\(Money.format(spent - income, cur)) more out than in")
-                }
-            }
-            divider
-            kpi("Transactions", "\(monthTxs.count)") {
-                if openThisMonth > 0 {
-                    Button("\(Self.plural(openThisMonth, "split bill")) still open", action: onOpenTransactions)
-                        .buttonStyle(.fn)
-                } else if !prevTxs.isEmpty {
-                    Text("\(prevTxs.count) by \(isCurrent ? "this point in " : "")\(lastMonthName)")
-                }
-            }
+            Button(action: onOpenTransactions) { pulseChip(Self.plural(monthTxs.count, "transaction")) }.buttonStyle(.fn)
+            Spacer(minLength: 0)
         }
-        .fixedSize(horizontal: false, vertical: true)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
         .background(p.surface, in: RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous).strokeBorder(p.border, lineWidth: 1))
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(monthName) in numbers")
     }
 
-    private var divider: some View { Rectangle().fill(p.borderSubtle).frame(width: 1) }
-
-    private func deltaText(_ spent: Double, _ prevSpent: Double) -> String {
-        let than = isCurrent ? "this point in \(lastMonthName)" : lastMonthName
-        guard let pct = FinanceMath.pct(spent, prevSpent) else {
-            return spent > 0 ? "Nothing logged by \(than)" : ""
-        }
-        if abs(pct) < 0.005 { return "The same as \(than)" }
-        let n = abs(pct * 100)
-        return "\(n >= 10 ? String(Int(n.rounded())) : String(format: "%.1f", n))% \(pct > 0 ? "more" : "less") than \(than)"
-    }
-
-    /// One number in the strip.
-    private func kpi<Sub: View>(_ label: String, _ value: String, @ViewBuilder sub: () -> Sub) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label).font(FN.font(13)).foregroundStyle(p.textSecondary).lineLimit(1)
-            Text(value)
-                .font(FN.display(28))
-                .tracking(FN.displayTracking(28))
-                .monospacedDigit()
-                .foregroundStyle(p.foreground)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .contentTransition(.numericText())
-                .padding(.vertical, 1)
-            sub()
-                .font(FN.small)
-                .foregroundStyle(p.textMuted)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    private func pulseChip(_ text: String, red: Bool = false) -> some View {
+        Text(text)
+            .font(FN.font(14, .semibold))
+            .monospacedDigit()
+            .lineLimit(1)
+            .foregroundStyle(red ? p.danger : p.textSecondary)
+            .padding(.horizontal, 12)
+            .frame(height: 30)
+            .background(red ? p.dangerSubtle : p.surfaceMuted, in: Capsule(style: .circular))
     }
 
     // MARK: - The review: one line here, the rest on request
@@ -418,35 +428,16 @@ struct FinanceDashboard: View {
 
     // MARK: - Budgets, upcoming payments, split bills
 
-    /// Three cards side by side, each at least 300pt; fewer to a row when they don't fit.
-    private var cardsGrid: some View {
-        let columns = max(1, min(3, Int((gridWidth + 16) / (300 + 16))))
-        let cards: [AnyView] = [AnyView(budgetsCard), AnyView(upcomingCard), AnyView(splitsCard)]
-        let rows = stride(from: 0, to: cards.count, by: columns).map { Array(cards[$0..<min($0 + columns, cards.count)]) }
-        return VStack(spacing: 16) {
-            ForEach(rows.indices, id: \.self) { r in
-                HStack(alignment: .top, spacing: 16) {
-                    ForEach(rows[r].indices, id: \.self) { c in
-                        rows[r][c].frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    }
-                    ForEach(0..<(columns - rows[r].count), id: \.self) { _ in Color.clear.frame(maxWidth: .infinity) }
-                }
-                .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { gridWidth = $0 }
-    }
-
+    /// A block on the side sheet: no card, a hairline above it.
     private func card<Content: View>(_ padding: EdgeInsets, spacing: CGFloat, @ViewBuilder _ content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: spacing) { content() }
-            .padding(padding)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(p.surface, in: RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous).strokeBorder(p.border, lineWidth: 1))
+            .padding(.top, 14)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .overlay(alignment: .top) { Rectangle().fill(p.border).frame(height: 1) }
     }
 
     private func cardTitle(_ title: String) -> some View {
-        Text(title).font(FN.font(16, .medium)).foregroundStyle(p.foreground)
+        Text(title).font(FN.font(13, .semibold)).foregroundStyle(p.textMuted)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -494,18 +485,18 @@ struct FinanceDashboard: View {
         let total: Double? = upcoming.allSatisfy { $0.currency == cur } ? upcoming.reduce(0) { $0 + $1.amount } : nil
         return card(EdgeInsets(top: 24, leading: 16, bottom: 16, trailing: 16), spacing: 8) {
             HStack {
-                cardTitle("Upcoming payments")
+                cardTitle("Bills")
                 if let total, !upcoming.isEmpty {
                     Text(Money.format(total, cur)).font(FN.font(13)).monospacedDigit().foregroundStyle(p.textMuted)
                 }
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 0)
             .padding(.bottom, 8)
             if upcoming.isEmpty {
-                Text("No bills due soon. Repeating bills you add to To-Do show up here.")
+                Text("No bills due soon. Repeating bills you add to the Planner show up here.")
                     .font(FN.body).foregroundStyle(p.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, 0)
                     .padding(.bottom, 8)
             }
             VStack(spacing: 0) {
@@ -561,7 +552,7 @@ struct FinanceDashboard: View {
                 }
             }
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 0)
         .padding(.vertical, 10)
     }
 
@@ -570,18 +561,18 @@ struct FinanceDashboard: View {
         let owed = Insights.owedToMe(live, cur).reduce(0) { $0 + $1.amount }
         return card(EdgeInsets(top: 24, leading: 16, bottom: 16, trailing: 16), spacing: 8) {
             HStack {
-                cardTitle("Split bills")
+                cardTitle("Owed to you")
                 if owed > 0 {
-                    Text("\(Money.format(owed, cur)) owed to you").font(FN.font(13)).monospacedDigit().foregroundStyle(p.textMuted)
+                    Text(Money.format(owed, cur)).font(FN.font(13, .semibold)).monospacedDigit().foregroundStyle(p.textMuted)
                 }
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 0)
             .padding(.bottom, 8)
             if openSplits.isEmpty {
                 Text("Nobody owes you. Open a transaction below to split it.")
                     .font(FN.body).foregroundStyle(p.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, 0)
                     .padding(.bottom, 8)
             }
             ForEach(openSplits.prefix(3)) { tx in
@@ -594,7 +585,7 @@ struct FinanceDashboard: View {
                     .font(FN.small)
                     .monospacedDigit()
                     .foregroundStyle(p.textMuted)
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, 0)
                     ForEach(Array((tx.splits ?? []).enumerated()), id: \.offset) { j, s in
                         if j > 0 { Rectangle().fill(p.borderSubtle).frame(height: 1) }
                         splitRow(tx, j, s)
@@ -604,7 +595,7 @@ struct FinanceDashboard: View {
             if openSplits.count > 3 {
                 Text("\(openSplits.count - 3) more open below, in Transactions")
                     .font(FN.small).foregroundStyle(p.textMuted)
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, 0)
             }
         }
     }
@@ -679,9 +670,9 @@ private struct PlainForegroundButton: View {
                 .foregroundStyle(p.foreground)
                 .padding(.horizontal, 12)
                 .frame(height: 32)
-                .background(hovering && enabled ? p.hover : .clear, in: Capsule())
+                .background(hovering && enabled ? p.hover : .clear, in: Capsule(style: .circular))
                 .opacity(enabled ? 1 : 0.45)
-                .contentShape(Capsule())
+                .contentShape(Capsule(style: .circular))
         }
         .buttonStyle(.fn)
         .onHover { hovering = $0 }
@@ -707,18 +698,18 @@ private struct ChartSwitch: View {
                         .frame(height: 26)
                         .background {
                             if on {
-                                Capsule().fill(scheme == .dark ? p.surfaceRaised : p.surface)
+                                Capsule(style: .circular).fill(scheme == .dark ? p.surfaceRaised : p.surface)
                                     .shadow(color: .black.opacity(0.06), radius: 1, y: 1)
                             }
                         }
-                        .contentShape(Capsule())
+                        .contentShape(Capsule(style: .circular))
                 }
                 .buttonStyle(.fn)
                 .accessibilityAddTraits(on ? .isSelected : [])
             }
         }
         .padding(3)
-        .background(p.surfaceMuted, in: Capsule())
+        .background(p.surfaceMuted, in: Capsule(style: .circular))
         .fixedSize()
     }
 }
@@ -733,7 +724,7 @@ private struct Legend: View {
             ForEach(items, id: \.0) { label, kind in
                 HStack(spacing: 8) {
                     switch kind {
-                    case .line: Capsule().fill(p.accent).frame(width: 14, height: 2)
+                    case .line: Capsule(style: .circular).fill(p.accent).frame(width: 14, height: 2)
                     case .dashed: rule(p.borderStrong, dash: [3, 2])
                     case .bar: RoundedRectangle(cornerRadius: 2).fill(p.accent).frame(width: 8, height: 10)
                     case .dotted: rule(p.textMuted, dash: [2, 2])

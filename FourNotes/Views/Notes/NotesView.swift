@@ -64,18 +64,7 @@ struct NotesView: View {
             if liveNotes.isEmpty {
                 emptyState
             } else {
-                HStack(alignment: .top, spacing: 0) {
-                    if !listHidden && !nav.focusMode {
-                        listColumn
-                            .frame(width: 330)
-                            .background(p.background)
-                            .transition(.move(edge: .leading).combined(with: .opacity))
-                            // Above the editor, whose text slides under it.
-                            .zIndex(1)
-                        Rectangle().fill(p.border).frame(width: 1)
-                            .transition(.opacity)
-                            .zIndex(1)
-                    }
+                HStack(alignment: .top, spacing: 12) {
                     if let note = selected {
                         NoteEditorView(
                             note: note,
@@ -84,8 +73,18 @@ struct NotesView: View {
                             focusMode: nav.focusMode,
                             onToggleFocus: { nav.focusMode.toggle() })
                             .id(note.id)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .transition(.opacity.combined(with: .offset(x: 8)))
+                            .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
+                            .paper(p)
+                            .transition(.opacity.combined(with: .offset(x: -8)))
+                    }
+                    if !listHidden && !nav.focusMode {
+                        listColumn
+                            .frame(width: 340)
+                            .frame(maxHeight: .infinity)
+                            .paper(p)
+                            .transition(.move(edge: .trailing).combined(with: .opacity))
+                            // Above the editor, whose text slides under it.
+                            .zIndex(1)
                     }
                 }
                 .frame(maxHeight: .infinity)
@@ -94,7 +93,6 @@ struct NotesView: View {
                 .animation(Motion.screen, value: selected?.id ?? "")
             }
         }
-        .background(p.bg)
         .onAppear {
             cleanUpBlanks()
             if nav.selectedNoteId == nil { nav.selectedNoteId = list.first?.id }
@@ -138,8 +136,8 @@ struct NotesView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 4) {
                 Text("Notes")
-                    .font(FN.display(28))
-                    .tracking(FN.displayTracking(28))
+                    .font(FN.font(24, .bold))
+                    .tracking(-0.6)
                     .foregroundStyle(p.foreground)
                     .help("\(liveNotes.count) note\(liveNotes.count == 1 ? "" : "s")")
                 Spacer()
@@ -148,7 +146,8 @@ struct NotesView: View {
                         .item(option.label, checked: sort == option.id) { sort = option.id }
                     }
                 }
-                PrimaryButton(title: "New", icon: "plus", action: newNote)
+                PrimaryButton(title: "New", icon: "plus", small: true, action: newNote)
+                    .fixedSize()
                     .help("New note (⌘N)")
             }
             .padding(.leading, 8)
@@ -346,8 +345,8 @@ struct NotesView: View {
             .foregroundStyle(p.textMuted)
             .padding(.horizontal, 8)
             .frame(height: 20)
-            .background(p.surface, in: Capsule())
-            .overlay(Capsule().strokeBorder(p.border, lineWidth: 1))
+            .background(p.surface, in: Capsule(style: .circular))
+            .overlay(Capsule(style: .circular).strokeBorder(p.border, lineWidth: 1))
             .fixedSize()
     }
 

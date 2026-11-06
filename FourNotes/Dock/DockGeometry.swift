@@ -14,16 +14,16 @@ enum DockEdge: String, CaseIterable, Sendable {
 
 struct DockGeometry: Equatable, Sendable {
     // Handle
-    static let handleWidth: CGFloat = 26
-    static let handlePeekWidth: CGFloat = 38
-    static let handleHeight: CGFloat = 64
-    static let handleCorner: CGFloat = 13
+    static let handleWidth: CGFloat = 28
+    static let handlePeekWidth: CGFloat = 40
+    static let handleHeight: CGFloat = 68
+    static let handleCorner: CGFloat = 14
     static let handleFillet: CGFloat = 14
     // Drawer
-    static let drawerWidth: CGFloat = 724
-    static let drawerMaxHeight: CGFloat = 660
-    static let drawerCorner: CGFloat = 26
-    static let drawerFillet: CGFloat = 30
+    static let drawerWidth: CGFloat = 384
+    static let drawerMaxHeight: CGFloat = 680
+    static let drawerCorner: CGFloat = 28
+    static let drawerFillet: CGFloat = 28
     /// Room around the drawer for its shadow.
     static let margin: CGFloat = 26
     /// Around the handle: small, because the window's empty corners still

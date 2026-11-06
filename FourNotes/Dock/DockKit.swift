@@ -1,72 +1,96 @@
 import AppKit
 import SwiftUI
 
-// The edge dock's own small design language: a native Mac panel with Arc's
-// restraint. The desktop shows through a translucent material, cards sit on
-// it a shade lighter, edges are 1px hairlines, and type is the system font
-// in regular and medium. One accent — neutral ink — is kept for the primary
-// action, what's selected and progress; colour otherwise means status only:
-// red for recording and overdue, green for done and settled.
+// The edge dock's small design language, the app's own: an ink frame holding a paper sheet,
+// cards a shade brighter, 1px hairlines. One accent, ink, is kept for the primary action,
+// what's selected and progress; colour otherwise means status only: red for recording and
+// overdue, green for done and settled.
 
 struct DockStyle {
-    /// Laid over the blurred desktop: the drawer's and the handle's body.
-    let material: Color
-    /// The same, opaque: the sticky notes' bubbles, which can't be blurred.
-    let materialSolid: Color
-    /// A card, a shade lighter than the material under it.
-    let card: Color
+    // On the frame: the tab, the bubbles and the drawer's header.
+    var frame = Color.hex(0x111113)
+    var frameFill = Color.hex(0x1F1F22)
+    var frameText = Color.hex(0xECECEE)
+    var frameMuted = Color.hex(0xA1A1A8)
+    var frameHair = Color.white.opacity(0.08)
+    let spark = Color.hex(0xE53437)
+    /// The sheet the day is drawn on.
+    var sheet: Color
+    /// A card or a field on the sheet, a shade brighter than it.
+    var card: Color
     /// The chosen part of a segmented control.
-    let segment: Color
+    var segment: Color
     /// A faint fill: fields, round buttons, a segmented control's track.
-    let fill: Color
-    let hair, hairStrong: Color
-    let text, secondary, muted: Color
+    var fill: Color
+    var hair, hairStrong: Color
+    var text, secondary, muted: Color
     /// The one accent: the primary button, what's selected, progress.
-    let accent, accentSubtle, onAccent: Color
-    let success, successSubtle, danger: Color
+    var accent, accentSubtle, onAccent: Color
+    var success, successSubtle, danger: Color
+    /// The assistant, wherever it speaks.
+    var ai: Color
     /// The empty part of a ring.
-    let track: Color
+    var track: Color
     /// Categories' dots, so the same category always looks the same.
-    let series: [Color]
+    var series: [Color]
     /// A card picked up to be moved.
-    let lift: Color
+    var lift: Color
+
+    /// The same with a light frame, from Settings → Appearance. Dark themes keep theirs.
+    var withLightFrame: DockStyle {
+        var out = self
+        out.frame = .hex(0xE8E6E2)
+        out.frameFill = .hex(0xDCD9D4)
+        out.frameText = .hex(0x1B1B1D)
+        out.frameMuted = .hex(0x56565C)
+        out.frameHair = Color.black.opacity(0.08)
+        return out
+    }
+
+    /// The same, for what sits on the frame.
+    var onFrame: DockStyle {
+        var out = self
+        out.text = frameText
+        out.secondary = frameMuted
+        out.muted = frameMuted
+        out.fill = frameFill
+        out.hair = frameHair
+        out.accent = frameText
+        out.onAccent = frame
+        out.track = frameText.opacity(0.2)
+        return out
+    }
 
     static let light = DockStyle(
-        material: Color(.sRGB, red: 242 / 255, green: 242 / 255, blue: 244 / 255, opacity: 0.82),
-        materialSolid: .hex(0xF2F2F4),
-        card: .white.opacity(0.8), segment: .white, fill: .black.opacity(0.045),
-        hair: .black.opacity(0.085), hairStrong: .black.opacity(0.2),
-        // muted is 6:1 on a card: timestamps and hints stay readable.
-        text: .hex(0x0F0F0F), secondary: .hex(0x4D4D4D), muted: .hex(0x606060),
-        accent: .hex(0x292929), accentSubtle: Color.hex(0x2E2E2E).opacity(0.08), onAccent: .white,
-        success: .hex(0x00793D), successSubtle: Color.hex(0x25984D).opacity(0.12), danger: .hex(0xCC272E),
-        track: .black.opacity(0.1),
-        series: [.hex(0x2E2E2E), .hex(0x4081D2), .hex(0xE3AD4B), .hex(0x78A3CF), .hex(0x53AD81)],
+        sheet: .hex(0xFBFAF8), card: .white, segment: .white, fill: Color.hex(0x463C28).opacity(0.06),
+        hair: .hex(0xE7E4DF), hairStrong: .hex(0xA3A09B),
+        text: .hex(0x18181A), secondary: .hex(0x55555B), muted: .hex(0x6E6E74),
+        accent: .hex(0x18181A), accentSubtle: Color.hex(0x18181A).opacity(0.07), onAccent: .white,
+        success: .hex(0x00793D), successSubtle: Color.hex(0x25984D).opacity(0.12), danger: .hex(0xC62B2E),
+        ai: .hex(0x5B3BA6), track: Color.hex(0x18181A).opacity(0.1),
+        series: [.hex(0x18181A), .hex(0x4081D2), .hex(0xC77A00), .hex(0x78A3CF), .hex(0x53AD81)],
         lift: .black.opacity(0.22))
 
     /// The Paper theme: the same, on warm paper.
     static let paper = DockStyle(
-        material: Color(.sRGB, red: 248 / 255, green: 242 / 255, blue: 226 / 255, opacity: 0.85),
-        materialSolid: .hex(0xF8F2E2),
-        card: Color(.sRGB, red: 1, green: 252 / 255, blue: 242 / 255, opacity: 0.82),
-        segment: .hex(0xFFFCF4), fill: Color.hex(0x463214).opacity(0.06),
-        hair: Color.hex(0x463214).opacity(0.12), hairStrong: Color.hex(0x463214).opacity(0.24),
+        frame: .hex(0x1C1712), frameFill: .hex(0x2B241B),
+        sheet: .hex(0xFDF9F1), card: .hex(0xFFFCF8), segment: .hex(0xFFFCF4), fill: Color.hex(0x463214).opacity(0.06),
+        hair: .hex(0xE6DFD1), hairStrong: .hex(0xC7BCAA),
         text: .hex(0x2D251C), secondary: .hex(0x584A3D), muted: .hex(0x695B4D),
         accent: .hex(0x443428), accentSubtle: Color.hex(0x5A4530).opacity(0.1), onAccent: .white,
         success: .hex(0x00793D), successSubtle: Color.hex(0x25984D).opacity(0.12), danger: .hex(0xCC272E),
-        track: Color.hex(0x463214).opacity(0.12),
-        series: [.hex(0x443428), .hex(0x4081D2), .hex(0xE3AD4B), .hex(0x78A3CF), .hex(0x53AD81)],
+        ai: .hex(0x5B3BA6), track: Color.hex(0x463214).opacity(0.12),
+        series: [.hex(0x443428), .hex(0x4081D2), .hex(0xC77A00), .hex(0x78A3CF), .hex(0x53AD81)],
         lift: Color.hex(0x3C2A0E).opacity(0.22))
 
     static let dark = DockStyle(
-        material: Color(.sRGB, red: 40 / 255, green: 40 / 255, blue: 43 / 255, opacity: 0.8),
-        materialSolid: .hex(0x28282B),
-        card: .white.opacity(0.06), segment: .white.opacity(0.16), fill: .white.opacity(0.07),
+        frame: .hex(0x0B0B0D), frameFill: .hex(0x1C1C1F),
+        sheet: .hex(0x1B1B1D), card: .hex(0x212124), segment: .white.opacity(0.16), fill: .white.opacity(0.07),
         hair: .white.opacity(0.1), hairStrong: .white.opacity(0.24),
         text: .hex(0xF2F2F2), secondary: .hex(0xBEBEBE), muted: .hex(0x989898),
         accent: .hex(0xE8E8E8), accentSubtle: Color.hex(0xE8E8E8).opacity(0.12), onAccent: .hex(0x141414),
         success: .hex(0x56D57B), successSubtle: Color.hex(0x37BB62).opacity(0.16), danger: .hex(0xFF6A65),
-        track: .white.opacity(0.14),
+        ai: .hex(0xB9A2F0), track: .white.opacity(0.14),
         series: [.hex(0xE8E8E8), .hex(0x589AED), .hex(0xE3AD4B), .hex(0x577594), .hex(0x57BC8A)],
         lift: .black.opacity(0.55))
 
@@ -345,9 +369,9 @@ struct DockPrimaryButton: View {
             .foregroundStyle(d.onAccent)
             .padding(.horizontal, 14)
             .frame(height: 28)
-            .background(d.accent.opacity(hovering ? 0.86 : 1), in: Capsule())
+            .background(d.accent.opacity(hovering ? 0.86 : 1), in: Capsule(style: .circular))
             .opacity(disabled ? 0.4 : 1)
-            .contentShape(Capsule())
+            .contentShape(Capsule(style: .circular))
         }
         .buttonStyle(.fn)
         .disabled(disabled)
@@ -377,10 +401,10 @@ struct DockSecondaryButton: View {
             .foregroundStyle(d.text)
             .padding(.horizontal, small ? 10 : 12)
             .frame(height: small ? 26 : 28)
-            .background(hovering ? d.fill : d.card, in: Capsule())
-            .overlay(Capsule().strokeBorder(d.hair, lineWidth: 1))
+            .background(hovering ? d.fill : d.card, in: Capsule(style: .circular))
+            .overlay(Capsule(style: .circular).strokeBorder(d.hair, lineWidth: 1))
             .opacity(disabled ? 0.4 : 1)
-            .contentShape(Capsule())
+            .contentShape(Capsule(style: .circular))
         }
         .buttonStyle(.fn)
         .disabled(disabled)
@@ -409,9 +433,9 @@ struct DockPlainButton: View {
             .foregroundStyle(hovering ? d.text : d.secondary)
             .padding(.horizontal, 8)
             .frame(height: height)
-            .background(hovering ? d.fill : .clear, in: Capsule())
+            .background(hovering ? d.fill : .clear, in: Capsule(style: .circular))
             .opacity(disabled ? 0.4 : 1)
-            .contentShape(Capsule())
+            .contentShape(Capsule(style: .circular))
         }
         .buttonStyle(.fn)
         .disabled(disabled)
@@ -438,8 +462,8 @@ struct DockDisclosure: View {
             .foregroundStyle(hovering ? d.text : d.secondary)
             .padding(.horizontal, 8)
             .frame(height: 28)
-            .background(hovering ? d.fill : .clear, in: Capsule())
-            .contentShape(Capsule())
+            .background(hovering ? d.fill : .clear, in: Capsule(style: .circular))
+            .contentShape(Capsule(style: .circular))
         }
         .buttonStyle(.fn)
         .onHover { hovering = $0 }
@@ -467,9 +491,9 @@ struct DockMenuLabel: View {
         .foregroundStyle(hovering ? d.text : d.secondary)
         .padding(.horizontal, 8)
         .frame(height: height)
-        .background(hovering ? d.fill : .clear, in: Capsule())
+        .background(hovering ? d.fill : .clear, in: Capsule(style: .circular))
         .opacity(enabled ? 1 : 0.5)
-        .contentShape(Capsule())
+        .contentShape(Capsule(style: .circular))
         .onHover { hovering = $0 && enabled }
     }
 }
@@ -569,7 +593,7 @@ struct DockTag: View {
             .foregroundStyle(tone)
             .padding(.horizontal, 7)
             .frame(height: 18)
-            .background(tone.opacity(0.12), in: Capsule())
+            .background(tone.opacity(0.12), in: Capsule(style: .circular))
             .fixedSize()
     }
 }

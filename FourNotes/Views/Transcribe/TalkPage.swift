@@ -305,8 +305,8 @@ struct TalkPage: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(p.surface, in: Capsule())
-        .overlay(Capsule().strokeBorder(p.border, lineWidth: 1))
+        .background(p.surface, in: Capsule(style: .circular))
+        .overlay(Capsule(style: .circular).strokeBorder(p.border, lineWidth: 1))
     }
 
     // MARK: - People
@@ -395,7 +395,7 @@ struct TalkPage: View {
                         SectionTitle("Action items")
                         Spacer()
                         GhostButton(action: addAllTasks) {
-                            HStack(spacing: 4) { Icon("plus", size: 12); Text("Add all to To-Do") }.font(FN.small)
+                            HStack(spacing: 4) { Icon("plus", size: 12); Text("Add all to the Planner") }.font(FN.small)
                         }
                     }
                     ForEach(s.actionItems, id: \.self) { item in
@@ -403,7 +403,7 @@ struct TalkPage: View {
                             Text("☐").foregroundStyle(p.textMuted)
                             Text(item).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
                             Spacer(minLength: 8)
-                            IconButton("plus", size: 13, box: 26, help: "Add “\(item)” to To-Do") {
+                            IconButton("plus", size: 13, box: 26, help: "Add “\(item)” to the Planner") {
                                 addTask(item)
                                 toasts.push("✅ To-do: \(item)")
                             }
@@ -513,7 +513,7 @@ struct TalkPage: View {
     private func addAllTasks() {
         let items = talk.summary?.actionItems ?? []
         for item in items { addTask(item) }
-        toasts.push("✅ Added \(items.count == 1 ? "1 task" : "\(items.count) tasks") to To-Do")
+        toasts.push("✅ Added \(items.count == 1 ? "1 task" : "\(items.count) tasks") to the Planner")
     }
 
     private func writeUp() {

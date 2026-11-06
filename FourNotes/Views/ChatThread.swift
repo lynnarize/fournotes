@@ -423,9 +423,9 @@ struct CitationChip: View {
             .padding(.horizontal, 10)
             .frame(height: 26)
             .frame(maxWidth: 260)
-            .background(hovering ? p.hover : p.surfaceMuted, in: Capsule())
-            .overlay(Capsule().strokeBorder(p.borderSubtle, lineWidth: 1))
-            .contentShape(Capsule())
+            .background(hovering ? p.hover : p.surfaceMuted, in: Capsule(style: .circular))
+            .overlay(Capsule(style: .circular).strokeBorder(p.borderSubtle, lineWidth: 1))
+            .contentShape(Capsule(style: .circular))
         }
         .buttonStyle(.fn)
         .onHover { hovering = $0 }
@@ -519,8 +519,8 @@ private struct ReplyAction: View {
             .foregroundStyle(hovering ? p.foreground : p.textSecondary)
             .padding(.horizontal, title == nil ? 0 : 9)
             .frame(minWidth: 28, minHeight: 28)
-            .background(hovering ? p.hover : .clear, in: Capsule())
-            .contentShape(Capsule())
+            .background(hovering ? p.hover : .clear, in: Capsule(style: .circular))
+            .contentShape(Capsule(style: .circular))
         }
         .buttonStyle(.fn)
         .opacity(enabled ? 1 : 0.45)
@@ -585,7 +585,7 @@ private struct JumpToLatest: View {
             .padding(.horizontal, 12)
             .frame(height: 30)
             .floating(p, radius: 15)
-            .contentShape(Capsule())
+            .contentShape(Capsule(style: .circular))
         }
         .buttonStyle(.fn)
         .onHover { hovering = $0 }

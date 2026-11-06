@@ -38,12 +38,7 @@ struct LibraryView: View {
 
     var body: some View {
         let detail = detail
-        HStack(alignment: .top, spacing: 0) {
-            listColumn(selected: detail)
-                .frame(width: 330)
-                .background(p.background)
-                .zIndex(1)
-            Rectangle().fill(p.border).frame(width: 1).zIndex(1)
+        HStack(alignment: .top, spacing: 12) {
             Group {
                 switch detail {
                 case .newPage:
@@ -54,12 +49,17 @@ struct LibraryView: View {
                     emptyDetail
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .transition(.opacity.combined(with: .offset(x: 8)))
+            .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
+            .paper(p)
+            .transition(.opacity.combined(with: .offset(x: -8)))
+            listColumn(selected: detail)
+                .frame(width: 340)
+                .frame(maxHeight: .infinity)
+                .paper(p)
+                .zIndex(1)
         }
         .frame(maxHeight: .infinity)
         .animation(Motion.screen, value: detail)
-        .background(p.bg)
         .task { library.refreshFolders() }
         .task(id: nav.focus) {
             guard let link = nav.consumeFocus([.library]) else { return }
@@ -87,8 +87,8 @@ struct LibraryView: View {
                     .foregroundStyle(p.accentForeground)
                     .padding(.horizontal, 14)
                     .frame(height: 36)
-                    .background(p.accent, in: Capsule())
-                    .contentShape(Capsule())
+                    .background(p.accent, in: Capsule(style: .circular))
+                    .contentShape(Capsule(style: .circular))
                 }
             }
             .padding(.leading, 8)

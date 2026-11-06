@@ -1,25 +1,34 @@
 import SwiftUI
 
-// The web app's tokens (src/app/globals.css), after Arc (uiarc.dev): neutral surfaces,
-// hairline borders, one accent spent on what is selected or active. Two vocabularies,
-// as on the web: the Arc role names (surface, foreground, border…) for new work, and the
-// short names the views grew up with (bg, text, line…), mapped onto those roles.
-// The oklch values on the web are converted to sRGB here. Light first, then paper, dark.
+// The web app's tokens (src/app/globals.css), "ink and paper": an ink frame holds paper
+// sheets, so only content is bright. Hairline borders, one ink accent, and red kept for
+// today and what's overdue. Two vocabularies, as on the web: the role names (surface,
+// foreground, border…) for new work, and the short names the views grew up with (bg, text,
+// line…), mapped onto those roles. Light first, then paper, dark.
 struct Palette {
     /// The mark: a navy pen stroke and a red spark (white and a brighter red in the dark).
-    let logoInk, logoRed: Color
+    var logoInk, logoRed: Color
 
-    // MARK: Arc roles
-    let background, surface, surfaceRaised, surfaceMuted, sidebar: Color
-    let foreground, textSecondary, textMuted: Color
-    let border, borderSubtle, borderStrong: Color
+    // MARK: The frame
+    /// The toolbar and sidebar around the sheets.
+    var frame, frame2, frame3, frameText, frameMuted, frameLabel: Color
+    /// Today and what's overdue, and nothing else.
+    let spark: Color
+    /// The assistant, wherever it speaks.
+    let ai, aiSubtle: Color
+
+    // MARK: Roles
+    /// `background` is the sheet: paper. Cards on it are `surface`, a shade brighter.
+    var background, surface, surfaceRaised, surfaceMuted, sidebar: Color
+    var foreground, textSecondary, textMuted: Color
+    var border, borderSubtle, borderStrong: Color
     /// The accent: neutral ink by default, or the hue picked in Settings → Appearance.
     var accent, accentStrong, accentSubtle, accentForeground: Color
     /// The empty part of a meter, a switch that's off, "other" in a chart.
     let controlTrack: Color
     /// Status colours mean status: done, needs attention, failed. Never decoration.
     let success, successSubtle, warning, warningSubtle, danger, dangerSubtle: Color
-    let hover: Color
+    var hover: Color
     /// Chart series, told apart by lightness as well as hue.
     let series: [Color]
     /// A quick note keeps its colour as a small dot.
@@ -50,18 +59,21 @@ struct Palette {
 
     static let light = Palette(
         logoInk: .hex(0x0F0B4C), logoRed: .hex(0xE53437),
-        background: .hex(0xFFFFFF), surface: .hex(0xFFFFFF), surfaceRaised: .hex(0xFFFFFF),
-        surfaceMuted: .hex(0xF7F7F7), sidebar: .hex(0xFBFBFB),
-        foreground: .hex(0x0F0F0F), textSecondary: .hex(0x525252), textMuted: .hex(0x696969),
-        border: .hex(0xE6E6E6), borderSubtle: .hex(0xF0F0F0), borderStrong: .hex(0xC7C7C7),
-        accent: .hex(0x2E2E2E), accentStrong: .hex(0x1B1B1B),
-        accentSubtle: Color.hex(0x2E2E2E).opacity(0.07), accentForeground: .white,
-        controlTrack: .hex(0xDCDCDC),
+        frame: .hex(0x111113), frame2: .hex(0x1F1F22), frame3: .hex(0x2B2B2F),
+        frameText: .hex(0xECECEE), frameMuted: .hex(0xA1A1A8), frameLabel: .hex(0x8A8A91),
+        spark: .hex(0xE53437), ai: .hex(0x5B3BA6), aiSubtle: .hex(0xF1ECFB),
+        background: .hex(0xFBFAF8), surface: .hex(0xFFFFFF), surfaceRaised: .hex(0xFFFFFF),
+        surfaceMuted: .hex(0xF2F0EC), sidebar: .hex(0x111113),
+        foreground: .hex(0x18181A), textSecondary: .hex(0x55555B), textMuted: .hex(0x6E6E74),
+        border: .hex(0xE7E4DF), borderSubtle: .hex(0xEFEDE9), borderStrong: .hex(0xCFCCC7),
+        accent: .hex(0x18181A), accentStrong: .hex(0x2C2C30),
+        accentSubtle: Color.hex(0x18181A).opacity(0.07), accentForeground: .white,
+        controlTrack: .hex(0xE9E6E1),
         success: .hex(0x007329), successSubtle: Color.hex(0x25984D).opacity(0.12),
         warning: .hex(0x975200), warningSubtle: Color.hex(0xF0B135).opacity(0.22),
         danger: .hex(0xC51D28), dangerSubtle: Color.hex(0xDE3B3D).opacity(0.1),
-        hover: Color.hex(0x0F0F0F).opacity(0.045),
-        series: [.hex(0x2E2E2E), .hex(0x4081D2), .hex(0xE9B452), .hex(0xCCDCF2), .hex(0x46B68C)],
+        hover: Color.hex(0x463C28).opacity(0.06),
+        series: [.hex(0x18181A), .hex(0x4081D2), .hex(0xE9B452), .hex(0xCCDCF2), .hex(0x46B68C)],
         noteYellow: .hex(0xEBC75E), notePink: .hex(0xF39098), noteBlue: .hex(0x70B4DC), noteGreen: .hex(0x7CC58C),
         stickyYellow: .hex(0xFBF3DB), stickyPink: .hex(0xFBE4E4),
         stickyBlue: .hex(0xE7F3F8), stickyGreen: .hex(0xEDF3EC),
@@ -76,8 +88,11 @@ struct Palette {
     static let paper = Palette(
         // The mark keeps its light colours on paper.
         logoInk: .hex(0x0F0B4C), logoRed: .hex(0xE53437),
+        frame: .hex(0x1C1712), frame2: .hex(0x2B241B), frame3: .hex(0x3A3226),
+        frameText: .hex(0xECECEE), frameMuted: .hex(0xA1A1A8), frameLabel: .hex(0x8A8A91),
+        spark: .hex(0xE53437), ai: .hex(0x5B3BA6), aiSubtle: .hex(0xF1ECFB),
         background: .hex(0xFDF9F1), surface: .hex(0xFFFCF8), surfaceRaised: .hex(0xFFFCF8),
-        surfaceMuted: .hex(0xF5F0E5), sidebar: .hex(0xF9F4EA),
+        surfaceMuted: .hex(0xF5F0E5), sidebar: .hex(0x1C1712),
         foreground: .hex(0x2D251C), textSecondary: .hex(0x5B4D40), textMuted: .hex(0x6F6053),
         border: .hex(0xE6DFD1), borderSubtle: .hex(0xEFEADF), borderStrong: .hex(0xC7BCAA),
         accent: .hex(0x443428), accentStrong: .hex(0x2F2115),
@@ -101,8 +116,11 @@ struct Palette {
 
     static let dark = Palette(
         logoInk: .hex(0xFFFBF7), logoRed: .hex(0xEE1923),
-        background: .hex(0x141414), surface: .hex(0x191919), surfaceRaised: .hex(0x1F1F1F),
-        surfaceMuted: .hex(0x232323), sidebar: .hex(0x171717),
+        frame: .hex(0x0B0B0D), frame2: .hex(0x1C1C1F), frame3: .hex(0x28282C),
+        frameText: .hex(0xECECEE), frameMuted: .hex(0xA1A1A8), frameLabel: .hex(0x8A8A91),
+        spark: .hex(0xE53437), ai: .hex(0xB9A2F0), aiSubtle: Color.hex(0xB9A2F0).opacity(0.16),
+        background: .hex(0x1B1B1D), surface: .hex(0x212124), surfaceRaised: .hex(0x27272A),
+        surfaceMuted: .hex(0x2A2A2D), sidebar: .hex(0x0B0B0D),
         foreground: .hex(0xF2F2F2), textSecondary: .hex(0xB7B7B7), textMuted: .hex(0x959595),
         border: .hex(0x2B2B2B), borderSubtle: .hex(0x222222), borderStrong: .hex(0x484848),
         accent: .hex(0xE4E4E4), accentStrong: .hex(0xF5F5F5),
@@ -124,6 +142,40 @@ struct Palette {
     )
 
     var finSeries: [Color] { [finA, finB, finC, finD, finE] }
+
+    /// Where Settings → Appearance keeps the frame's choice: "ink", or "light".
+    static let frameKey = "fournotes.frame"
+
+    /// This palette with a light frame. Dark themes keep theirs.
+    var withLightFrame: Palette {
+        var out = self
+        out.frame = .hex(0xE8E6E2)
+        out.frame2 = .hex(0xDCD9D4)
+        out.frame3 = .hex(0xD0CDC7)
+        out.frameText = .hex(0x1B1B1D)
+        out.frameMuted = .hex(0x56565C)
+        out.frameLabel = .hex(0x606066)
+        return out
+    }
+
+    /// This palette for what sits on the frame (the toolbar, the sidebar): the views there
+    /// ask for the same roles and get the frame's colours.
+    var onFrame: Palette {
+        var out = self
+        out.logoInk = frameText
+        out.foreground = frameText
+        out.textSecondary = frameMuted
+        out.textMuted = frameLabel
+        out.surface = frame2
+        out.surfaceMuted = frame3
+        out.border = frame3
+        out.borderSubtle = frame2
+        out.borderStrong = frame3
+        out.hover = frame2
+        out.accent = spark
+        out.accentSubtle = frame2
+        return out
+    }
 
     /// CSS `color-mix(in srgb, <color> <pct>, var(--bg))`, which the board uses for tints.
     func mix(_ color: Color, _ ratio: Double) -> Color { color.mixed(with: bg, ratio: 1 - ratio) }
@@ -229,11 +281,13 @@ struct PaletteProvider<Content: View>: View {
     @Environment(\.colorScheme) private var scheme
     @AppStorage("fournotes.theme") private var themeRaw = ThemeChoice.system.rawValue
     @AppStorage(AccentChoice.storageKey) private var accentRaw = AccentChoice.neutral.rawValue
+    @AppStorage(Palette.frameKey) private var frameRaw = "ink"
     @ViewBuilder var content: () -> Content
 
     var body: some View {
-        let palette = (ThemeChoice(rawValue: themeRaw) ?? .system)
+        let chosen = (ThemeChoice(rawValue: themeRaw) ?? .system)
             .palette(for: scheme, accent: AccentChoice(rawValue: accentRaw) ?? .neutral)
+        let palette = frameRaw == "light" && scheme != .dark ? chosen.withLightFrame : chosen
         content()
             .environment(\.palette, palette)
             .tint(palette.accent)
@@ -246,14 +300,20 @@ struct PaletteProvider<Content: View>: View {
 // MARK: - Type scale
 
 enum FN {
-    /// Inter, as on the web. Weights stay at regular and medium: hierarchy comes from
-    /// size and colour, not bold. Heavier weights asked for are drawn as medium.
+    /// Geist, as on the web, at its real weights.
     static func font(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
-        Font(Typeface.text.font(size, medium: ![.regular, .light, .thin, .ultraLight].contains(weight)))
+        let axis: Int
+        switch weight {
+        case .medium: axis = 500
+        case .semibold: axis = 600
+        case .bold, .heavy, .black: axis = 700
+        default: axis = 400
+        }
+        return Font(Typeface.font(size, weight: axis))
     }
-    /// Headings of 30pt and up, in Geist at regular weight, as on the web. Pair with
-    /// `.tracking(FN.displayTracking(size))` for the web's tight -0.03em.
-    static func display(_ size: CGFloat) -> Font { Font(Typeface.display.font(size, medium: false)) }
+    /// Page titles, in bold Geist, as on the web. Pair with `.tracking(FN.displayTracking(size))`
+    /// for the web's tight -0.03em.
+    static func display(_ size: CGFloat) -> Font { Font(Typeface.font(size, weight: 700)) }
     static func displayTracking(_ size: CGFloat) -> CGFloat { -0.03 * size }
     /// Kept for the views that still ask for it: the redesign has no serif, so this is
     /// the display face (medium below 30pt, where the serif marked a card's title).
@@ -267,28 +327,24 @@ enum FN {
     static let small = font(12)               // text-xs
     static let tiny = font(11)
 
-    /// Concentric corners, as on the web: a nested corner is the outer radius minus
-    /// the padding between them. Controls 18, panels (cards) 26, surfaces 34.
-    static let radiusControl: CGFloat = 18
-    static let radiusPanel: CGFloat = 26
-    static let radiusSurface: CGFloat = 34
+    /// Corners, as on the web: rows and controls 14, cards 16, sheets 20.
+    static let radiusControl: CGFloat = 14
+    static let radiusPanel: CGFloat = 16
+    static let radiusSurface: CGFloat = 20
     static let radius: CGFloat = 12
     static let radiusSmall: CGFloat = 8
-    static let cardRadius: CGFloat = 26
+    static let cardRadius: CGFloat = 16
     /// max-w-[1500px] from the web shell.
     static let maxContentWidth: CGFloat = 1500
 }
 
 // MARK: - Typefaces
 
-/// The web app's faces (next/font): Inter for text and controls, Geist for headings.
-/// Bundled in Resources/Fonts from the web build, as variable fonts with the latin
-/// subset the web serves (SIL Open Font License, Inter-OFL.txt and Geist-OFL.txt
-/// there); anything they don't cover falls back to the system font, as in a browser.
+/// The web app's face (next/font): Geist. Bundled in Resources/Fonts from the web build, as a
+/// variable font with the latin subset the web serves (SIL Open Font License, Geist-OFL.txt
+/// there); anything it doesn't cover falls back to the system font, as in a browser.
 enum Typeface {
-    case text, display
-
-    private var family: String { self == .text ? "Inter" : "Geist" }
+    private static let family = "Geist"
 
     /// Registered for this process on first use.
     private static let registered: Bool = {
@@ -301,24 +357,25 @@ enum Typeface {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var cache: [String: CTFont] = [:]
 
-    /// The face at a size, regular (400) or medium (500), or the system font should
-    /// the bundled one ever be missing.
-    func font(_ size: CGFloat, medium: Bool) -> CTFont {
-        _ = Self.registered
-        let key = "\(family)-\(size)-\(medium)"
-        Self.lock.lock()
-        defer { Self.lock.unlock() }
-        if let font = Self.cache[key] { return font }
+    /// The face at a size and weight (400 to 700), or the system font should the bundled one
+    /// ever be missing.
+    static func font(_ size: CGFloat, weight: Int) -> CTFont {
+        _ = registered
+        let key = "\(size)-\(weight)"
+        lock.lock()
+        defer { lock.unlock() }
+        if let font = cache[key] { return font }
         let attributes: [CFString: Any] = [
             kCTFontFamilyNameAttribute: family,
             // The weight axis ('wght').
-            kCTFontVariationAttribute: [0x7767_6874: medium ? 500 : 400],
+            kCTFontVariationAttribute: [0x7767_6874: weight],
         ]
         var font = CTFontCreateWithFontDescriptor(CTFontDescriptorCreateWithAttributes(attributes as CFDictionary), size, nil)
         if CTFontCopyFamilyName(font) as String != family {
-            font = NSFont.systemFont(ofSize: size, weight: medium ? .medium : .regular) as CTFont
+            let system: NSFont.Weight = weight >= 700 ? .bold : weight >= 600 ? .semibold : weight >= 500 ? .medium : .regular
+            font = NSFont.systemFont(ofSize: size, weight: system) as CTFont
         }
-        Self.cache[key] = font
+        cache[key] = font
         return font
     }
 }
@@ -348,5 +405,15 @@ extension Color {
             blue: Double(a.blueComponent) * (1 - t) + Double(b.blueComponent) * t,
             opacity: Double(a.alphaComponent) * (1 - t) + Double(b.alphaComponent) * t
         )
+    }
+}
+
+// MARK: - Sheets
+
+extension View {
+    /// Paper laid on the frame. A screen has one sheet, or a main sheet and a side sheet.
+    func paper(_ p: Palette) -> some View {
+        background(p.bg, in: RoundedRectangle(cornerRadius: FN.radiusSurface, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: FN.radiusSurface, style: .continuous))
     }
 }

@@ -62,15 +62,15 @@ private struct PanelTab: View {
                         .foregroundStyle(p.accentForeground)
                         .padding(.horizontal, 5)
                         .frame(minWidth: 17, minHeight: 17)
-                        .background(p.accent, in: Capsule())
+                        .background(p.accent, in: Capsule(style: .circular))
                 }
             }
             .font(FN.font(13, selected ? .medium : .regular))
             .foregroundStyle(selected || hovering ? p.foreground : p.textSecondary)
             .padding(.horizontal, 11)
             .frame(height: 30)
-            .background(selected ? p.accentSubtle : (hovering ? p.hover : .clear), in: Capsule())
-            .contentShape(Capsule())
+            .background(selected ? p.accentSubtle : (hovering ? p.hover : .clear), in: Capsule(style: .circular))
+            .contentShape(Capsule(style: .circular))
         }
         .buttonStyle(.fn)
         .onHover { hovering = $0 }

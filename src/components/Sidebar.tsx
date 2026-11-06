@@ -1,7 +1,6 @@
 "use client";
-// The sidebar, after Arc (Main.dc.html): the space switcher with the mark, a search field
-// that opens ⌘K, the places with their counts, then capture (Scan, Record), the voice
-// assistant and Settings, and a last line saying where the data lives.
+// The sidebar sits on the frame and holds places only: the five tabs, recent notes and spaces,
+// with Settings and sync in the footer. Starting something lives in the toolbar's omnibar.
 // On phones the same sidebar is a drawer behind the header's mark.
 import { useEffect, useState } from "react";
 import { usePulsingTabs } from "@/lib/highlight";
@@ -21,14 +20,14 @@ import Logo from "./Logo";
 import TypeToConfirm from "./TypeToConfirm";
 import { Icon, useToast } from "./ui";
 
-// Meetings comes right after Today: where a meeting's notes and to-dos go follows it. Its id
-// stays "transcribe", the page's old name, as it's kept in storage and links.
+// Today, then calendar and tasks together, then meetings, notes and money. The ids stay the
+// pages' old names ("todo", "transcribe", "finance"), as they're kept in storage and links.
 export const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "today", label: "Today", icon: "today" },
+  { id: "todo", label: "Planner", icon: "planner" },
   { id: "transcribe", label: "Meetings", icon: "wave" },
-  { id: "notes", label: "Notes", icon: "note" },
-  { id: "todo", label: "To-Do", icon: "todo" },
-  { id: "finance", label: "Finance", icon: "finance" },
+  { id: "notes", label: "Notes", icon: "lines" },
+  { id: "finance", label: "Money", icon: "wallet" },
 ];
 
 const STATUS_LABEL = { off: "", "signed-out": "Not synced", syncing: "Syncing…", synced: "Synced", offline: "Offline", error: "Sync error" } as const;
@@ -49,7 +48,7 @@ export default function Sidebar({ tab, setTab, onClose, onSearch, onSettings }: 
   const store = useStore();
   const { notes, todos, transactions, spaces, currentSpaceId, switchSpace } = store;
   const talks = useTalks();
-  const { scan, recording, startRecording, stopRecording, busy, voice, toggleVoice } = useAssistant();
+  const { scan, recording, startRecording, stopRecording } = useAssistant();
   const cloud = useCloud();
   const google = useGoogleSync();
   const month = localMonth();
@@ -115,77 +114,34 @@ export default function Sidebar({ tab, setTab, onClose, onSearch, onSettings }: 
 
   // Where the data lives, and how to change that.
   const syncState = google.email ? google.status : cloud.email ? cloud.status : null;
-  const syncTone = syncState === "error" ? "text-[var(--danger)]" : syncState === "synced" ? "text-[var(--success)]" : "";
+  const syncTone = syncState === "error" ? "text-[var(--spark)]" : syncState === "synced" ? "text-[#5fb97f]" : "";
   const syncText = google.email
     ? `${GOOGLE_STATUS_LABEL[google.status]} · Google Drive`
     : cloud.email
       ? `${STATUS_LABEL[cloud.status]} · ${cloud.email}`
       : "Saved on this device";
+  const syncShort = google.email ? GOOGLE_STATUS_LABEL[google.status] : cloud.email ? STATUS_LABEL[cloud.status] : "Not synced";
+
+  // The newest notes, one click from anywhere.
+  const recent = alive(notes).filter((n) => n.title.trim()).sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "")).slice(0, 3);
+  const openNote = (id: string) => { setTab("notes"); openItem("note", id); onClose?.(); };
 
   return (
     <nav
       aria-label={onClose ? "Menu" : "Main"}
-      className={`scroll-thin flex h-full flex-col gap-5 overflow-y-auto bg-[var(--sidebar)] px-3 pb-4 text-sm ${
-        onClose ? "w-[86vw] max-w-[22rem] pt-[calc(env(safe-area-inset-top)+14px)]" : "w-[248px] border-r border-[var(--border)] pt-3.5"
+      className={`on-frame scroll-thin flex h-full flex-col gap-0.5 overflow-y-auto text-sm ${
+        onClose ? "w-[86vw] max-w-[22rem] bg-[var(--frame)] px-3 pb-4 pt-[calc(env(safe-area-inset-top)+14px)]" : "w-[236px] pt-0.5"
       }`}
     >
-      {/* The space switcher: whose notes these are, which space, and the ways out. */}
-      <div className="flex items-center gap-1">
-        {spaces.length > 0 || signedInAs || syncAvailable ? (
-          <Dropdown
-            label={`Switch space, current space ${spaceLabel}`}
-            title={signedInAs ? `Signed in as ${signedInAs}` : undefined}
-            width={260}
-            chevron={false}
-            className="flex h-12 min-w-0 flex-1 items-center gap-2.5 rounded-[18px] pl-1.5 pr-2.5 text-left transition-colors hover:bg-[var(--hover)]"
-            button={<>{identity}<ChevronsUpDown className="shrink-0 text-[var(--text-muted)]" /></>}
-          >
-            {(close) => (
-              <>
-                {/* Shared spaces (Supabase) are only there once signed in. */}
-                {spaces.length > 0 && (
-                  <>
-                    <MenuLabel>Space</MenuLabel>
-                    <MenuItem label="Personal" active={!currentSpaceId} onSelect={() => { close(); switchSpace(null); }} />
-                    {spaces.map((s) => (
-                      <MenuItem key={s.id} label={s.name} active={currentSpaceId === s.id} onSelect={() => { close(); switchSpace(s.id); }} />
-                    ))}
-                    <MenuSep />
-                  </>
-                )}
-                {signedInAs ? (
-                  <>
-                    <MenuLabel>{signedInAs}</MenuLabel>
-                    <MenuItem icon="logout" label="Sign out" onSelect={() => { close(); void signOut(); }} />
-                    {/* Someone else's or a shared computer: leave nothing behind. */}
-                    <MenuItem icon="trash" label="Sign out and remove data…" danger onSelect={() => { close(); setConfirmWipe(true); }} />
-                  </>
-                ) : (
-                  <MenuItem icon="cloud" label="Sign in to sync and share" onSelect={() => { close(); syncSettings(); }} />
-                )}
-              </>
-            )}
-          </Dropdown>
-        ) : (
-          // Nothing to switch to: the mark and the space, nothing to open.
+      {/* The phone drawer has no toolbar above it: the mark and the way out go here. */}
+      {onClose && (
+        <div className="mb-3 flex items-center gap-1">
           <div className="flex h-12 min-w-0 flex-1 items-center gap-2.5 pl-1.5 pr-2.5">{identity}</div>
-        )}
-        {onClose && (
-          <button className="btn btn-plain btn-icon fn-pop h-11 w-11 md:hidden" style={{ animationDelay: "120ms" }} onClick={onClose} aria-label="Close menu">
+          <button className="rnd fn-pop" style={{ animationDelay: "120ms" }} onClick={onClose} aria-label="Close menu">
             <Icon name="x" size={20} />
           </button>
-        )}
-      </div>
-
-      <button
-        type="button"
-        onClick={search}
-        className="flex h-9 shrink-0 items-center gap-2 rounded-[18px] border border-[var(--border)] bg-[var(--surface)] pl-3 pr-1.5 text-left text-[var(--text-muted)] transition-colors hover:border-[var(--border-strong)] max-md:h-11"
-      >
-        <Icon name="search" size={16} className="shrink-0" />
-        <span className="flex-1">Search or add</span>
-        <kbd className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-xs text-[var(--text-secondary)]">{mac ? "⌘K" : "Ctrl K"}</kbd>
-      </button>
+        </div>
+      )}
 
       {/* The places. The count gives way to a menu of quick actions while a row is in use. */}
       <ul className="flex flex-col gap-0.5">
@@ -197,14 +153,12 @@ export default function Sidebar({ tab, setTab, onClose, onSearch, onSettings }: 
           return (
             <li key={t.id} style={enter(i)} className={`${onClose ? "fn-rise" : ""} group relative`}>
               <button type="button" onClick={() => go(t.id)} aria-current={selected ? "page" : undefined} className={ROW}>
-                <Icon name={t.icon} size={16} className="shrink-0" />
+                <Icon name={t.icon} size={18} className="shrink-0" />
                 <span className="truncate">{t.label}</span>
-                {/* Still being shaped: said plainly beside its name. */}
-                {t.id === "finance" && <span className="badge badge-info h-5 px-1.5 text-[11px]">Beta</span>}
                 <span className="flex-1" />
                 {t.id === "transcribe" && recordingFor && (
-                  <span className="fn-num flex items-center gap-1.5 pr-0.5 text-xs text-[var(--danger)]">
-                    <span className="recording h-1.5 w-1.5 rounded-full bg-[var(--danger)]" aria-hidden />
+                  <span className="fn-num flex items-center gap-1.5 pr-0.5 text-xs text-[var(--spark)]">
+                    <span className="recording h-1.5 w-1.5 rounded-full bg-[var(--spark)]" aria-hidden />
                     {recordingFor}<span className="sr-only">, recording</span>
                   </span>
                 )}
@@ -216,7 +170,7 @@ export default function Sidebar({ tab, setTab, onClose, onSearch, onSettings }: 
                 )}
                 {counts[t.id] > 0 && !(t.id === "transcribe" && recordingFor) && (
                   <span
-                    className={`fn-num pr-0.5 text-xs font-normal text-[var(--text-muted)] ${
+                    className={`fn-num pr-0.5 text-xs font-normal text-[var(--frame-label)] ${
                       menuAlways ? "invisible" : "group-hover:invisible group-has-[:focus-visible]:invisible group-has-[[aria-expanded=true]]:invisible"
                     }`}
                   >
@@ -234,7 +188,7 @@ export default function Sidebar({ tab, setTab, onClose, onSearch, onSettings }: 
                   width={230}
                   align="right"
                   chevron={false}
-                  className="grid h-7 w-7 place-items-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--hover)] hover:text-[var(--foreground)] max-md:h-9 max-md:w-9"
+                  className="grid h-7 w-7 place-items-center rounded-full text-[var(--frame-muted)] hover:bg-[var(--frame-3)] hover:text-[var(--frame-text)] max-md:h-9 max-md:w-9"
                   button={<Icon name="more" size={18} />}
                 >
                   {(close) => (
@@ -273,61 +227,76 @@ export default function Sidebar({ tab, setTab, onClose, onSearch, onSettings }: 
         })}
       </ul>
 
-      <span className="flex-1" aria-hidden />
+      {recent.length > 0 && (
+        <>
+          <p className="frame-label">Recent</p>
+          <ul className="flex flex-col gap-0.5">
+            {recent.map((n) => (
+              <li key={n.id}>
+                <button type="button" className={ROW} onClick={() => openNote(n.id)}>
+                  <Icon name="note" size={18} className="shrink-0" />
+                  <span className="truncate">{n.title}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
 
-      {/* Capture, side by side. */}
-      <div className="flex gap-2">
-        <ScanPicker onFile={(f) => { onClose?.(); scan(f); }}>
-          {(pick) => (
-            <button type="button" className="btn btn-secondary flex-1 font-normal max-md:h-11" onClick={pick} disabled={!!busy} title="Scan a receipt, note, e-wallet screenshot or chat">
-              <Icon name="scan" size={16} /> Scan
-            </button>
-          )}
-        </ScanPicker>
-        <button
-          type="button"
-          className={`btn btn-secondary flex-1 font-normal max-md:h-11 ${recording ? "!text-[var(--danger)]" : ""}`}
-          onClick={record}
-          disabled={(!!busy && !recording) || voice !== "off"}
-          title={recording ? "Stop recording" : "Record a voice note"}
-        >
-          <Icon name={recording ? "stop" : "mic"} size={16} /> {recording ? "Stop" : "Record"}
-        </button>
-      </div>
+      {/* Shared spaces (Supabase) are only there once signed in. */}
+      {spaces.length > 0 && (
+        <>
+          <p className="frame-label">Spaces</p>
+          <ul className="flex flex-col gap-0.5">
+            {[{ id: null as string | null, name: "Personal" }, ...spaces].map((s) => (
+              <li key={s.id ?? "personal"}>
+                <button type="button" className={ROW} aria-current={currentSpaceId === s.id ? "true" : undefined} onClick={() => { switchSpace(s.id); onClose?.(); }}>
+                  <Icon name="users" size={18} className="shrink-0" />
+                  <span className="truncate">{s.name}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
 
-      <div className="flex flex-col gap-0.5">
-        <button type="button" className={ROW} onClick={toggleVoice} disabled={recording}>
-          <Icon name="wave" size={16} className={`shrink-0 ${voice !== "off" ? "text-[var(--accent)]" : ""}`} />
-          {voice !== "off" ? "End voice mode" : "Voice assistant"}
-        </button>
-        <button type="button" className={ROW} onClick={openSettings} aria-keyshortcuts={mac ? "Meta+Comma" : "Control+Comma"}>
+      <span className="min-h-4 flex-1" aria-hidden />
+
+      {/* Settings, and where the data lives. Signed in, the status opens the account menu. */}
+      <div className="flex items-center gap-1">
+        <button type="button" className={`${ROW} !h-8 w-auto flex-1 !text-[13px] !text-[var(--frame-muted)]`} onClick={openSettings} aria-keyshortcuts={mac ? "Meta+Comma" : "Control+Comma"}>
           <Icon name="settings" size={16} className="shrink-0" />
-          <span className="flex-1">Settings</span>
-          <kbd className="bg-transparent p-0 text-xs text-[var(--text-muted)] max-md:hidden" aria-hidden>{mac ? "⌘," : "Ctrl ,"}</kbd>
+          Settings
         </button>
-      </div>
-
-      {/* Where the data lives. Signed in: the line opens sync settings. */}
-      <div className="flex items-center gap-2 border-t border-[var(--border-subtle)] px-3 pt-2.5 text-xs text-[var(--text-muted)]">
-        <Icon name="cloud" size={16} className={`shrink-0 ${syncTone}`} />
-        {syncState ? (
-          <button
-            type="button"
-            className="min-h-8 min-w-0 flex-1 truncate text-left hover:text-[var(--foreground)] max-md:min-h-11"
-            onClick={syncSettings}
-            title={(google.email ? google.error : cloud.error) ?? "Sync settings"}
+        {signedInAs || syncAvailable ? (
+          <Dropdown
+            label={signedInAs ? `Account, ${signedInAs}` : "Sync"}
+            title={(google.email ? google.error : cloud.error) ?? syncText}
+            width={260}
+            align="right"
+            chevron={false}
+            className="flex h-8 min-w-0 items-center gap-1.5 rounded-full px-2.5 text-[13px] text-[var(--frame-muted)] transition-colors hover:bg-[var(--frame-2)] max-md:h-11"
+            button={<><Icon name="cloud" size={15} className={`shrink-0 ${syncTone}`} /><span className="truncate">{syncShort}</span></>}
           >
-            {syncText}
-          </button>
-        ) : (
-          <>
-            <span className="min-w-0 flex-1 truncate">{syncText}</span>
-            {syncAvailable && (
-              <button type="button" className="min-h-8 shrink-0 font-medium text-[var(--foreground)] hover:underline max-md:min-h-11" onClick={syncSettings}>
-                Turn on sync
-              </button>
+            {(close) => (
+              <>
+                {signedInAs ? (
+                  <>
+                    <MenuLabel>{signedInAs}</MenuLabel>
+                    <MenuItem icon="cloud" label="Sync settings" onSelect={() => { close(); syncSettings(); }} />
+                    <MenuSep />
+                    <MenuItem icon="logout" label="Sign out" onSelect={() => { close(); void signOut(); }} />
+                    {/* Someone else's or a shared computer: leave nothing behind. */}
+                    <MenuItem icon="trash" label="Sign out and remove data…" danger onSelect={() => { close(); setConfirmWipe(true); }} />
+                  </>
+                ) : (
+                  <MenuItem icon="cloud" label="Sign in to sync and share" onSelect={() => { close(); syncSettings(); }} />
+                )}
+              </>
             )}
-          </>
+          </Dropdown>
+        ) : (
+          <span className="flex items-center gap-1.5 px-2.5 text-[13px] text-[var(--frame-muted)]"><Icon name="cloud" size={15} className="shrink-0" />On this device</span>
         )}
       </div>
 

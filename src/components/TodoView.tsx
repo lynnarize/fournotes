@@ -1,7 +1,7 @@
 "use client";
-// To-Do: a board (To do, Doing, Done) with the open task in a panel beside it. Columns are
-// neutral; colour marks only real status (due soon, overdue), always with words. Phones show
-// one status at a time, picked with a segmented control, and open a task full screen.
+// The Planner: calendar and tasks in one place, as a Day, a List or a Board, with the open task
+// on a side sheet. The board's columns are neutral; colour marks only real status (due soon,
+// overdue), always with words. Phones show one status at a time, and open a task full screen.
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { downloadIcs, googleCalendarUrl, toLocalInput } from "@/lib/client";
 import { suggestReminder } from "@/lib/insights";
@@ -15,8 +15,12 @@ import { peopleIn, usePeople } from "@/lib/people";
 import { isMe, parseRotation, turnLabel, turnMessageUrl } from "@/lib/tasks";
 import type { ExpenseCategory, Todo } from "@/lib/types";
 import EmptyStart from "./EmptyStart";
+import { dayAt, dayLabel, PlannerDay, PlannerList } from "./Planner";
 import StuckTasks from "./StuckTasks";
-import { Icon, useToast } from "./ui";
+import { Icon, PageHead, useToast } from "./ui";
+
+type PlannerView = "day" | "list" | "board";
+const VIEW_KEY = "four-notes:planner-view";
 
 const PRIORITY_LABEL = { high: "High priority", medium: "Medium priority", low: "Low priority" };
 
@@ -129,6 +133,19 @@ export default function TodoView() {
   const [over, setOver] = useState<Status | null>(null);
   const [allDone, setAllDone] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
+  const [view, setViewState] = useState<PlannerView>("day");
+  const [dayOffset, setDayOffset] = useState(0);
+  // Remembered per device; read after mount, as the server can't know it.
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(VIEW_KEY);
+      if (v === "list" || v === "board") setViewState(v);
+    } catch { /* storage blocked */ }
+  }, []);
+  const setView = (v: PlannerView) => {
+    setViewState(v);
+    try { localStorage.setItem(VIEW_KEY, v); } catch { /* storage blocked */ }
+  };
   // Phones: the status shown.
   const [tab, setTab] = useState<Status>("todo");
   const now = useNow();
@@ -209,6 +226,7 @@ export default function TodoView() {
     show(f.id);
   });
 
+  const toggle = (t: Todo) => move(t.id, t.done ? "todo" : "done");
   const card = (t: Todo) => (
     <TodoCard
       key={t.id}
@@ -243,17 +261,28 @@ export default function TodoView() {
   }, [phoneItems, now]);
 
   return (
-    <div className="flex items-start gap-4">
-      <div className="min-w-0 flex-1">
-        {/* Under the page title: how much is open, and New. */}
-        <div className="-mt-2 mb-4 flex flex-wrap items-center gap-3">
-          <p className="min-w-0 flex-1 text-[var(--text-secondary)]">
-            <span className="fn-num">{openCount}</span> open, <span className="fn-num">{doneThisWeek}</span> done this week
-          </p>
+    <div className="flex min-h-0 flex-1 flex-col pb-24 max-md:pb-[calc(var(--tabbar-space)+72px)] md:flex-row md:gap-3 md:pb-0">
+      <section className="sheet min-w-0 flex-1 md:overflow-y-auto md:px-8 md:pb-8 md:pt-7">
+        <PageHead
+          title="Planner"
+          sub={view === "day" ? dayLabel(dayAt(now, dayOffset), now) : <><span className="fn-num">{openCount}</span> open, <span className="fn-num">{doneThisWeek}</span> done this week</>}
+        >
+          {view === "day" && (
+            <>
+              {dayOffset !== 0 && <button type="button" className="btn btn-secondary max-md:h-11" onClick={() => setDayOffset(0)}>Today</button>}
+              <button type="button" className="btn btn-secondary btn-icon max-md:hidden" aria-label="Previous day" onClick={() => setDayOffset(dayOffset - 1)}><Icon name="chevronLeft" size={18} /></button>
+              <button type="button" className="btn btn-secondary btn-icon max-md:hidden" aria-label="Next day" onClick={() => setDayOffset(dayOffset + 1)}><Icon name="chevron" size={18} /></button>
+            </>
+          )}
+          <div role="group" aria-label="View" className="seg">
+            {(["day", "list", "board"] as const).map((v) => (
+              <button key={v} type="button" aria-pressed={view === v} onClick={() => setView(v)} className="capitalize">{v}</button>
+            ))}
+          </div>
           <button onClick={() => create(mobile ? tab : "todo")} className="btn btn-primary pl-3 pr-4 max-md:h-11">
             <Icon name="plus" size={16} /> New task
           </button>
-        </div>
+        </PageHead>
 
         {perm === "default" && (
           <div className="mb-4 flex items-center gap-3 rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--surface)] py-2 pl-4 pr-2 text-sm">
@@ -271,6 +300,10 @@ export default function TodoView() {
             hint="Press New task, or ask the assistant. It understands dates, reminders and repeats. Scan a chat screenshot to turn its plans into tasks."
             prompts={["Remind me to pay rent every month on the 5th at 9am", "Call the dentist tomorrow at 10am"]}
           />
+        ) : view === "day" ? (
+          <PlannerDay todos={live} now={now} offset={dayOffset} setOffset={setDayOffset} openId={openId} onOpen={show} onToggle={toggle} />
+        ) : view === "list" ? (
+          <PlannerList todos={shownTodos} now={now} openId={openId} onOpen={show} onToggle={toggle} />
         ) : (
           <>
             {mobile && (
@@ -283,7 +316,7 @@ export default function TodoView() {
               </div>
             )}
 
-            <div role="group" aria-label="Filter tasks" className="-mx-4 mb-5 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:flex-wrap md:overflow-visible md:px-0">
+            <div role="group" aria-label="Filter tasks" className="-mx-[18px] mb-5 flex gap-2 overflow-x-auto px-[18px] [scrollbar-width:none] md:mx-0 md:flex-wrap md:overflow-visible md:px-0">
               {FILTERS.map((f) => (
                 <button key={f.id} type="button" aria-pressed={filter === f.id} onClick={() => setFilter(f.id)} className="pill pill-sm shrink-0 max-md:h-9 max-md:text-sm">
                   {f.label}
@@ -352,7 +385,7 @@ export default function TodoView() {
             )}
           </>
         )}
-      </div>
+      </section>
 
       {openTodo && (
         <TaskPanel
@@ -536,17 +569,17 @@ function TaskPanel({ todo, isNew, expanded, mobile, anim, onToggleExpand, onClos
       data-anim={anim}
       role="complementary"
       aria-label="Task details"
-      className={`note-card flex min-h-0 flex-col bg-[var(--surface)] ${
+      className={`note-card flex min-h-0 flex-col ${
         expanded
-          ? "fixed inset-0 z-[45] pt-[env(safe-area-inset-top)]"
-          : "sticky top-4 max-h-[calc(100dvh-2rem)] w-[380px] shrink-0 rounded-[var(--radius-panel)] border border-[var(--border)] lg:w-[420px]"
+          ? "fixed inset-0 z-[45] bg-[var(--background)] pt-[env(safe-area-inset-top)]"
+          : "sheet w-[380px] shrink-0 overflow-hidden lg:w-[400px]"
       }`}
     >
       <div className="flex shrink-0 items-center gap-1 px-2 pt-2 md:px-4 md:pt-4">
         {mobile ? (
           <>
-            <button className="btn btn-plain h-11 gap-1 pl-2 pr-3 text-[var(--foreground)]" onClick={onClose} aria-label="Back to To-Do">
-              <Icon name="chevronLeft" size={20} /> To-Do
+            <button className="btn btn-plain h-11 gap-1 pl-2 pr-3 text-[var(--foreground)]" onClick={onClose} aria-label="Back to Planner">
+              <Icon name="chevronLeft" size={20} /> Planner
             </button>
             <span className="flex-1" />
           </>

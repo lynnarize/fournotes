@@ -436,7 +436,7 @@ export function StoreProvider({ children, adapter = localAdapter }: { children: 
                 noteId: (a.noteRef && refs.get(a.noteRef)) || fallbackNote(),
               });
               transactionIds.push(t.id);
-              file(`💸 Finance: ${a.merchant}${a.splitWith?.length ? ` (split ${a.splitWith.length + 1})` : ""}`, { kind: "transactions", id: t.id });
+              file(`💸 Money: ${a.merchant}${a.splitWith?.length ? ` (split ${a.splitWith.length + 1})` : ""}`, { kind: "transactions", id: t.id });
               break;
             }
             case "create_sticky": {

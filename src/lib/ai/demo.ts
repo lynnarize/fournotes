@@ -53,7 +53,7 @@ export class DemoProvider implements LLMProvider {
     const wallet = parseWalletNotification(text);
     if (wallet && !/\b(remind|ingatkan)\b/i.test(text)) {
       actions.push({ type: "add_transaction", merchant: wallet.merchant, amount: wallet.amount, category: wallet.category, date: today });
-      return { reply: `Logged ${wallet.wallet ?? "the"} notification in Finance.${DEMO}`, actions, demo: true };
+      return { reply: `Logged ${wallet.wallet ?? "the"} notification in Money.${DEMO}`, actions, demo: true };
     }
 
     // "budget makan 1.5jt" / "set food budget to 2jt"
@@ -90,7 +90,7 @@ export class DemoProvider implements LLMProvider {
         type: "create_todo", title: title || text, dueAt: when, remindAt: when, rrule,
         bill: amount && amount >= 1000 ? { amount, category: guessCategory(text) === "Other" ? "Bills & Utilities" : guessCategory(text) } : null,
       });
-      return { reply: `Added to your To-Do${when ? " with a reminder" : ""}${rrule ? ", repeating" : ""}.${DEMO}`, actions, demo: true };
+      return { reply: `Added to your Planner${when ? " with a reminder" : ""}${rrule ? ", repeating" : ""}.${DEMO}`, actions, demo: true };
     }
 
     const amount = parseAmount(text);
@@ -99,7 +99,7 @@ export class DemoProvider implements LLMProvider {
       const clean = text.replace(/\b(?:split with|bagi dengan|patungan (?:sama|dengan))\s+.+$/i, "");
       const merchant = clean.match(/\b(?:at|di)\s+([^,]+?)\s*$/i)?.[1]?.slice(0, 40) ?? clean.replace(/\d[\d.,]*\s*(rb|ribu|k|jt|juta)?/gi, "").replace(/\b(beli|bayar|spent|paid|bought|buy)\b/gi, "").trim().slice(0, 40);
       actions.push({ type: "add_transaction", merchant: merchant || "Expense", amount, category: guessCategory(text), date: today, splitWith: splitWith.length ? splitWith : undefined });
-      return { reply: `Logged in Finance.${DEMO}`, actions, demo: true };
+      return { reply: `Logged in Money.${DEMO}`, actions, demo: true };
     }
 
     if (/^(note|catat|catatan)\b[:\s]/i.test(text)) {

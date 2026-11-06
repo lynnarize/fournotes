@@ -70,11 +70,11 @@ function describe(label: string, link: ChangeLink, all: AppData): CardInfo {
         gone,
       };
     }
-    if (!t) return { icon: "wallet", head: "Added to Finance", title: rest, gone: true };
+    if (!t) return { icon: "wallet", head: "Added to Money", title: rest, gone: true };
     const ways = t.splits?.length ? `, split ${t.splits.length + 1} ways` : "";
     return {
       icon: "wallet",
-      head: t.amount < 0 ? "Income added to Finance" : "Added to Finance",
+      head: t.amount < 0 ? "Income added to Money" : "Added to Money",
       title: `${t.merchant}, ${formatMoney(Math.abs(t.amount), t.currency)}`,
       detail: `${t.category}, ${dayLabel(t.date)}${ways}`,
       gone,
@@ -82,7 +82,7 @@ function describe(label: string, link: ChangeLink, all: AppData): CardInfo {
   }
   if (link.kind === "todos") {
     const t = all.todos.find((x) => x.id === link.id);
-    const head = /^done/i.test(verb) ? "Marked done" : /^doing/i.test(verb) ? "In progress" : "Added to To-Do";
+    const head = /^done/i.test(verb) ? "Marked done" : /^doing/i.test(verb) ? "In progress" : "Added to the Planner";
     if (!t) return { icon: "squareCheck", head, title: rest, gone: true };
     const freq = t.rrule?.match(/FREQ=(\w+)/i)?.[1]?.toUpperCase();
     return {

@@ -439,8 +439,8 @@ const WASH = {
 function WelcomePicture() {
   const { resolved } = useTheme();
   const rows = [
-    { icon: "finance", title: "Kopi Kenangan", detail: "Finance, food and drink", trailing: "Rp 25,000", trailingClass: "font-medium" },
-    { icon: "todo", title: "Pay the electricity bill", detail: "To-Do, reminder set", trailing: "Tomorrow, 9:00", trailingClass: "text-[13px] text-[var(--text-secondary)]" },
+    { icon: "finance", title: "Kopi Kenangan", detail: "Money, food and drink", trailing: "Rp 25,000", trailingClass: "font-medium" },
+    { icon: "todo", title: "Pay the electricity bill", detail: "Planner, reminder set", trailing: "Tomorrow, 9:00", trailingClass: "text-[13px] text-[var(--text-secondary)]" },
     { icon: "note", title: "Singapore trip", detail: "Notes, flights on the 12th, hotel near Bugis", trailing: "Yesterday", trailingClass: "text-[13px] text-[var(--text-muted)]", faded: true },
   ];
   return (
@@ -622,7 +622,7 @@ function BriefTiles() {
 
 /** Everything the app does, around its mark. */
 function FeatureOrbit() {
-  const items = [["note", "Notes"], ["todo", "To-Do"], ["finance", "Finance"], ["scan", "Scan"], ["mic", "Voice"], ["search", "Search"]];
+  const items = [["note", "Notes"], ["todo", "Planner"], ["finance", "Money"], ["scan", "Scan"], ["mic", "Voice"], ["search", "Search"]];
   const r = 124;
   return (
     <div className="relative h-[320px] w-[320px] max-w-full">

@@ -85,7 +85,7 @@ export function renumbered(text: string, c: Citations) {
 /** The answer with every citation marker removed: for titles and for reading aloud. */
 export const withoutCitations = (text: string) => text.replace(new RegExp(`[ \\t]*(${GROUP.source})`, "gi"), "");
 
-const KIND_NAME: Record<SourceKind, string> = { note: "Note", quick: "Quick note", todo: "To-Do", transaction: "Finance", budget: "Budgets" };
+const KIND_NAME: Record<SourceKind, string> = { note: "Note", quick: "Quick note", todo: "Planner", transaction: "Finance", budget: "Budgets" };
 
 const shortDate = (day?: string) => {
   if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return "";

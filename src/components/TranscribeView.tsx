@@ -78,64 +78,10 @@ export default function TranscribeView() {
   const recordingHere = rec.status !== "idle" && rec.talkId;
 
   return (
-    <div className="-mx-4 flex min-h-0 flex-1 md:-mx-8">
-      {showList && (
-        <aside className="fn-aside flex min-h-0 w-full shrink-0 flex-col md:w-[331px] md:border-r md:border-[var(--border)]">
-          <div className="flex min-h-0 w-full flex-1 flex-col px-3 md:w-[330px]">
-            <div className="flex items-center gap-1 pb-3 pl-2 pr-1 pt-5 md:pt-6">
-              <h2 className="fn-display min-w-0 flex-1 text-[28px]">Meetings</h2>
-              {rec.status === "idle" ? (
-                <button onClick={newRecording} className="btn btn-primary pl-2.5 pr-3.5 max-md:h-11">
-                  <Icon name="mic" size={16} /> Record
-                </button>
-              ) : (
-                <button onClick={() => recordingHere && open(rec.talkId!)} className="btn btn-secondary pl-2.5 pr-3.5 !text-[var(--danger)] max-md:h-11">
-                  <span className="recording h-2 w-2 rounded-full bg-[var(--danger)]" aria-hidden /> Recording
-                </button>
-              )}
-            </div>
-            <div className="px-1 pb-3">
-              <div className="relative">
-                <Icon name="search" size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-                <input
-                  type="search"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Escape" && query) { e.stopPropagation(); setQuery(""); }
-                    if (e.key === "Enter" && query.trim() && !list.length) ask();
-                  }}
-                  placeholder="Search talks"
-                  aria-label="Search talks"
-                  className="field pl-9 max-md:h-11"
-                />
-              </div>
-              {query.trim().length > 1 && (
-                <button onClick={ask} className="mt-2 flex w-full items-center gap-2 rounded-[var(--radius-control)] px-3 py-2 text-left text-[13px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--hover)] hover:text-[var(--foreground)]">
-                  <Icon name="sparkle" size={14} className="shrink-0 text-[var(--accent)]" />
-                  <span className="min-w-0 flex-1 truncate">Ask the assistant about “{query.trim()}”</span>
-                </button>
-              )}
-            </div>
-            <div className="scroll-thin -mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-24 max-md:pb-[calc(var(--tabbar-space)+64px)]">
-              {!query.trim() && <TodaysMeetings onOpen={open} />}
-              <ul className="flex flex-col gap-1">
-                {list.map((t) => <TalkRow key={t.id} talk={t} selected={!mobile && !setup && selected?.id === t.id} onOpen={() => open(t.id)} />)}
-              </ul>
-              {mine.length === 0 && (
-                <div className="px-3 py-8 text-center">
-                  <p className="font-medium">No talks yet</p>
-                  <p className="mt-1 text-sm text-[var(--text-muted)]">Record a conversation in person, or a Google Meet, Zoom or WhatsApp call. You get who said what, a summary, and a note if you want one.</p>
-                </div>
-              )}
-              {mine.length > 0 && list.length === 0 && <p className="px-3 py-8 text-center text-sm text-[var(--text-muted)]">No talk mentions that. Ask the assistant instead.</p>}
-            </div>
-          </div>
-        </aside>
-      )}
-
+    <div className="flex min-h-0 flex-1 max-md:-mx-[18px] max-md:-mt-[22px] md:gap-3">
       {(mobile ? mobileOpen : true) && (
-        setup && rec.status === "idle" ? (
+        <section className="sheet flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto max-md:rounded-none">
+        {setup && rec.status === "idle" ? (
           <NewRecording
             key={preset?.meeting.id ?? "new"}
             preset={preset}
@@ -162,8 +108,64 @@ export default function TranscribeView() {
               </div>
             </div>
           )
-        )
+        )}
+        </section>
       )}
+      {showList && (
+        <aside className="fn-aside sheet flex min-h-0 w-full shrink-0 flex-col md:w-[360px]">
+          <div className="flex min-h-0 w-full flex-1 flex-col px-[22px] md:w-[360px]">
+            <div className="flex items-center gap-1 pb-3 pt-5 md:pt-6">
+              <h2 className="min-w-0 flex-1 text-[24px] font-bold leading-[1.1] tracking-[-0.025em]">Meetings</h2>
+              {rec.status === "idle" ? (
+                <button onClick={newRecording} className="btn btn-primary pl-2.5 pr-3.5 max-md:h-11">
+                  <Icon name="mic" size={16} /> Record
+                </button>
+              ) : (
+                <button onClick={() => recordingHere && open(rec.talkId!)} className="btn btn-secondary pl-2.5 pr-3.5 !text-[var(--danger)] max-md:h-11">
+                  <span className="recording h-2 w-2 rounded-full bg-[var(--danger)]" aria-hidden /> Recording
+                </button>
+              )}
+            </div>
+            <div className="pb-3">
+              <div className="relative">
+                <Icon name="search" size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape" && query) { e.stopPropagation(); setQuery(""); }
+                    if (e.key === "Enter" && query.trim() && !list.length) ask();
+                  }}
+                  placeholder="Search talks"
+                  aria-label="Search talks"
+                  className="field pl-9 max-md:h-11"
+                />
+              </div>
+              {query.trim().length > 1 && (
+                <button onClick={ask} className="mt-2 flex w-full items-center gap-2 rounded-[var(--radius-control)] px-3 py-2 text-left text-[13px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--hover)] hover:text-[var(--foreground)]">
+                  <Icon name="sparkle" size={14} className="shrink-0 text-[var(--ai)]" />
+                  <span className="min-w-0 flex-1 truncate">Ask the assistant about “{query.trim()}”</span>
+                </button>
+              )}
+            </div>
+            <div className="scroll-thin -mx-[22px] min-h-0 flex-1 overflow-y-auto px-[22px] pb-6 max-md:pb-[calc(var(--tabbar-space)+64px)]">
+              {!query.trim() && <TodaysMeetings onOpen={open} />}
+              <ul className="flex flex-col gap-1">
+                {list.map((t) => <TalkRow key={t.id} talk={t} selected={!mobile && !setup && selected?.id === t.id} onOpen={() => open(t.id)} />)}
+              </ul>
+              {mine.length === 0 && (
+                <div className="px-3 py-8 text-center">
+                  <p className="font-medium">No talks yet</p>
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">Record a conversation in person, or a Google Meet, Zoom or WhatsApp call. You get who said what, a summary, and a note if you want one.</p>
+                </div>
+              )}
+              {mine.length > 0 && list.length === 0 && <p className="px-3 py-8 text-center text-sm text-[var(--text-muted)]">No talk mentions that. Ask the assistant instead.</p>}
+            </div>
+          </div>
+        </aside>
+      )}
+
     </div>
   );
 }

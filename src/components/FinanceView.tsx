@@ -22,7 +22,7 @@ import SplitEditor from "./SplitEditor";
 import EmptyStart from "./EmptyStart";
 import Dashboard, { categoryColors } from "./finance/Dashboard";
 import { Dropdown, MenuItem, MenuSep } from "./notes/Dropdown";
-import { Icon, Modal, useToast } from "./ui";
+import { Icon, PageHead, Modal, useToast } from "./ui";
 
 const monthLabel = (m: string) =>
   new Date(`${m}-01T00:00:00`).toLocaleDateString("en-US", { month: "long", year: "numeric" });
@@ -37,6 +37,7 @@ type SortCol = "date" | "merchant" | "category" | "amount";
 type SortState = { col: SortCol; dir: "asc" | "desc" };
 
 export default function FinanceView({ setTab }: { setTab: (t: Tab) => void }) {
+  const [side, setSide] = useState<HTMLElement | null>(null);
   const { transactions, notes, summaries, settings, categories, addTransaction, updateTransaction, remove, saveSummary } = useStore();
   const { send, scan } = useAssistant();
   const toast = useToast();
@@ -173,10 +174,10 @@ export default function FinanceView({ setTab }: { setTab: (t: Tab) => void }) {
   };
 
   return (
-    <div>
-      {/* Under the page title (which carries the Beta badge): the month, scanning, and the rest of Finance's actions. */}
-      <div className="-mt-2 mb-6 flex flex-wrap items-center justify-end gap-2.5">
-        <div className="flex h-9 items-center rounded-full border border-[var(--border)] bg-[var(--surface)] max-md:h-11">
+    <div className="flex min-h-0 flex-1 flex-col pb-24 max-md:gap-8 max-md:pb-[calc(var(--tabbar-space)+72px)] md:flex-row md:gap-3 md:pb-0">
+      <section className="sheet min-w-0 flex-[999_1_560px] md:overflow-y-auto md:px-8 md:pb-8 md:pt-7">
+      <PageHead title="Money" badge={<span className="badge badge-info self-center font-[family-name:var(--font-body)] tracking-normal">Beta</span>}>
+        <div className="flex h-[34px] items-center rounded-full bg-[var(--surface-muted)] max-md:h-11">
           <button className="grid h-full w-9 place-items-center rounded-full text-[var(--text-secondary)] transition-colors hover:bg-[var(--hover)] hover:text-[var(--foreground)] max-md:w-11" onClick={() => setMonth((m) => shiftMonth(m, -1))} aria-label="Previous month">
             <Icon name="chevronLeft" size={16} />
           </button>
@@ -202,9 +203,10 @@ export default function FinanceView({ setTab }: { setTab: (t: Tab) => void }) {
             </>
           )}
         </Dropdown>
-      </div>
+      </PageHead>
 
       <Dashboard
+        side={side}
         month={month}
         setTab={setTab}
         summary={summary}
@@ -492,6 +494,8 @@ export default function FinanceView({ setTab }: { setTab: (t: Tab) => void }) {
           <button className="btn btn-primary btn-lg w-full" onClick={() => setSettingsOpen(false)}>Done</button>
         </div>
       </Modal>
+      </section>
+      <aside ref={setSide} aria-label="Coming up" className="sheet sheet-side max-md:max-w-none max-md:p-0" />
     </div>
   );
 }

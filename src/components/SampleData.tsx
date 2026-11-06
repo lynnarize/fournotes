@@ -48,13 +48,13 @@ export default function SampleBanner() {
   if (!hasSamples) return null;
   return (
     <div
-      className="no-print flex min-h-11 items-center md:min-h-9 justify-center gap-2 border-b border-[var(--border-subtle)] bg-[var(--surface-muted)] px-4 text-[13px] text-[var(--text-secondary)]"
+      className="no-print on-frame flex min-h-11 items-center justify-center gap-2 bg-[var(--frame-2)] px-4 text-[13px] !text-[var(--frame-muted)] md:min-h-9"
       role="status"
     >
-      <Icon name="sparkle" size={14} className="shrink-0 text-[var(--accent)]" />
+      <Icon name="sparkle" size={14} className="shrink-0" />
       <span>You&apos;re looking at sample data. It isn&apos;t saved to the cloud.</span>
       <button
-        className="btn btn-sm btn-plain font-medium text-[var(--foreground)] max-md:h-11"
+        className="btn btn-sm btn-plain font-medium !text-[var(--frame-text)] hover:!bg-[var(--frame-3)] max-md:h-11"
         onClick={() => {
           clearSamples();
           toast("Sample data removed.");

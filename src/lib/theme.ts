@@ -2,7 +2,7 @@
 // Themes: "system" follows the device; "light", "paper" (warm paper, ink-brown text)
 // and "dark" override it. Stored per device (not synced) and applied via <html data-theme="…">.
 import { useEffect, useState } from "react";
-import { ACCENT_KEY, ACCENTS, THEME_COLORS, THEME_KEY } from "./theme-script";
+import { ACCENT_KEY, ACCENTS, FRAME_KEY, THEME_COLORS, THEME_KEY } from "./theme-script";
 
 export type ThemePref = "system" | "light" | "paper" | "dark";
 export type ResolvedTheme = "light" | "paper" | "dark";
@@ -115,6 +115,42 @@ export function useAccent() {
     return () => window.removeEventListener(ACCENT_EVT, update);
   }, []);
   return { accent, setAccent };
+}
+
+// ---- Frame ------------------------------------------------------------------
+// The frame around the sheets: ink, or light (Settings → Appearance). Stored per device, and
+// applied as <html data-frame="light"> before first paint (theme-script.ts).
+
+export type FramePref = "ink" | "light";
+const FRAME_EVT = "four-notes:frame-changed";
+
+export function getFrame(): FramePref {
+  try {
+    return localStorage.getItem(FRAME_KEY) === "light" ? "light" : "ink";
+  } catch {
+    return "ink";
+  }
+}
+
+export function setFrame(frame: FramePref) {
+  try {
+    if (frame === "ink") localStorage.removeItem(FRAME_KEY);
+    else localStorage.setItem(FRAME_KEY, frame);
+  } catch { /* storage blocked: still apply for this session */ }
+  if (frame === "light") document.documentElement.dataset.frame = "light";
+  else delete document.documentElement.dataset.frame;
+  window.dispatchEvent(new Event(FRAME_EVT));
+}
+
+export function useFrame() {
+  const [frame, setState] = useState<FramePref>("ink");
+  useEffect(() => {
+    const update = () => setState(getFrame());
+    update();
+    window.addEventListener(FRAME_EVT, update);
+    return () => window.removeEventListener(FRAME_EVT, update);
+  }, []);
+  return { frame, setFrame };
 }
 
 export function useTheme() {

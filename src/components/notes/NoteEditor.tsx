@@ -719,7 +719,7 @@ export default function NoteEditor({ note, onBack, listHidden, onToggleList, foc
     <div
       data-anim={anim}
       onAnimationEnd={(e) => { if (e.target === e.currentTarget) onAnimDone?.(); }}
-      className={`note-card flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--background)] ${
+      className={`note-card flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--background)] md:rounded-[var(--radius-surface)] ${
         focusMode ? "fixed inset-0 z-[45] pt-[env(safe-area-inset-top)]" : ""
       }`}
     >
@@ -731,7 +731,7 @@ export default function NoteEditor({ note, onBack, listHidden, onToggleList, foc
           </button>
         ) : (
           onToggleList && !focusMode && (
-            <IconBtn icon={listHidden ? "collapseRight" : "collapseLeft"} label={listHidden ? "Show note list" : "Hide note list"} onClick={onToggleList} />
+            <IconBtn icon={listHidden ? "collapseLeft" : "collapseRight"} label={listHidden ? "Show note list" : "Hide note list"} onClick={onToggleList} />
           )
         )}
         <IconBtn icon={focusMode ? "shrink" : "expand"} label={focusMode ? "Exit focus mode (Esc)" : "Focus mode"} onClick={onToggleFocus} />

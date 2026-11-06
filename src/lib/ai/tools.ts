@@ -34,7 +34,7 @@ export const ACTION_TOOLS = [
   {
     name: "create_todo",
     description:
-      "Add a task to the To-Do tab. Resolve relative dates ('tomorrow 9am', 'next Friday') into absolute ISO 8601 timestamps WITH the user's UTC offset. If the user asks to be reminded, set remindAt. For repeating tasks or bills (rent, internet, subscriptions) set rrule; if it costs money set bill so paying it logs spending.",
+      "Add a task to the Planner. Resolve relative dates ('tomorrow 9am', 'next Friday') into absolute ISO 8601 timestamps WITH the user's UTC offset. If the user asks to be reminded, set remindAt. For repeating tasks or bills (rent, internet, subscriptions) set rrule; if it costs money set bill so paying it logs spending.",
     input_schema: {
       type: "object",
       properties: {
@@ -51,7 +51,7 @@ export const ACTION_TOOLS = [
         rrule,
         bill: {
           type: ["object", "null"],
-          description: "For bills: the amount logged to Finance when the task is completed",
+          description: "For bills: the amount logged to Money when the task is completed",
           properties: {
             amount: { type: "number" },
             currency: { type: "string" },
@@ -91,7 +91,7 @@ export const ACTION_TOOLS = [
   {
     name: "add_transaction",
     description:
-      "Record money spent (positive amount) or received (negative amount, category Income) in the Finance tab. Also use for pasted e-wallet or bank notifications (GoPay, OVO, DANA, ShopeePay, QRIS, BCA, Mandiri…).",
+      "Record money spent (positive amount) or received (negative amount, category Income) in the Money tab. Also use for pasted e-wallet or bank notifications (GoPay, OVO, DANA, ShopeePay, QRIS, BCA, Mandiri…).",
     input_schema: {
       type: "object",
       properties: {

@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
-import { Geist, Inter } from "next/font/google";
+import { Geist } from "next/font/google";
 import localFont from "next/font/local";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
@@ -8,8 +8,7 @@ import { themeInitScript, THEME_COLORS } from "@/lib/theme-script";
 import "./globals.css";
 
 // Downloaded at build time and served from this site: visitors never contact Google Fonts.
-// Inter for text and controls; Geist for headings 30px and up (see --font-body and --font-display).
-const inter = Inter({ subsets: ["latin"], display: "swap", variable: "--font-inter" });
+// Geist for everything (see --font-body and --font-display).
 const geist = Geist({ subsets: ["latin"], display: "swap", variable: "--font-geist" });
 // Google's branding rules require Google Sans Medium on the "Continue with Google" button.
 // Self-hosted (SIL Open Font License, see src/fonts/GoogleSans-OFL.txt).
@@ -22,7 +21,7 @@ const googleSans = localFont({
 
 export const metadata: Metadata = {
   title: "Four Notes",
-  description: "Notes, To-Do and Finance in one place, with an AI assistant.",
+  description: "Notes, Planner and Money in one place, with an AI assistant.",
   manifest: "/manifest.webmanifest",
   applicationName: "Four Notes",
   appleWebApp: { capable: true, title: "Four Notes", statusBarStyle: "default" },
@@ -44,7 +43,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     // data-theme is set by the inline script before hydration, so React must not warn about it.
-    <html lang="en" className={`${inter.variable} ${geist.variable} ${googleSans.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${geist.variable} ${googleSans.variable}`} suppressHydrationWarning>
       <head>
         {/* Browsers blank the nonce attribute after load, so React would report a mismatch. */}
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: themeInitScript }} suppressHydrationWarning />

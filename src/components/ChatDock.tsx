@@ -312,7 +312,7 @@ function AskPill({ busy, unread, onClick }: { busy: string | null; unread: boole
     <button
       type="button"
       onClick={onClick}
-      className={`no-print fn-pop fixed right-4 z-[46] flex h-11 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] pl-3.5 pr-4 text-[14px] text-[var(--text-secondary)] shadow-[var(--shadow-floating)] transition-colors hover:text-[var(--foreground)] md:bottom-6 md:right-6 ${ABOVE_TABBAR}`}
+      className={`no-print fn-pop fixed right-4 z-[46] flex h-11 max-md:hidden items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] pl-3.5 pr-4 text-[14px] text-[var(--text-secondary)] shadow-[var(--shadow-floating)] transition-colors hover:text-[var(--foreground)] md:bottom-6 md:right-6 ${ABOVE_TABBAR}`}
       aria-label={unread ? "Ask Four Notes, there's a new reply" : "Ask Four Notes"}
     >
       <span className="relative grid h-6 w-6 place-items-center text-[var(--foreground)]">

@@ -120,8 +120,8 @@ export default function CommandPalette({ open, onClose, setTab, onSettings }: {
       const seen = new Set(hits.map((h) => h.item.id));
       for (const h of hits) {
         if (h.kind === "note") out.push({ key: h.item.id, group: "Notes", icon: "note", label: h.item.title || "Untitled", hint: h.item.content.slice(0, 60), run: () => openItem("note", h.item.id) });
-        if (h.kind === "todo") out.push({ key: h.item.id, group: "To-Do", icon: "todo", label: h.item.title, hint: h.item.done ? "Done" : fmtDateTime(h.item.dueAt), run: () => openItem("todo", h.item.id) });
-        if (h.kind === "transaction") out.push({ key: h.item.id, group: "Finance", icon: "finance", label: h.item.merchant, detail: h.item.category, hint: `${shortDate(h.item.date)}, ${formatMoney(h.item.amount, h.item.currency)}`, run: () => openItem("transaction", h.item.id) });
+        if (h.kind === "todo") out.push({ key: h.item.id, group: "Planner", icon: "todo", label: h.item.title, hint: h.item.done ? "Done" : fmtDateTime(h.item.dueAt), run: () => openItem("todo", h.item.id) });
+        if (h.kind === "transaction") out.push({ key: h.item.id, group: "Money", icon: "finance", label: h.item.merchant, detail: h.item.category, hint: `${shortDate(h.item.date)}, ${formatMoney(h.item.amount, h.item.currency)}`, run: () => openItem("transaction", h.item.id) });
       }
       if (semantic?.q === query) {
         for (const n of semantic.notes) {
@@ -137,8 +137,8 @@ export default function CommandPalette({ open, onClose, setTab, onSettings }: {
       { key: "go-today", group: "Go to", icon: "today", label: "Today", run: () => setTab("today") },
       { key: "go-meetings", group: "Go to", icon: "wave", label: "Meetings", run: () => setTab("transcribe") },
       { key: "go-notes", group: "Go to", icon: "note", label: "Notes", run: () => setTab("notes") },
-      { key: "go-todo", group: "Go to", icon: "todo", label: "To-Do", run: () => setTab("todo") },
-      { key: "go-finance", group: "Go to", icon: "finance", label: "Finance", run: () => setTab("finance") },
+      { key: "go-todo", group: "Go to", icon: "todo", label: "Planner", run: () => setTab("todo") },
+      { key: "go-finance", group: "Go to", icon: "finance", label: "Money", run: () => setTab("finance") },
       { key: "new-note", group: "Create", icon: "plus", label: "New note", hint: "n …", run: () => { const n = store.addNote({ title: "" }); setTab("notes"); openItem("note", n.id); } },
       { key: "new-quick", group: "Create", icon: "note", label: "Quick note", hint: "s …", run: () => { setTab("today"); setTimeout(() => document.getElementById("quick-note-input")?.focus(), 350); } },
       theme.resolved === "dark"

@@ -240,7 +240,7 @@ export default function FinanceView({ setTab }: { setTab: (t: Tab) => void }) {
           onChange={(e) => setForm({ ...form, merchant: e.target.value })}
           placeholder={form.category === "Income" ? "Add income, like Salary" : "Add a transaction, like Lunch at Sederhana"}
           aria-label="Merchant or note"
-          className="input-plain h-11 min-w-0 flex-[999_1_240px] rounded-[20px] px-4 text-[15px]"
+          className="input-plain h-11 min-w-0 flex-[999_1_170px] rounded-[20px] px-4 text-[15px]"
         />
         <div className="flex h-11 min-w-0 flex-[1_1_170px] items-center rounded-[20px] bg-[var(--surface-muted)] pr-4">
           <select

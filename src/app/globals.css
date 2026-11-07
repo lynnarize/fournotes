@@ -1,29 +1,43 @@
 @import "tailwindcss";
 
-/* Design tokens, after Arc (uiarc.dev): neutral surfaces, hairline borders, one accent spent
-   on what is selected or active. Two vocabularies on purpose: the Arc role names (--surface,
-   --foreground, --border…) for new work, and the short names the components grew up with
-   (--bg, --text, --line…), mapped onto those roles. Shared with the macOS app (Design/Theme.swift).
-   Components use these through Tailwind's arbitrary values, e.g. bg-[var(--surface)]. */
+/* Design tokens, "ink and paper": an ink frame holds paper sheets, so only content is bright.
+   Hairline borders, one ink accent, and red kept for today and what's overdue. Two vocabularies
+   on purpose: the role names (--surface, --foreground, --border…) for new work, and the short
+   names the components grew up with (--bg, --text, --line…), mapped onto those roles. Shared
+   with the macOS app (Design/Theme.swift). Components use these through Tailwind's arbitrary
+   values, e.g. bg-[var(--surface)]. */
 :root {
   color-scheme: light;
-  --background: oklch(100% 0 0);
-  --surface: oklch(100% 0 0);
-  --surface-raised: oklch(100% 0 0);
-  --surface-muted: oklch(97.6% 0 0);
-  --sidebar: oklch(98.7% 0 0);
-  --foreground: oklch(17% 0 0);
-  --text-secondary: oklch(44% 0 0);
-  --text-muted: oklch(52% 0 0);
-  --border: oklch(92.5% 0 0);
-  --border-subtle: oklch(95.5% 0 0);
-  --border-strong: oklch(83% 0 0);
-  /* The accent: neutral ink by default, or the hue picked in Settings (data-accent below). */
-  --accent: oklch(30% 0 0);
-  --accent-strong: oklch(22% 0 0);
-  --accent-subtle: oklch(30% 0 0 / 0.07);
-  --accent-foreground: oklch(100% 0 0);
-  --control-track: oklch(89.5% 0 0);
+  /* The frame: the toolbar and sidebar around the sheets. Settings → Appearance can make it light. */
+  --frame: #111113;
+  --frame-2: #1f1f22;
+  --frame-3: #2b2b2f;
+  --frame-text: #ececee;
+  --frame-muted: #a1a1a8;
+  --frame-label: #8a8a91;
+  /* --background is the sheet: paper. Cards on it are --surface, a shade brighter. */
+  --background: #fbfaf8;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-muted: #f2f0ec;
+  --sidebar: var(--frame);
+  --foreground: #18181a;
+  --text-secondary: #55555b;
+  --text-muted: #6e6e74;
+  --border: #e7e4df;
+  --border-subtle: #efede9;
+  --border-strong: #cfccc7;
+  /* The accent: ink by default, or the hue picked in Settings (data-accent below). */
+  --accent: #18181a;
+  --accent-strong: #2c2c30;
+  --accent-subtle: rgb(24 24 26 / 0.07);
+  --accent-foreground: #ffffff;
+  /* The spark: today and overdue, and nothing else. The assistant is violet wherever it speaks. */
+  --spark: #e53437;
+  --ai: #5b3ba6;
+  --ai-subtle: #f1ecfb;
+  --ai-ink: #3f2a78;
+  --control-track: #e9e6e1;
   /* Status colours mean status: done, needs attention, failed. Never decoration. */
   --success: oklch(48% 0.15 150);
   --success-subtle: oklch(60% 0.15 150 / 0.12);
@@ -40,11 +54,11 @@
   --shadow-resting: 0 1px 2px oklch(0% 0 0 / 0.035);
   --shadow-floating: 0 20px 48px oklch(0% 0 0 / 0.105), 0 3px 10px oklch(0% 0 0 / 0.045);
   /* Concentric corners: a nested corner is the outer radius minus the padding between them. */
-  --radius-control: 18px;
-  --radius-panel: 26px;
-  --radius-surface: 34px;
+  --radius-control: 14px;
+  --radius-panel: 16px;
+  --radius-surface: 20px;
   --font-display: var(--font-geist), "Geist", ui-sans-serif, system-ui, sans-serif;
-  --font-body: var(--font-inter), "Inter", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-body: var(--font-geist), "Geist", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   /* The mark: a navy pen stroke and a red spark. */
   --logo-ink: #0f0b4c;
   --logo-red: #e53437;
@@ -61,12 +75,12 @@
   --muted: var(--text-secondary);
   --faint: var(--text-muted);
   --line: var(--border);
-  --hover: oklch(17% 0 0 / 0.045);
+  --hover: rgb(70 60 40 / 0.06);
   --ok: var(--success);
   --r-sm: 8px;
   --r-md: 12px;
-  --r-lg: 18px;
-  --r-xl: 26px;
+  --r-lg: 14px;
+  --r-xl: 16px;
   --shadow: var(--shadow-floating);
   --font-serif: var(--font-display);
   --card-paper: var(--surface);
@@ -99,11 +113,13 @@
 /* Paper: light, on warm paper — cream pages, ink-brown text. */
 :root[data-theme="paper"] {
   color-scheme: light;
+  --frame: #1c1712;
+  --frame-2: #2b241b;
+  --frame-3: #3a3226;
   --background: oklch(98.3% 0.011 85);
   --surface: oklch(99.3% 0.007 85);
   --surface-raised: oklch(99.3% 0.007 85);
   --surface-muted: oklch(95.6% 0.016 85);
-  --sidebar: oklch(96.9% 0.014 85);
   --foreground: oklch(27% 0.02 65);
   --text-secondary: oklch(43% 0.028 65);
   --text-muted: oklch(50% 0.028 65);
@@ -140,11 +156,13 @@
    (System follows the device). See src/lib/theme.ts. */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --background: oklch(19% 0 0);
-  --surface: oklch(21.5% 0 0);
-  --surface-raised: oklch(24% 0 0);
-  --surface-muted: oklch(25.5% 0 0);
-  --sidebar: oklch(20.5% 0 0);
+  --frame: #0b0b0d;
+  --frame-2: #1c1c1f;
+  --frame-3: #28282c;
+  --background: oklch(20% 0 0);
+  --surface: oklch(23% 0 0);
+  --surface-raised: oklch(25% 0 0);
+  --surface-muted: oklch(26% 0 0);
   --foreground: oklch(96% 0 0);
   --text-secondary: oklch(78% 0 0);
   --text-muted: oklch(67% 0 0);
@@ -155,6 +173,9 @@
   --accent-strong: oklch(97% 0 0);
   --accent-subtle: oklch(92% 0 0 / 0.1);
   --accent-foreground: oklch(19% 0 0);
+  --ai: #b9a2f0;
+  --ai-subtle: rgb(185 162 240 / 0.16);
+  --ai-ink: #d9cdf7;
   --control-track: oklch(33% 0 0);
   --success: oklch(78% 0.17 150);
   --success-subtle: oklch(70% 0.17 150 / 0.16);
@@ -190,6 +211,16 @@
   --calm-glow: 42%;
 }
 
+/* Frame (Settings → Appearance): light instead of ink. Dark themes keep theirs. */
+:root:not([data-theme="dark"])[data-frame="light"] {
+  --frame: #e8e6e2;
+  --frame-2: #dcd9d4;
+  --frame-3: #d0cdc7;
+  --frame-text: #1b1b1d;
+  --frame-muted: #56565c;
+  --frame-label: #606066;
+}
+
 /* Accent hues (Settings → Appearance), on <html data-accent="…">. "neutral" uses the theme's own ink.
    Light values keep white text at 4.5:1 or better; dark values are lighter for dark surfaces. */
 :root[data-accent="blue"] { --accent: #0562ef; --accent-strong: #074db7; --accent-subtle: rgb(5 98 239 / 0.1); --accent-foreground: #fff; }
@@ -216,13 +247,13 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Headings 30px and up: Geist, regular weight, tight tracking. Hierarchy comes from size and colour, not bold. */
+/* Page titles: Geist, bold, tight tracking. Everything else gets its hierarchy from size and colour. */
 .fn-serif,
 .fn-display {
   font-family: var(--font-display);
-  font-weight: 400;
+  font-weight: 700;
   letter-spacing: -0.03em;
-  line-height: 1.1;
+  line-height: 1.05;
 }
 /* Numbers that change or line up in columns. */
 .fn-num { font-variant-numeric: tabular-nums; }
@@ -492,7 +523,7 @@ kbd {
 
 /* A dot on a tab that just received something from the assistant. */
 /* The phone tab bar floats over the page: frosted, so what scrolls beneath shows faintly through. */
-.tabbar { background: color-mix(in oklab, var(--surface) 78%, transparent); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); }
+.tabbar { background: color-mix(in oklab, var(--background) 62%, transparent); -webkit-backdrop-filter: blur(18px) saturate(1.8); backdrop-filter: blur(18px) saturate(1.8); border: 0.5px solid rgb(17 17 19 / 0.1); box-shadow: 0 10px 30px rgb(17 17 19 / 0.16), 0 1px 2px rgb(17 17 19 / 0.08), inset 0 1px 0 rgb(255 255 255 / 0.5); }
 @supports not (backdrop-filter: blur(1px)) { .tabbar { background: var(--surface); } }
 
 /* An indeterminate progress bar: a stripe sliding across while there's no number to show. */
@@ -761,28 +792,30 @@ kbd {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    height: 36px;
+    height: 34px;
     padding: 0 14px;
     flex-shrink: 0;
     border-radius: 9999px;
     border: 1px solid transparent;
     font-size: 14px;
-    font-weight: 500;
+    font-weight: 600;
     line-height: 1;
     white-space: nowrap;
     transition: background-color 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s, transform 0.12s;
   }
   .btn:active:not(:disabled):not([aria-disabled="true"]) { transform: scale(0.97); }
   .btn:disabled, .btn[aria-disabled="true"] { opacity: 0.45; cursor: default; }
-  .btn-sm { height: 32px; padding: 0 12px; gap: 6px; font-size: 13px; }
+  .btn-sm { height: 30px; padding: 0 12px; gap: 6px; font-size: 13px; }
   .btn-lg { height: 44px; padding: 0 20px; font-size: 15px; }
-  .btn-icon { width: 36px; padding: 0; }
-  .btn-sm.btn-icon { width: 32px; }
+  .btn-icon { width: 34px; padding: 0; }
+  .btn-sm.btn-icon { width: 30px; }
   .btn-lg.btn-icon { width: 44px; }
   .btn-primary { background: var(--accent); color: var(--accent-foreground); }
   .btn-primary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--accent-strong); }
-  .btn-secondary { background: var(--surface); color: var(--foreground); border-color: var(--border); }
-  .btn-secondary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--surface-muted); }
+  .btn-secondary { background: var(--surface-muted); color: var(--text-secondary); }
+  .btn-secondary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--control-track); color: var(--foreground); }
+  .btn-outline { background: var(--surface); color: var(--foreground); border-color: var(--border); }
+  .btn-outline:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--surface-muted); }
   .btn-plain { background: transparent; color: var(--text-secondary); font-weight: 400; }
   .btn-plain:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--hover); color: var(--foreground); }
   .btn-danger { background: transparent; color: var(--danger); }
@@ -809,14 +842,14 @@ kbd {
   .field[aria-invalid="true"] { border-color: var(--danger); }
   textarea.field { height: auto; padding: 10px 14px; border-radius: 14px; line-height: 1.5; }
   select.field { padding-right: 32px; }
-  .field-lg { height: 44px; border-radius: 22px; padding: 0 16px; }
+  .field-lg { height: 44px; border-radius: var(--radius-control); padding: 0 16px; }
 
   /* Segmented control: a track with the chosen segment raised. */
   .seg {
     display: inline-flex;
     gap: 2px;
     padding: 3px;
-    border-radius: var(--radius-control);
+    border-radius: 9999px;
     background: var(--surface-muted);
   }
   .seg > button, .seg > a {
@@ -824,10 +857,11 @@ kbd {
     align-items: center;
     justify-content: center;
     gap: 6px;
-    height: 30px;
-    padding: 0 12px;
-    border-radius: 15px;
-    font-size: 13px;
+    height: 28px;
+    padding: 0 14px;
+    border-radius: 9999px;
+    font-size: 13.5px;
+    font-weight: 600;
     color: var(--text-secondary);
     white-space: nowrap;
     transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
@@ -836,8 +870,7 @@ kbd {
   .seg > [aria-selected="true"], .seg > [aria-checked="true"], .seg > [aria-pressed="true"], .seg > [aria-current="page"] {
     background: var(--surface);
     color: var(--foreground);
-    font-weight: 500;
-    box-shadow: 0 1px 2px oklch(0% 0 0 / 0.06);
+    box-shadow: 0 1px 2px oklch(0% 0 0 / 0.07);
   }
   :root[data-theme="dark"] .seg > [aria-selected="true"],
   :root[data-theme="dark"] .seg > [aria-checked="true"],
@@ -899,7 +932,7 @@ kbd {
     gap: 10px;
     height: 36px;
     padding: 0 12px;
-    border-radius: 18px;
+    border-radius: 12px;
     color: var(--text-secondary);
     transition: background-color 0.15s, color 0.15s;
   }
@@ -959,5 +992,69 @@ kbd {
   .check[aria-checked="true"] { background: var(--accent); border-color: var(--accent); }
 
   /* Small grey group label above a list (never uppercase). */
-  .group-label { font-size: 12px; color: var(--text-muted); }
+  .group-label { font-size: 13px; font-weight: 600; color: var(--text-muted); }
+
+  /* The sheets: paper laid on the frame. A screen has one, or a main sheet and a side sheet. */
+  .sheet { min-width: 0; background: var(--background); color: var(--foreground); border-radius: var(--radius-surface); }
+  .sheet-side { flex: 1 1 340px; max-width: 400px; padding: 24px 22px; overflow-y: auto; }
+
+  /* One row, everywhere: a mark, a title and a meta line. Its hover fill reaches 10px past the text. */
+  .row { display: flex; align-items: flex-start; gap: 14px; margin: 0 -10px; padding: 10px; border-radius: 14px; text-align: left; transition: background-color 0.12s; }
+  .row:hover { background: var(--surface-muted); }
+  .row-title { display: block; font-size: 16px; font-weight: 500; line-height: 22px; }
+  .row-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 3px; font-size: 13.5px; color: var(--text-muted); }
+  .row-meta .tm { color: var(--text-secondary); font-weight: 600; }
+  /* The mark column: a task's ring, a dot, an icon or a tinted tile, always the same width. */
+  .mark { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 22px; height: 22px; color: var(--text-muted); }
+  .mark-event { width: 9px; height: 9px; border-radius: 9999px; background: var(--spark); }
+  .tile { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 34px; width: 34px; height: 34px; border-radius: 10px; }
+  .tile-red { background: var(--danger-subtle); color: var(--danger); }
+  .tile-amber { background: var(--warning-subtle); color: var(--warning); }
+  .tile-ink { background: var(--surface-muted); color: var(--text-secondary); }
+
+  .row-selected, .row-selected:hover { background: var(--surface); box-shadow: 0 0 0 1px var(--border), 0 1px 3px oklch(0% 0 0 / 0.04); }
+  /* A ring says what state a task is in: amber is high priority, half-filled is in progress. */
+  .check[data-tone="hi"] { border-color: var(--warning); border-width: 2.25px; }
+  .check[data-tone="doing"] { border-color: var(--danger); border-width: 2px; background: linear-gradient(90deg, var(--surface) 50%, var(--foreground) 50%); box-shadow: inset 0 0 0 2.5px var(--surface); }
+
+  /* The Planner's day strip, summary bar and now line. */
+  .day { position: relative; flex: 0 0 58px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; height: 70px; border-radius: 14px; border: 1px solid transparent; transition: background-color 0.12s; }
+  .day:hover { background: var(--surface-muted); }
+  .day span { font-size: 12px; color: var(--text-muted); }
+  .day b { font-size: 21px; font-weight: 600; line-height: 1; }
+  .day i { position: absolute; bottom: 7px; width: 4px; height: 4px; border-radius: 9999px; background: var(--border-strong); }
+  .day[aria-pressed="true"] { background: var(--surface); border-color: var(--border); box-shadow: 0 1px 2px oklch(0% 0 0 / 0.05); }
+  .day[data-today] b, .day[data-today] span { color: var(--danger); }
+  .sumbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 16px; padding: 12px 16px; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); font-size: 16px; font-weight: 500; }
+  .chip-count { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 9999px; background: var(--surface-muted); color: var(--text-secondary); font-size: 14px; font-weight: 600; box-shadow: inset 0 0 0 1.5px transparent; }
+  .chip-count[aria-pressed="true"] { box-shadow: inset 0 0 0 1.5px currentColor; }
+  .chip-count i { width: 8px; height: 8px; border-radius: 9999px; background: var(--spark); }
+  .chip-red { background: var(--danger-subtle); color: var(--danger); }
+  .now-line { display: flex; align-items: center; gap: 10px; margin: 2px 0; font-size: 12px; color: var(--danger); list-style: none; }
+  .now-line b { font-weight: 700; }
+  .now-line i { flex: 1 1 auto; height: 1.5px; background: var(--spark); opacity: 0.7; }
+
+  /* A block on a side sheet: no card, a hairline between neighbours. */
+  .glance + .glance { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+
+  /* The assistant's chip. */
+  .ai-chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 9999px; background: var(--ai-subtle); color: var(--ai); font-size: 12.5px; font-weight: 700; }
+
+  /* The toolbar on the frame: round buttons and the omnibar. */
+  .rnd { display: inline-grid; place-items: center; flex: 0 0 38px; width: 38px; height: 38px; border-radius: 9999px; background: var(--frame-2); color: var(--frame-text); transition: background-color 0.15s, color 0.15s; }
+  .rnd:hover:not(:disabled) { background: var(--frame-3); }
+  .rnd:disabled { color: var(--frame-label); cursor: default; }
+  .omni { display: flex; align-items: center; gap: 10px; width: 100%; height: 42px; padding: 0 6px 0 16px; border-radius: 9999px; background: var(--frame-2); color: var(--frame-muted); transition: background-color 0.15s; }
+  .omni:hover { background: var(--frame-3); }
+  .omni-mini { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 9999px; color: var(--frame-text); }
+  .omni-mini:hover:not(:disabled) { background: var(--frame-3); }
+  .omni-kbd { padding: 3px 7px; margin-right: 4px; border-radius: 7px; background: var(--frame-3); color: var(--frame-muted); font-size: 12px; font-weight: 600; }
+
+  /* The sidebar sits on the frame. */
+  .on-frame { --logo-ink: var(--frame-text); color: var(--frame-text); }
+  .on-frame .nav-row { height: 40px; gap: 12px; color: var(--frame-text); font-size: 15px; font-weight: 500; }
+  .on-frame .nav-row svg:first-child { color: var(--frame-muted); }
+  .on-frame .nav-row:hover, .on-frame .nav-row[aria-current="page"], .on-frame .nav-row[aria-current="true"] { background: var(--frame-2); color: var(--frame-text); }
+  .on-frame .nav-row[aria-current="page"] > svg:first-child { color: var(--spark); }
+  .frame-label { display: flex; align-items: center; justify-content: space-between; padding: 20px 12px 6px; font-size: 12px; font-weight: 600; letter-spacing: 0.03em; color: var(--frame-label); }
 }

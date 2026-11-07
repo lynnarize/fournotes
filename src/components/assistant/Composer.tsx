@@ -70,14 +70,26 @@ export default function Composer({ placeholder, onSend, handle, label = "Message
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useImperativeHandle(handle, () => ({ fill: (t: string) => { setText(t); focusEnd(); }, focus: () => focusEnd() }), []);
 
-  // Grow with the text up to eight lines, then scroll inside.
+  // Grow with the text up to eight lines, then scroll inside. Measured again when the width
+  // changes: measured while the box is narrow, the placeholder wraps and it would stay that tall.
   useLayoutEffect(() => {
     const el = inputRef.current;
     if (!el) return;
     const max = LINE * MAX_LINES + PAD;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, max)}px`;
-    el.style.overflowY = el.scrollHeight > max ? "auto" : "hidden";
+    const measure = () => {
+      el.style.height = "auto";
+      el.style.height = `${Math.min(el.scrollHeight, max)}px`;
+      el.style.overflowY = el.scrollHeight > max ? "auto" : "hidden";
+    };
+    measure();
+    let width = el.clientWidth;
+    const watch = new ResizeObserver(() => {
+      if (el.clientWidth === width) return;
+      width = el.clientWidth;
+      measure();
+    });
+    watch.observe(el);
+    return () => watch.disconnect();
   }, [text]);
 
   const empty = !text.trim();

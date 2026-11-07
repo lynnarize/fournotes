@@ -2,6 +2,7 @@
 // Finance overview: the month in four numbers (one bordered strip), a line on what stands
 // out, the spending trend against last month beside the split by category, then budgets,
 // payments coming up and split bills. Everything but the review is computed on the device.
+import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { baseAmount, budgetStatus, detectSubscriptions, myShare, owedToMe, spendByCategory, type Subscription } from "@/lib/insights";
 import { reviewLines } from "@/lib/monthlyReview";
@@ -48,8 +49,10 @@ type ChartView = "running" | "daily" | "year";
 const VIEW_KEY = "four-notes:finance-view";
 const DISMISSED_KEY = "four-notes:finance-dismissed";
 
-export default function Dashboard({ month, summary, summarizing, onSummarize, onBudgets, onOpenTransactions, onOpenTransaction, onAddIncome }: {
+export default function Dashboard({ month, side, summary, summarizing, onSummarize, onBudgets, onOpenTransactions, onOpenTransaction, onAddIncome }: {
   month: string;
+  /** The side sheet: what's coming up, what's owed to you and budgets are drawn there. */
+  side: HTMLElement | null;
   setTab?: (t: Tab) => void;
   summary?: MonthlySummary;
   summarizing: boolean;
@@ -167,6 +170,8 @@ export default function Dashboard({ month, summary, summarizing, onSummarize, on
   const lines = summary ? reviewLines(summary.text, cur).filter((l) => !/^total$/i.test(l.label ?? "")) : [];
   const lead = lines.find((l) => /unusual|watch|notable|alert|insight/i.test(l.label ?? "")) ?? lines[0];
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [trends, setTrends] = useState(false);
+  const colors = categoryColors(byCat);
   const clean = (s: string) => s.replace(/\*\*(.+?)\*\*/g, "$1");
 
   const deltaText = (() => {
@@ -180,45 +185,63 @@ export default function Dashboard({ month, summary, summarizing, onSummarize, on
 
   return (
     <div className="flex flex-col gap-6">
-      {/* The month in four numbers: one strip, hairlines between. */}
-      <section aria-label={`${monthName} in numbers`} className="grid grid-cols-2 overflow-hidden rounded-[var(--radius-panel)] border border-[var(--border)] bg-[var(--surface)] lg:grid-cols-4">
-        <Kpi label={isCurrent ? "Spent so far" : "Spent"} value={formatMoney(spent, cur)} wide big>
+      {/* The month in one sentence of counted chips. */}
+      <section aria-label={`${monthName} in numbers`} className="sumbar !mt-0">
+        <span>{isCurrent ? "This month" : monthName}</span>
+        {isCurrent && hasPace && (
+          <span className={`chip-count ${left < 0 ? "chip-red" : ""}`}>
+            {left >= 0 ? `${formatMoney(left, cur)} left for today` : `${formatMoney(-left, cur)} over today's pace`}
+          </span>
+        )}
+        <button type="button" className="chip-count" onClick={income === 0 ? onAddIncome : undefined}>
+          {income === 0 ? "Add income" : `${formatMoney(income, cur)} income`}
+        </button>
+        <button type="button" className="chip-count" onClick={onOpenTransactions}>{plural(monthTxs.length, "transaction")}</button>
+        {openThisMonth > 0 && <button type="button" className="chip-count chip-red" onClick={onOpenTransactions}>{plural(openThisMonth, "split bill")} open</button>}
+        {isCurrent && !hasPace && <button type="button" className="chip-count" onClick={onBudgets}>Set a budget</button>}
+      </section>
+
+      {/* Numbers first: one number, what it's made of, and the chart one click away. */}
+      <section aria-label="Spent">
+        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+          <div>
+            <p className="fn-display fn-num text-[44px] md:text-[52px]">{formatMoney(spent, cur)}</p>
+            <p className="mt-2 text-[15px] text-[var(--text-muted)]">{isCurrent ? "Spent so far" : `Spent in ${monthName}`}</p>
+          </div>
           {deltaText && (
-            <span className="inline-flex items-center gap-1">
-              {prevSpent > 0 && <Icon name="arrowUpRight" size={14} className={`shrink-0 ${spent < prevSpent ? "rotate-90" : ""}`} />}
+            <span className="inline-flex items-center gap-1 pb-0.5 text-[14px] font-semibold text-[var(--warning)]">
+              {prevSpent > 0 && <Icon name="arrowUpRight" size={15} className={`shrink-0 ${spent < prevSpent ? "rotate-90" : ""}`} />}
               {deltaText}
             </span>
           )}
-        </Kpi>
-        {isCurrent ? (
-          hasPace ? (
-            <Kpi label="Left for today" value={formatMoney(Math.max(0, left), cur)}>
-              {left >= 0 ? `Of a ${formatMoney(allowance, cur)} daily pace` : <span className="text-[var(--danger)]">{formatMoney(-left, cur)} over today&apos;s pace</span>}
-            </Kpi>
-          ) : (
-            <Kpi label="Spent today" value={formatMoney(spentToday, cur)}>
-              <button className="text-left text-[var(--foreground)] underline decoration-[var(--border-strong)] underline-offset-[3px]" onClick={onBudgets}>Set a budget for a daily pace</button>
-            </Kpi>
-          )
-        ) : (
-          <Kpi label="Daily average" value={formatMoney(spent / Math.max(1, dayOfMonth), cur)}>Over {plural(dayOfMonth, "day")}</Kpi>
+        </div>
+        {byCat.length > 0 && (
+          <>
+            <div className="mt-4 flex h-2.5 gap-0.5 overflow-hidden rounded-full bg-[var(--surface-muted)]" aria-hidden>
+              {byCat.map(([c, v]) => <i key={c} className="block h-full" style={{ width: `${(v / spent) * 100}%`, background: colors[c] ?? REST }} />)}
+            </div>
+            <ul className="mt-2.5 grid gap-x-6 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
+              {byCat.slice(0, 4).map(([c, v]) => (
+                <li key={c} className="flex items-center gap-2.5 py-1.5 text-[14.5px]">
+                  <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ background: colors[c] ?? REST }} />
+                  <span className="min-w-0 flex-1 truncate">{c}</span>
+                  <span className="fn-num font-semibold">{formatMoney(v, cur)}</span>
+                  <span className="fn-num w-10 text-right text-[var(--text-muted)]">{Math.round((v / spent) * 100)}%</span>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
-        <Kpi label="Income" value={formatMoney(income, cur)}>
-          {income === 0 ? (
-            <button className="text-left text-[var(--foreground)] underline decoration-[var(--border-strong)] underline-offset-[3px]" onClick={onAddIncome}>Add income to see what you save</button>
-          ) : income >= spent ? `You kept ${formatMoney(income - spent, cur)}` : `${formatMoney(spent - income, cur)} more out than in`}
-        </Kpi>
-        <Kpi label="Transactions" value={String(monthTxs.length)} wide>
-          {openThisMonth > 0 ? (
-            <button className="text-left hover:text-[var(--foreground)]" onClick={onOpenTransactions}>{plural(openThisMonth, "split bill")} still open</button>
-          ) : prevTxs.length > 0 ? `${prevTxs.length} by ${isCurrent ? "this point in " : ""}${lastMonthName}` : ""}
-        </Kpi>
+        <button type="button" className="mt-3 flex h-[46px] w-full items-center gap-2.5 rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--surface)] px-3.5 text-[14px] font-semibold text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-muted)]" aria-expanded={trends} onClick={() => setTrends(!trends)}>
+          <Icon name="chart" size={16} /> Trends
+          <span className="ml-auto font-medium text-[var(--text-muted)]">{trends ? "Hide" : "By day, month and year"}</span>
+        </button>
       </section>
 
       {/* What stands out, from the month's review; a spending spike gets its own line. */}
       <div className="-mt-1 flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[var(--text-secondary)]">
-          <Icon name="sparkle" size={16} className="shrink-0 text-[var(--accent)]" />
+          <Icon name="sparkle" size={16} className="shrink-0 text-[var(--ai)]" />
           <span className="min-w-0 flex-[1_1_16rem]">
             {lead ? (lead.label ? `${lead.label}: ${clean(lead.body)}` : clean(lead.body))
               : summarizing ? "Reading this month's spending…"
@@ -263,7 +286,7 @@ export default function Dashboard({ month, summary, summarizing, onSummarize, on
         )}
       </div>
 
-      <div className="flex flex-wrap items-stretch gap-4">
+      {trends && <div className="fn-rise flex flex-wrap items-stretch gap-4">
         <section aria-labelledby="fin-trend-h" className="flex min-w-0 flex-[999_1_520px] flex-col gap-4 rounded-[var(--radius-panel)] border border-[var(--border)] bg-[var(--surface)] p-6 max-sm:p-5">
           <div className="flex flex-wrap items-center gap-3">
             <h2 id="fin-trend-h" className="min-w-0 flex-1 text-base font-medium">
@@ -342,12 +365,102 @@ export default function Dashboard({ month, summary, summarizing, onSummarize, on
             <CategoryDonut byCat={byCat} total={spent} currency={cur} />
           )}
         </section>
-      </div>
+      </div>}
 
-      <div className="grid items-stretch gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr))]">
-        <section aria-labelledby="fin-budget-h" className="flex flex-col gap-[18px] rounded-[var(--radius-panel)] border border-[var(--border)] bg-[var(--surface)] p-6 max-sm:p-5">
+      {side && createPortal(
+        <>
+          <h2 className="mb-3 text-[24px] font-bold leading-[1.1] tracking-[-0.025em]">Coming up</h2>
+        <section aria-labelledby="fin-up-h" className="glance flex flex-col">
+          <div className="flex min-h-[30px] items-center">
+            <h2 id="fin-up-h" className="min-w-0 flex-1 text-[13px] font-semibold text-[var(--text-muted)]">Bills</h2>
+            {upcomingTotal !== null && upcoming.length > 0 && <span className="fn-num text-[13px] text-[var(--text-muted)]">{formatMoney(upcomingTotal, cur)}</span>}
+          </div>
+          {upcoming.length === 0 ? (
+            <p className="text-sm text-[var(--text-secondary)]">No bills due soon. Repeating bills you add to the Planner show up here.</p>
+          ) : (
+            <ul className="flex flex-col">
+              {upcoming.map((p, i) => {
+                const n = daysFromToday(p.date);
+                const d = new Date(`${p.date}T00:00:00`);
+                return (
+                  <li key={p.key} className={`flex items-center gap-3 py-2.5 ${i > 0 ? "border-t border-[var(--border-subtle)]" : ""}`}>
+                    <div className="w-11 shrink-0 text-center" aria-hidden>
+                      <span className="block text-[11px] text-[var(--text-muted)]">{MONTHS[d.getMonth()]}</span>
+                      <span className="fn-num block text-lg font-medium leading-tight">{d.getDate()}</span>
+                    </div>
+                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="truncate">{p.title}</span>
+                      <span className="fn-num truncate text-xs text-[var(--text-muted)]">
+                        <span className="sr-only">{shortDate(p.date)}, </span>{p.sub}, {formatMoney(p.amount, p.currency)}
+                      </span>
+                    </div>
+                    {p.sub_ ? (
+                      <button className="btn btn-secondary btn-sm max-md:h-11" onClick={() => trackSub(p.sub_!)}>Track</button>
+                    ) : (
+                      <>
+                        {n < 0 ? (
+                          <span className="badge badge-danger badge-dot">{n === -1 ? "1 day late" : `${-n} days late`}</span>
+                        ) : n <= 3 ? (
+                          <span className="badge badge-warning badge-dot">{n === 0 ? "Today" : n === 1 ? "Tomorrow" : `In ${n} days`}</span>
+                        ) : (
+                          <span className="fn-num shrink-0 text-xs text-[var(--text-muted)]">In {n} days</span>
+                        )}
+                        <button
+                          className="btn btn-plain btn-sm btn-icon -mr-1 max-md:h-11 max-md:w-11"
+                          aria-label={`Mark ${p.title} as paid`}
+                          title="Mark as paid"
+                          onClick={() => { const extra = toggleTodo(p.todoId!, true); toast([`Paid: ${p.title}`, ...extra].join("\n")); }}
+                        >
+                          <Icon name="check" size={16} />
+                        </button>
+                      </>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+
+        <section aria-labelledby="fin-split-h" className="glance flex flex-col">
+          <div className="flex min-h-[30px] items-center">
+            <h2 id="fin-split-h" className="min-w-0 flex-1 text-[13px] font-semibold text-[var(--text-muted)]">Owed to you</h2>
+            {owed > 0 && <span className="fn-num text-[13px] font-semibold">{formatMoney(owed, cur)}</span>}
+          </div>
+          {openSplits.length === 0 ? (
+            <p className="text-sm text-[var(--text-secondary)]">Nobody owes you. Open a transaction below to split it.</p>
+          ) : (
+            openSplits.slice(0, 3).map((tx) => (
+              <div key={tx.id} className="flex flex-col">
+                <button className="fn-num self-start rounded-full text-left text-xs text-[var(--text-muted)] hover:text-[var(--foreground)]" onClick={() => onOpenTransaction(tx.id)}>
+                  {tx.merchant}, {shortDate(tx.date)}, {formatMoney(tx.amount, tx.currency)} split with {plural(tx.splits!.length, "person").replace("persons", "people")}
+                </button>
+                <ul className="flex flex-col">
+                  {tx.splits!.map((s, j) => (
+                    <li key={`${s.name}-${j}`} className={`flex items-center gap-3 py-2.5 ${j > 0 ? "border-t border-[var(--border-subtle)]" : ""}`}>
+                      <span aria-hidden className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--surface-muted)] text-[13px] font-medium">
+                        {s.name.trim()[0]?.toUpperCase() ?? "?"}
+                      </span>
+                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span className="truncate">{s.name}</span>
+                        <span className="fn-num text-xs text-[var(--text-muted)]">{s.settled ? "Paid" : "Owes you"} {formatMoney(s.amount, tx.currency)}</span>
+                      </div>
+                      {s.settled ? (
+                        <span className="inline-flex shrink-0 items-center gap-1 text-[13px] text-[var(--success)]"><Icon name="check" size={14} />Settled</span>
+                      ) : (
+                        <button className="btn btn-secondary btn-sm max-md:h-11" onClick={() => settle(tx, j, true)}>Mark settled</button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))
+          )}
+          {openSplits.length > 3 && <p className="text-xs text-[var(--text-muted)]">{openSplits.length - 3} more open below, in Transactions</p>}
+        </section>
+        <section aria-labelledby="fin-budget-h" className="glance flex flex-col gap-[14px]">
           <div className="flex items-center">
-            <h2 id="fin-budget-h" className="flex-1 text-base font-medium">Budgets</h2>
+            <h2 id="fin-budget-h" className="min-w-0 flex-1 text-[13px] font-semibold text-[var(--text-muted)]">Budgets</h2>
             {budgets.length > 0 && <button className="btn btn-plain btn-sm -mr-2 max-md:h-11" onClick={onBudgets}>Edit</button>}
           </div>
           {budgets.length === 0 && (
@@ -388,95 +501,9 @@ export default function Dashboard({ month, summary, summarizing, onSummarize, on
           </button>
         </section>
 
-        <section aria-labelledby="fin-up-h" className="flex flex-col gap-2 rounded-[var(--radius-panel)] border border-[var(--border)] bg-[var(--surface)] px-4 pb-4 pt-6">
-          <div className="flex items-center px-2 pb-2">
-            <h2 id="fin-up-h" className="flex-1 text-base font-medium">Upcoming payments</h2>
-            {upcomingTotal !== null && upcoming.length > 0 && <span className="fn-num text-[13px] text-[var(--text-muted)]">{formatMoney(upcomingTotal, cur)}</span>}
-          </div>
-          {upcoming.length === 0 ? (
-            <p className="px-2 pb-2 text-sm text-[var(--text-secondary)]">No bills due soon. Repeating bills you add to To-Do show up here.</p>
-          ) : (
-            <ul className="flex flex-col">
-              {upcoming.map((p, i) => {
-                const n = daysFromToday(p.date);
-                const d = new Date(`${p.date}T00:00:00`);
-                return (
-                  <li key={p.key} className={`flex items-center gap-3 px-2 py-2.5 ${i > 0 ? "border-t border-[var(--border-subtle)]" : ""}`}>
-                    <div className="w-11 shrink-0 text-center" aria-hidden>
-                      <span className="block text-[11px] text-[var(--text-muted)]">{MONTHS[d.getMonth()]}</span>
-                      <span className="fn-num block text-lg font-medium leading-tight">{d.getDate()}</span>
-                    </div>
-                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <span className="truncate">{p.title}</span>
-                      <span className="fn-num truncate text-xs text-[var(--text-muted)]">
-                        <span className="sr-only">{shortDate(p.date)}, </span>{p.sub}, {formatMoney(p.amount, p.currency)}
-                      </span>
-                    </div>
-                    {p.sub_ ? (
-                      <button className="btn btn-secondary btn-sm max-md:h-11" onClick={() => trackSub(p.sub_!)}>Track</button>
-                    ) : (
-                      <>
-                        {n < 0 ? (
-                          <span className="badge badge-danger badge-dot">{n === -1 ? "1 day late" : `${-n} days late`}</span>
-                        ) : n <= 3 ? (
-                          <span className="badge badge-warning badge-dot">{n === 0 ? "Today" : n === 1 ? "Tomorrow" : `In ${n} days`}</span>
-                        ) : (
-                          <span className="fn-num shrink-0 text-xs text-[var(--text-muted)]">In {n} days</span>
-                        )}
-                        <button
-                          className="btn btn-plain btn-sm btn-icon -mr-1 max-md:h-11 max-md:w-11"
-                          aria-label={`Mark ${p.title} as paid`}
-                          title="Mark as paid"
-                          onClick={() => { const extra = toggleTodo(p.todoId!, true); toast([`Paid: ${p.title}`, ...extra].join("\n")); }}
-                        >
-                          <Icon name="check" size={16} />
-                        </button>
-                      </>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
-
-        <section aria-labelledby="fin-split-h" className="flex flex-col gap-2 rounded-[var(--radius-panel)] border border-[var(--border)] bg-[var(--surface)] px-4 pb-4 pt-6">
-          <div className="flex items-center px-2 pb-2">
-            <h2 id="fin-split-h" className="flex-1 text-base font-medium">Split bills</h2>
-            {owed > 0 && <span className="fn-num text-[13px] text-[var(--text-muted)]">{formatMoney(owed, cur)} owed to you</span>}
-          </div>
-          {openSplits.length === 0 ? (
-            <p className="px-2 pb-2 text-sm text-[var(--text-secondary)]">Nobody owes you. Open a transaction below to split it.</p>
-          ) : (
-            openSplits.slice(0, 3).map((tx) => (
-              <div key={tx.id} className="flex flex-col">
-                <button className="fn-num self-start rounded-full px-2 text-left text-xs text-[var(--text-muted)] hover:text-[var(--foreground)]" onClick={() => onOpenTransaction(tx.id)}>
-                  {tx.merchant}, {shortDate(tx.date)}, {formatMoney(tx.amount, tx.currency)} split with {plural(tx.splits!.length, "person").replace("persons", "people")}
-                </button>
-                <ul className="flex flex-col">
-                  {tx.splits!.map((s, j) => (
-                    <li key={`${s.name}-${j}`} className={`flex items-center gap-3 px-2 py-2.5 ${j > 0 ? "border-t border-[var(--border-subtle)]" : ""}`}>
-                      <span aria-hidden className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--surface-muted)] text-[13px] font-medium">
-                        {s.name.trim()[0]?.toUpperCase() ?? "?"}
-                      </span>
-                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                        <span className="truncate">{s.name}</span>
-                        <span className="fn-num text-xs text-[var(--text-muted)]">{s.settled ? "Paid" : "Owes you"} {formatMoney(s.amount, tx.currency)}</span>
-                      </div>
-                      {s.settled ? (
-                        <span className="inline-flex shrink-0 items-center gap-1 text-[13px] text-[var(--success)]"><Icon name="check" size={14} />Settled</span>
-                      ) : (
-                        <button className="btn btn-secondary btn-sm max-md:h-11" onClick={() => settle(tx, j, true)}>Mark settled</button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))
-          )}
-          {openSplits.length > 3 && <p className="px-2 text-xs text-[var(--text-muted)]">{openSplits.length - 3} more open below, in Transactions</p>}
-        </section>
-      </div>
+        </>,
+        side,
+      )}
     </div>
   );
 }

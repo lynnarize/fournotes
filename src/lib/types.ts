@@ -191,6 +191,22 @@ export interface Talk {
   noteId?: string | null;
   /** The recording is kept in this browser and can be played back. */
   hasAudio?: boolean;
+  /** The calendar event it was recorded for, as it was then. */
+  event?: TalkEvent | null;
+}
+
+/** A calendar event a talk was recorded for. The same shape as the Mac app's. */
+export interface TalkEvent {
+  /** The event's id: on Google Calendar, one occurrence of a repeating meeting has its own. */
+  id: string;
+  title: string;
+  /** ISO 8601, as the rest of the talk's dates. */
+  start: string;
+  end: string;
+  /** The people invited, by name (or address when there's no name). */
+  attendees: string[];
+  /** The call's link (Zoom, Meet, Teams…), when the event has one. */
+  url?: string | null;
 }
 
 export interface MonthlySummary {

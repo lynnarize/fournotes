@@ -203,6 +203,9 @@ const paths: Record<string, string> = {
   shield: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z",
   moon: "M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z",
   monitor: "M3 4h18v12H3zM8 20h8M12 16v4",
+  planner: "M4 7a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v11a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3zM4 9.5h16M8.5 2.5v4M15.5 2.5v4M9 15l2 2 4-4",
+  sidebar: "M3 7a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3zM9 4v16",
+  compose: "M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6M17.5 3.5a2.1 2.1 0 0 1 3 3L13 14l-4 1 1-4z",
   wifiOff: "M2 2l20 20M8.5 16.5a5 5 0 0 1 7 0M5 13a10 10 0 0 1 5.2-2.8M19 13a10 10 0 0 0-2.2-1.7M2 8.8a15 15 0 0 1 4.2-2.6M22 8.8A15 15 0 0 0 10.7 5M12 20h.01",
 };
 
@@ -212,6 +215,19 @@ export function Icon({ name, size = 16, className = "" }: { name: keyof typeof p
       strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
       <path d={paths[name] ?? ""} />
     </svg>
+  );
+}
+
+/** Every page's header: a 40px title and one subtitle line on the left, controls on the right. */
+export function PageHead({ title, sub, badge, children }: { title: string; sub?: ReactNode; badge?: ReactNode; children?: ReactNode }) {
+  return (
+    <div className="mb-6 flex flex-wrap items-start gap-3">
+      <div className="min-w-0 flex-1">
+        <h2 className="fn-display flex flex-wrap items-center gap-x-3 gap-y-2 text-[34px] md:text-[40px]">{title}{badge}</h2>
+        {sub && <p className="mt-1.5 text-[15px] text-[var(--text-muted)]">{sub}</p>}
+      </div>
+      {children && <div className="flex flex-wrap items-center gap-2">{children}</div>}
+    </div>
   );
 }
 

@@ -39,7 +39,8 @@ This guide has three parts:
 | People pages | `lib/people.ts`, `components/notes/People.tsx` |
 | Interview mode (Ask AI → Interview me) | `components/notes/NoteEditor.tsx` |
 | The app's own AI jobs, one shape for every provider | `lib/ai/agent.ts`, `app/api/ai/agent` |
-| Transcribe: recording talks and calls, speakers, write-up | `lib/talks/*`, `components/TranscribeView.tsx`, `components/talks/TalkPage.tsx` |
+| Meetings (the "transcribe" tab): recording talks and calls, speakers, write-up | `lib/talks/*`, `components/TranscribeView.tsx`, `components/talks/TalkPage.tsx` |
+| Meetings from Google Calendar: Today's next-meeting card, today's list, Connect calendar | `lib/calendar.ts`, `lib/meetings.ts`, `lib/callLink.ts`, `components/meetings.tsx`, `app/api/google/calendar` |
 | Transcription engines (speech-to-text key, OpenRouter audio) | `lib/ai/transcribe.ts`, `app/api/transcribe` |
 
 Still open: location reminders and widgets (both native-only), tax/annual export, voice assistant mode, and smart reminder timing.
@@ -198,6 +199,16 @@ The lightest option, and the one built in. Data is stored as a single JSON file 
 **How it works.** `/api/google/start` redirects to Google with `access_type=offline` and a CSRF `state` cookie. `/api/google/callback` exchanges the code and stores the refresh token in an **AES-256-GCM sealed, httpOnly cookie** — it never reaches the browser's JavaScript. `/api/google/token` mints short-lived access tokens from it. `runDriveSync()` in `src/lib/gdrive.ts` then checks whether the Drive file changed since this device last saw it, downloads and merges if so (newer `updatedAt` wins, deletions are tombstones), and uploads only when the merged result differs — a short FNV-1a signature skips no-op uploads.
 
 This uses the OAuth redirect flow rather than the Google Identity Services button, because GIS `initCodeClient` has no `prompt` option and so can't guarantee a refresh token on every device.
+
+### Meetings from Google Calendar (read-only)
+
+Today's next-meeting card and the Meetings page read the user's primary calendar, once they tap **Connect calendar**. It uses the same Google client and cookie as Drive sync, but its own sign-in: `/api/google/start?for=calendar` asks for `https://www.googleapis.com/auth/calendar.events.readonly` (plus basic profile) with `include_granted_scopes=true`, so someone who already syncs grants the one extra permission and Drive keeps working, and Drive sync's own sign-in never asks for the calendar. The callback marks the session `calendar: true`; `GET /api/google/calendar` trades the refresh token for an access token and returns the meetings from three hours ago to 36 hours ahead (`singleEvents=true`, so each occurrence of a repeating meeting has its own id), without all-day, cancelled or declined events, and with the call link found the way the Mac app finds it (`lib/callLink.ts`). Nothing is stored on the server. `DELETE /api/google/calendar` turns it off (and `?google=1` signs out of Google when Drive sync isn't on).
+
+To turn it on:
+
+1. In the same Google Cloud project, enable the **Google Calendar API**.
+2. On the **OAuth consent screen** → *Data access* (Scopes), add `.../auth/calendar.events.readonly`.
+3. That scope is **sensitive**: while the app is unverified, people see Google's "unverified app" screen and only test users (up to 100) can connect. For a public launch, submit the app for **verification** (a privacy policy that covers the calendar — `/privacy` does — a short video of Connect calendar and the card, and why the scope is needed). It isn't a restricted scope, so no security assessment.
 
 ### Google Calendar: full two-way sync
 

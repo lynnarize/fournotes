@@ -12,7 +12,7 @@ import { useSyncExternalStore } from "react";
 import { useNow } from "../hooks";
 import { authHeaders, getUserKeys } from "../byok";
 import { api } from "../client";
-import type { Talk, TalkChunk, TalkSegment } from "../types";
+import type { Talk, TalkChunk, TalkEvent, TalkSegment } from "../types";
 import { CHUNK_SECONDS, concat, decodeFile, hasSpeech, RATE, rms, wav } from "./audio";
 import { addTalk, getTalk, saveAudio, updateTalk } from "./db";
 import { clock, defaultTitle, isDefaultTitle, mergeTranscript, speakersOf, transcriptText } from "./transcript";
@@ -142,7 +142,7 @@ export class RecorderError extends Error {}
  * Starts recording. For a call, the browser asks what to share: a tab with "Share tab audio"
  * on, or the entire screen with "Share system audio" for an app.
  */
-export async function startRecording(opts: { mode: RecordMode; lang: string; title?: string; app?: string }) {
+export async function startRecording(opts: { mode: RecordMode; lang: string; title?: string; app?: string; event?: TalkEvent | null }) {
   if (session || state.status !== "idle") throw new RecorderError("A recording is already running.");
   set({ status: "starting", warning: null, caption: "", mode: opts.mode });
   const streams: MediaStream[] = [];
@@ -184,6 +184,7 @@ export async function startRecording(opts: { mode: RecordMode; lang: string; tit
       id: crypto.randomUUID(), createdAt: new Date(startedAt).toISOString(), updatedAt: new Date(startedAt).toISOString(), deletedAt: null,
       title: opts.title?.trim() || defaultTitle(new Date(startedAt)), mode: opts.mode, app, lang: opts.lang, duration: 0,
       status: "recording", engine: null, problem: null, chunks: [], live: [], segments: [], names: {}, summary: null, hasAudio: false,
+      event: opts.event ?? null,
     });
     made = talk.id;
     active.add(talk.id);

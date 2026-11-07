@@ -5,7 +5,8 @@ import { rateLimit } from "@/lib/ratelimit";
 export const runtime = "nodejs";
 
 // POST -> { accessToken, expiresIn, email, name } using the refresh token in the cookie.
-// Access tokens only allow Drive's private app-data folder and expire in an hour.
+// Access tokens allow Drive's private app-data folder (and reading calendar events, once the
+// calendar is connected: Google adds what was granted before) and expire in an hour.
 export async function POST(req: NextRequest) {
   const limited = rateLimit(req, "google");
   if (limited) return limited;

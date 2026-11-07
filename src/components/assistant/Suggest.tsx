@@ -14,7 +14,7 @@ type Command = { id: string; label: string; hint: string; icon: GlyphName; inser
 /** Each fills in the start of a request; sending it is still yours. */
 const COMMANDS: Command[] = [
   { id: "note", label: "Note", hint: "Write a note", icon: "pen", insert: "Write a note about " },
-  { id: "task", label: "Task", hint: "Add something to To-Do", icon: "squareCheck", insert: "Add a task: " },
+  { id: "task", label: "Task", hint: "Add something to the Planner", icon: "squareCheck", insert: "Add a task: " },
   { id: "spent", label: "Spent", hint: "Log what you spent", icon: "receipt", insert: "Spent " },
   { id: "remind", label: "Remind", hint: "A reminder at a time", icon: "calendarCheck", insert: "Remind me to " },
   { id: "plan", label: "Plan my day", hint: "What to focus on today", icon: "target", insert: "What should I focus on today?" },

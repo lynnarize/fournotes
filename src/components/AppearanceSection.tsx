@@ -3,7 +3,7 @@
 // (System, Light, Paper, Dark), and the accent as six round swatches.
 import { useEffect, useState } from "react";
 import { isMac } from "@/lib/hooks";
-import { useAccent, useTheme, type AccentPref, type ThemePref } from "@/lib/theme";
+import { useAccent, useFrame, useTheme, type AccentPref, type ThemePref } from "@/lib/theme";
 import { SettingsGroup, SettingsRow } from "./SettingsSection";
 import { Icon } from "./ui";
 
@@ -125,6 +125,7 @@ export function AccentSwatches({ labelledBy, label, className = "" }: { labelled
 
 export default function AppearanceSection() {
   const { pref, resolved } = useTheme();
+  const { frame, setFrame } = useFrame();
   // The shortcut label depends on the platform, which the server can't know.
   const [mac, setMac] = useState(false);
   useEffect(() => setMac(isMac()), []);
@@ -143,6 +144,15 @@ export default function AppearanceSection() {
       </fieldset>
 
       <SettingsGroup>
+        <SettingsRow label="Frame" description="What's around the sheets. Dark themes keep the ink frame.">
+          {(labelId) => (
+            <div role="radiogroup" aria-labelledby={labelId} className="seg">
+              {(["ink", "light"] as const).map((f) => (
+                <button key={f} type="button" role="radio" aria-checked={frame === f} onClick={() => setFrame(f)} className="capitalize">{f}</button>
+              ))}
+            </div>
+          )}
+        </SettingsRow>
         <SettingsRow label="Accent" description="Used for what's selected or active">
           {(labelId) => <AccentSwatches labelledBy={labelId} />}
         </SettingsRow>

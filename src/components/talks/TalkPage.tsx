@@ -72,7 +72,7 @@ export default function TalkPage({ talk, onBack, onDeleted }: { talk: Talk; onBa
   const addAllTasks = () => {
     const items = talk.summary?.actionItems ?? [];
     for (const a of items) addTask(a);
-    toast(`✅ Added ${items.length === 1 ? "1 task" : `${items.length} tasks`} to To-Do`);
+    toast(`✅ Added ${items.length === 1 ? "1 task" : `${items.length} tasks`} to the Planner`);
   };
 
   const writeSummary = async () => {
@@ -215,13 +215,13 @@ export default function TalkPage({ talk, onBack, onDeleted }: { talk: Talk; onBa
                 <div>
                   <div className="mb-1 flex items-center gap-2">
                     <h3 className="group-label flex-1">Action items</h3>
-                    <button className="btn btn-plain btn-sm h-7 px-2 text-xs" onClick={addAllTasks}><Icon name="plus" size={12} /> Add all to To-Do</button>
+                    <button className="btn btn-plain btn-sm h-7 px-2 text-xs" onClick={addAllTasks}><Icon name="plus" size={12} /> Add all to the Planner</button>
                   </div>
                   <ul className="flex flex-col gap-1">
                     {talk.summary.actionItems.map((a) => (
                       <li key={a} className="flex items-center gap-2 text-sm">
                         <span className="min-w-0 flex-1">☐ {a}</span>
-                        <button className="btn btn-plain btn-sm h-7 shrink-0 px-2 text-xs" onClick={() => { addTask(a); toast(`✅ To-do: ${a}`); }} aria-label={`Add “${a}” to To-Do`}>
+                        <button className="btn btn-plain btn-sm h-7 shrink-0 px-2 text-xs" onClick={() => { addTask(a); toast(`✅ To-do: ${a}`); }} aria-label={`Add “${a}” to the Planner`}>
                           <Icon name="plus" size={12} />
                         </button>
                       </li>

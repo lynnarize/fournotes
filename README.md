@@ -12,7 +12,8 @@ Built with Next.js, React and Tailwind v4. It runs with no API keys at all, and 
 - **Voice → note** — record a meeting and get a summary, key points and action items, with the action items turned into to-dos.
 - **Quick-add everywhere** — `⌘K` / `Ctrl+K` to search or add, `/` commands inside notes, and a PWA share target so you can share a photo straight into the app.
 
-**Transcribe**
+**Meetings**
+- **Your next meeting on Today**, from Google Calendar (read-only, connected when you tap *Connect calendar*): when it starts, who's invited, and **Join and record** or **Record** in one click. The Meetings page lists today's meetings above your talks, with a Now line.
 - **Record a conversation** in person, or a call: Google Meet, Teams or Zoom in a tab, or an app like WhatsApp by sharing the screen with its sound. Your microphone and the call are recorded apart, so the transcript knows what you said from what they said.
 - **Who said what**, with names you can change (giving two speakers the same name merges them), and a short profile of each person in the talk.
 - **A write-up**: title, summary, key points and action items, one tap from To-Do, and **Save to Notes** for the whole thing.
@@ -117,7 +118,7 @@ GUIDE.md                      Setup guides, architecture and roadmap
 
 ## Privacy
 
-Data lives in your browser unless you turn on sync. Google Drive sync uses the hidden **appDataFolder**, so it is private to this app and invisible in your Drive. Receipt thumbnails stay on the device. Photos and recordings are sent to whichever AI provider is configured, and Settings → Data & privacy lets you export everything or delete it.
+Data lives in your browser unless you turn on sync. Google Drive sync uses the hidden **appDataFolder**, so it is private to this app and invisible in your Drive. Google Calendar, if you connect it, is only read (`calendar.events.readonly`), when Today or Meetings shows, and isn't kept on the server. Receipt thumbnails stay on the device. Photos and recordings are sent to whichever AI provider is configured, and Settings → Data & privacy lets you export everything or delete it.
 
 ## License
 

@@ -1,5 +1,5 @@
 "use client";
-// Settings → Today: how the daily brief reads, one short paragraph or point by point.
+// Settings → Today: where the summary comes from, your data alone or the assistant.
 import { BRIEF_STYLES, useBriefStyle } from "@/lib/briefParagraph";
 import { SettingsGroup, SettingsRow } from "./SettingsSection";
 
@@ -8,7 +8,7 @@ export default function BriefStyleSection() {
   const current = BRIEF_STYLES.find((o) => o.id === style) ?? BRIEF_STYLES[0];
   return (
     <SettingsGroup>
-      <SettingsRow label="Daily brief" description={<>How the greeting sums up your day. {current.detail}</>}>
+      <SettingsRow label="Summary" description={<>How Today sums up your day. {current.detail}</>}>
         {(labelId) => (
           <div role="radiogroup" aria-labelledby={labelId} className="seg">
             {BRIEF_STYLES.map((o) => (

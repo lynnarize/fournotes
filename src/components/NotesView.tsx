@@ -62,25 +62,18 @@ function NoteCard({ note, selected, tasks, expenses, onOpen }: { note: Note; sel
       <button
         onClick={onOpen}
         aria-current={selected ? "true" : undefined}
-        className={`fn-press flex w-full flex-col gap-1.5 rounded-[var(--radius-control)] px-3.5 py-3 text-left transition-colors ${
-          selected ? "bg-[var(--accent-subtle)]" : "hover:bg-[var(--hover)]"
-        }`}
+        className={`row fn-press w-[calc(100%+20px)] ${selected ? "row-selected" : ""}`}
       >
-        <span className="flex items-center gap-2">
-          <span className={`min-w-0 flex-1 truncate font-medium ${note.title ? "" : "text-[var(--text-muted)]"}`}>{note.title || "Untitled"}</span>
-          <span className="fn-num shrink-0 text-xs text-[var(--text-muted)]">{cardDate(note.updatedAt)}</span>
-        </span>
-        <span className="line-clamp-2 text-[13px] leading-normal text-[var(--text-secondary)]">{preview || "No text yet"}</span>
-        {(tags.length > 0 || linked || source) && (
-          <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-[var(--text-muted)]">
-            {tags.slice(0, 3).map((t) => (
-              <span key={t} className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-px">{tagLabel(t)}</span>
-            ))}
-            {tags.length > 3 && <span>+{tags.length - 3}</span>}
-            {linked && <span className="flex items-center gap-1"><Icon name="link" size={12} />{linked}</span>}
-            {source && <span>{source}</span>}
+        <span className="mark" aria-hidden><Icon name={source ? "scan" : isQuick(note) ? "pin" : "lines"} size={17} /></span>
+        <span className="min-w-0 flex-1">
+          <span className={`row-title truncate ${note.title ? "" : "text-[var(--text-muted)]"}`}>{note.title || "Untitled"}</span>
+          <span className="block truncate text-[14px] leading-[1.45] text-[var(--text-secondary)]">{preview || "No text yet"}</span>
+          <span className="row-meta">
+            <span className="fn-num">{cardDate(note.updatedAt)}</span>
+            {tags.slice(0, 2).map((t) => <span key={t}>{tagLabel(t)}</span>)}
+            {linked && <span className="flex items-center gap-1"><Icon name="link" size={13} />{linked}</span>}
           </span>
-        )}
+        </span>
       </button>
     </li>
   );
@@ -269,18 +262,36 @@ export default function NotesView() {
   return (
     // Fills the space below the header exactly: the list and the note each scroll on
     // their own, so headers, toolbar and footer stay in place.
-    <div className="-mx-4 flex min-h-0 flex-1 md:-mx-8">
+    <div className="flex min-h-0 flex-1 max-md:-mx-[18px] max-md:-mt-[22px] md:gap-3">
+      {show === "people" && person && (mobile ? mobileOpen : true) && (
+        <PersonPage person={person} onBack={mobile ? () => { setMobileOpen(false); setReturned(true); } : undefined} />
+      )}
+
+      {show !== "people" && showEditor && selected && (
+        <NoteEditor
+          key={selected.id}
+          note={selected}
+          onBack={mobile ? () => { leave(null); setMobileOpen(false); setReturned(true); setAnim(undefined); } : undefined}
+          listHidden={listHidden}
+          onToggleList={mobile ? undefined : () => setListHidden((v) => !v)}
+          focusMode={focusMode}
+          onToggleFocus={() => (focusMode ? exitFocus() : enterFocus())}
+          anim={anim ?? (mobile ? "push" : undefined)}
+          // Phones keep the last value, so clearing it can't replay the slide-in.
+          onAnimDone={() => setAnim((a) => (a === "focus-out" || mobile ? a : undefined))}
+        />
+      )}
       {(mobile ? showList : listPresence.mounted) && (
         <aside
-          className={`fn-aside flex min-h-0 w-full shrink-0 flex-col md:w-[331px] md:border-r md:border-[var(--border)] ${mobile && returned ? "fn-list-back" : ""}`}
+          className={`fn-aside sheet flex min-h-0 w-full shrink-0 flex-col md:w-[360px] ${mobile && returned ? "fn-list-back" : ""}`}
           data-state={mobile ? undefined : listPresence.state}
           inert={!mobile && listHidden ? true : undefined}
         >
           {/* Fixed width inside, so the rows don't reflow while the list folds. */}
-          <div className="flex min-h-0 w-full flex-1 flex-col px-3 md:w-[330px]">
+          <div className="flex min-h-0 w-full flex-1 flex-col px-[22px] md:w-[360px]">
           {/* The list carries the tab's title, as the macOS app has it. */}
-          <div className="flex items-center gap-1 pb-3 pl-2 pr-1 pt-5 md:pt-6">
-            <h2 className="fn-display min-w-0 flex-1 text-[28px]" title={plural(liveCount, "note")}>Notes</h2>
+          <div className="flex items-center gap-1 pb-3 pt-5 md:pt-6">
+            <h2 className="min-w-0 flex-1 text-[24px] font-bold leading-[1.1] tracking-[-0.025em]" title={plural(liveCount, "note")}>Notes</h2>
             <Dropdown
               label="Sort notes"
               title={`Sorted by ${SORTS[sort].toLowerCase()}`}
@@ -309,11 +320,11 @@ export default function NotesView() {
                 </>
               )}
             </Dropdown>
-            <button onClick={newNote} className="btn btn-primary pl-2.5 pr-3.5 max-md:h-11">
-              <Icon name="plus" size={16} /> New
+            <button onClick={newNote} className="btn btn-primary btn-icon max-md:h-11 max-md:w-11" aria-label="New note" title="New note">
+              <Icon name="plus" size={16} />
             </button>
           </div>
-          <div className="px-1 pb-3">
+          <div className="pb-3">
             <div className="relative">
               <Icon name="search" size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
               <input
@@ -330,7 +341,7 @@ export default function NotesView() {
               <p className="px-2 pt-1.5 text-xs text-[var(--text-muted)]">Best matches first</p>
             )}
           </div>
-          <div role="group" aria-label="Show" className="seg mx-1 mb-1 flex">
+          <div role="group" aria-label="Show" className="seg mb-1 flex">
             <button type="button" aria-pressed={show === "all"} onClick={() => setShow("all")} className="flex-1 max-md:h-[38px]">
               All <span className="fn-num font-normal text-[var(--text-muted)]">{liveCount}</span>
             </button>
@@ -343,14 +354,14 @@ export default function NotesView() {
               People {people.length > 0 && <span className="fn-num font-normal text-[var(--text-muted)]">{people.length}</span>}
             </button>
           </div>
-          <div className="scroll-thin -mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-24 max-md:pb-[calc(var(--tabbar-space)+64px)]">
+          <div className="scroll-thin -mx-[22px] min-h-0 flex-1 overflow-y-auto px-[22px] pb-6 max-md:pb-[calc(var(--tabbar-space)+64px)]">
             {show === "people" && (
               <PeopleList people={shownPeople} selected={!mobile ? person?.key : undefined} onOpen={(k) => { setPersonKey(k); setMobileOpen(true); }} />
             )}
             {show !== "people" && groups.map((g) => (
               <section key={g.label || "all"} aria-label={g.label || undefined}>
-                {g.label && <h3 className="group-label px-2 pb-1.5 pt-3">{g.label}</h3>}
-                <ul className="flex flex-col gap-1">
+                {g.label && <h3 className="group-label pb-1 pt-[18px]">{g.label}</h3>}
+                <ul className="flex flex-col">
                   {g.notes.map((n) => (
                     <NoteCard key={n.id} note={n} selected={!mobile && selected?.id === n.id} tasks={linkedTasks(n.id)} expenses={linkedExpenses(n.id)} onOpen={() => open(n.id)} />
                   ))}
@@ -368,25 +379,6 @@ export default function NotesView() {
       )}
 
       <Conflicts open={conflictsOpen} onClose={() => setConflictsOpen(false)} />
-
-      {show === "people" && person && (mobile ? mobileOpen : true) && (
-        <PersonPage person={person} onBack={mobile ? () => { setMobileOpen(false); setReturned(true); } : undefined} />
-      )}
-
-      {show !== "people" && showEditor && selected && (
-        <NoteEditor
-          key={selected.id}
-          note={selected}
-          onBack={mobile ? () => { leave(null); setMobileOpen(false); setReturned(true); setAnim(undefined); } : undefined}
-          listHidden={listHidden}
-          onToggleList={mobile ? undefined : () => setListHidden((v) => !v)}
-          focusMode={focusMode}
-          onToggleFocus={() => (focusMode ? exitFocus() : enterFocus())}
-          anim={anim ?? (mobile ? "push" : undefined)}
-          // Phones keep the last value, so clearing it can't replay the slide-in.
-          onAnimDone={() => setAnim((a) => (a === "focus-out" || mobile ? a : undefined))}
-        />
-      )}
     </div>
   );
 }

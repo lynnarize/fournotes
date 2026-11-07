@@ -33,8 +33,8 @@ export default function PrivacyPage() {
 
       <h2>2. Google user data</h2>
       <p>
-        Signing in with Google is optional. It is used only to back up your data and sync it between your devices. This section describes how Four
-        Notes accesses, uses, shares, protects, retains and deletes Google user data.
+        Signing in with Google is optional. It is used to back up your data and sync it between your devices, and, if you connect your calendar, to
+        show your meetings. This section describes how Four Notes accesses, uses, shares, protects, retains and deletes Google user data.
       </p>
 
       <h3>2.1 Data accessed</h3>
@@ -53,8 +53,18 @@ export default function PrivacyPage() {
         </li>
       </ul>
       <p>
+        Only if you choose <em>Connect calendar</em> (on Today, the Meetings page or in Settings), it also asks for:
+      </p>
+      <ul>
+        <li>
+          <strong>Your calendar&apos;s events, read-only</strong> (scope <code>calendar.events.readonly</code>): the meetings on your primary calendar
+          from a few hours ago to a day and a half ahead — their title, start and end, the people invited, and the link to join a call. The app cannot
+          change, add or delete events, and does not ask for this as part of Drive sync.
+        </li>
+      </ul>
+      <p>
         The app <strong>cannot see, open, list, change or delete any other file</strong> in your Google Drive. It does not access your contacts,
-        calendar, Gmail, photos or any other Google data.
+        Gmail, photos or any other Google data, and reads your calendar only when you have connected it.
       </p>
 
       <h3>2.2 How we use Google user data</h3>
@@ -70,6 +80,12 @@ export default function PrivacyPage() {
         <li>
           <strong>Drive app data</strong> — to save your notes, to-dos, transactions, sticky notes and a few settings (currency, budgets, display name,
           voice replies) to the sync file, and to read that file back so the same data appears on your other devices.
+        </li>
+        <li>
+          <strong>Calendar events</strong> — to show your next meeting on Today and today&apos;s meetings on the Meetings page, and to name a recording
+          after the meeting it&apos;s for, with who was invited. They are read when those pages show (at most every five minutes) and are not sent to
+          AI providers. A meeting&apos;s title and invitees are saved with a recording only when you record that meeting; recordings stay in your
+          browser.
         </li>
       </ul>
       <p>
@@ -99,6 +115,10 @@ export default function PrivacyPage() {
       <ul>
         <li>The sync file is stored in your own Google Drive, under your Google account. We do not store it on our servers.</li>
         <li>
+          Calendar events pass through our server on their way from Google to your browser and are not stored there or anywhere else; your browser
+          keeps them in memory only while the app is open.
+        </li>
+        <li>
           To keep syncing, Google issues a refresh token. It is stored only on your device, in a cookie encrypted with AES-256-GCM and marked HttpOnly,
           so scripts on the page cannot read it. It is not stored in any database.
         </li>
@@ -121,6 +141,11 @@ export default function PrivacyPage() {
           <strong>Sign-in token, email address and name</strong> — these are kept in the encrypted cookie on your device for up to 180
           days; your email is also saved in your browser&apos;s local storage to show which account is connected. These are deleted immediately when you
           choose <em>Disconnect</em>, which also revokes the app&apos;s access with Google.
+        </li>
+        <li>
+          <strong>Calendar</strong> — <em>Disconnect calendar</em> in Settings → Cloud sync stops the app reading it. If you don&apos;t also sync with
+          Google Drive, it signs out of Google and revokes the app&apos;s access too; if you do, Google keeps the calendar permission until you choose
+          <em> Disconnect</em> for Google or remove it in your Google account (below).
         </li>
         <li>
           <strong>Daily allowance counter</strong> — your email address (or IP address when signed out) is held in server memory only to count

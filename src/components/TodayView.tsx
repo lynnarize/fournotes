@@ -1,28 +1,32 @@
 "use client";
-// Today: the date and a greeting, the brief (one short paragraph written from your data,
-// or the written brief point by point, see Settings → Today), and the assistant under it.
-// Beside them, at a glance: what's due (tick it off right here), quick notes, and what
-// you've spent today. Phones stack it all, with the assistant docked above the tab bar.
+// Today, on two sheets. The main one: the greeting, the summary (one line, then only what needs
+// you, each with one button) and the assistant under it. The side one, at a glance: the next
+// meeting (record it in one click), what's due (tick it off right here), what you've spent today
+// and quick notes. Phones stack it all, with the assistant docked above the tab bar.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { looksLikeThinking } from "@/lib/ai/text";
-import { BRIEF_STYLES, composeBrief, useBriefStyle, type BriefItem, type BriefTarget } from "@/lib/briefParagraph";
+import { useBriefStyle } from "@/lib/briefParagraph";
+import { connectCalendar, useCalendar } from "@/lib/calendar";
 import { api, localIso } from "@/lib/client";
 import { fingerprint } from "@/lib/fingerprint";
 import { useFiledFlash } from "@/lib/highlight";
 import { greetingFor, useNow, useOnline } from "@/lib/hooks";
 import { budgetStatus, detectSubscriptions, myShare, owedToMe } from "@/lib/insights";
-import { openItem } from "@/lib/nav";
+import { clockTime, meetingDetail, talkFor, timeRange, type CalendarMeeting } from "@/lib/meetings";
+import { openAssistant, openItem } from "@/lib/nav";
 import { isQuick, quickNote } from "@/lib/quickNote";
 import { alive, formatMoney, localDate, localMonth, useStore } from "@/lib/store";
+import { useTalks } from "@/lib/talks/db";
+import { stuckTasks } from "@/lib/tasks";
+import { useRecorder } from "@/lib/talks/recorder";
 import type { BriefInput, Note, Tab, Todo } from "@/lib/types";
 import { useAssistant } from "./assistant";
 import { Glyph } from "./assistant/icons";
 import ChatDock from "./ChatDock";
-import { Dropdown, MenuItem } from "./notes/Dropdown";
+import { useRecordMeeting, useStoredFlag } from "./meetings";
 import { SampleDataButton } from "./SampleData";
-import { useToast } from "./ui";
+import { Icon, useToast } from "./ui";
 
-const LINK = "text-[var(--foreground)] underline decoration-[var(--border-strong)] decoration-1 underline-offset-4 transition-colors hover:decoration-[var(--foreground)]";
 const QUIET = "flex h-8 items-center gap-1.5 rounded-full px-3 text-[13px] text-[var(--text-muted)] transition-colors hover:bg-[var(--hover)] hover:text-[var(--foreground)] disabled:opacity-40";
 const HEAD_LINK = "flex min-h-8 items-center rounded-full px-1 text-[13px] text-[var(--text-secondary)] transition-colors hover:text-[var(--foreground)]";
 
@@ -145,37 +149,23 @@ export default function TodayView({ setTab }: { setTab: (t: Tab) => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stickies.length]);
 
-  const follow = (t: BriefTarget) => {
-    if (t.kind === "todos") setTab("todo");
-    else if (t.kind === "finance") setTab("finance");
-    else if (t.kind === "notes") setTab("notes");
-    else openItem(t.kind, t.id);
-  };
-
   const complete = (t: Todo) => {
     const extra = toggleTodo(t.id, true);
     toast([`Done: ${t.title}`, ...extra].join("\n"));
   };
 
   const firstName = settings.name?.trim().split(/\s+/)[0];
-  const item = (t: Todo): BriefItem => ({ id: t.id, title: t.title, due: t.dueAt ? new Date(t.dueAt) : null });
-  const pieces = composeBrief({
-    now, due: tasks.map(item), focus: focus.map(item),
-    yesterday: ySpend.map((t) => ({ category: t.category, amount: myShare(t, cur) })),
-    currency: cur, alerts, notesToday: quickToday.map((n) => ({ id: n.id, title: n.title })),
-  });
   // Only the heads-ups the written brief didn't already say.
   const said = briefLines.map((l) => l.toLowerCase());
   const freshAlerts = alerts.filter((a) => !said.some((l) => l.includes(a.toLowerCase().slice(0, 18))));
-  const styleLabel = BRIEF_STYLES.find((s) => s.id === style)?.label ?? "One paragraph";
 
   // While you chat, the card takes the brief's place under the greeting; the rest of Today stays.
   return (
-    <div className={`mx-auto flex w-full max-w-[1180px] flex-wrap items-start gap-10 pt-5 md:pb-12 ${todayChat ? "pb-6 max-md:pb-[calc(var(--tabbar-space)+24px)] md:pt-10" : "pb-[136px] max-md:pb-[calc(var(--tabbar-space)+136px)] md:pt-[72px]"}`}>
-      <div className="flex min-w-0 flex-[999_1_480px] flex-col gap-6">
-        <div className="flex flex-col gap-2.5 md:gap-3">
-          <p className="text-[14px] text-[var(--text-secondary)]">{now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</p>
-          <h2 className="fn-display text-[40px] md:text-[52px]">{greetingFor(now)}{firstName ? `, ${firstName}` : ""}</h2>
+    <div className="flex min-h-0 flex-1 flex-col gap-8 max-md:pb-[calc(var(--tabbar-space)+96px)] md:flex-row md:gap-3">
+      <section className={`sheet flex min-w-0 flex-[999_1_560px] flex-col gap-6 md:overflow-y-auto md:px-8 md:pt-7 md:pb-8 ${todayChat ? "" : "max-md:pb-10"}`}>
+        <div>
+          <h2 className="fn-display text-[34px] md:text-[40px]">{greetingFor(now)}{firstName ? `, ${firstName}` : ""}</h2>
+          <p className="mt-1.5 text-[15px] text-[var(--text-muted)]">{now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</p>
         </div>
 
         {!todayChat && (
@@ -187,74 +177,125 @@ export default function TodayView({ setTab }: { setTab: (t: Tab) => void }) {
               </p>
               <SampleDataButton label="Explore with sample data" className="btn btn-secondary" />
             </div>
-          ) : style === "paragraph" ? (
-            <p className="fn-rise max-w-[600px] text-[16px] leading-[1.6] text-[var(--text-secondary)] md:text-[18px]">
-              {pieces.map((p, i) =>
-                p.target ? (
-                  <button key={i} type="button" onClick={() => follow(p.target!)} className={LINK}>{p.text}</button>
-                ) : (
-                  <span key={i}>{p.text}</span>
-                ),
-              )}
-            </p>
           ) : (
-            <div className="fn-rise flex max-w-[600px] flex-col gap-2.5 text-[16px] leading-[1.6] text-[var(--text-secondary)] md:text-[17px]">
-              {briefLines.length ? (
-                briefLines.slice(0, 3).map((l, i) => {
-                  const { glyph, text } = leadingEmoji(l);
-                  return <Row key={i} glyph={glyph}>{text}</Row>;
-                })
-              ) : (
-                <>
-                  <Row glyph={<Glyph name="calendarCheck" size={16} />}>
-                    {loading ? <span className="fn-shimmer">Reading your day</span> : online ? "Your daily brief will appear here." : "The brief will be written when you're back online."}
-                  </Row>
-                  {ySpend.length > 0 && <Row glyph={<Glyph name="wallet" size={16} />}>{formatMoney(yTotal, cur)} spent yesterday</Row>}
-                </>
-              )}
-              {freshAlerts.slice(0, 2).map((a) => (
-                <Row key={a} glyph={<Glyph name="warning" size={16} className="text-[var(--warning)]" />}>{a}</Row>
-              ))}
-            </div>
-          )}
-
-          {!isEmptyApp && (
-            <div className="-mb-2 -ml-3 -mt-2 flex flex-wrap items-center gap-1">
-              {style === "points" && (
-                <button type="button" className={QUIET} onClick={() => write(true)} disabled={loading || !online}>
-                  <Glyph name="refresh" size={14} /> {loading ? "Writing…" : brief ? "Refresh brief" : "Write today's brief"}
-                </button>
-              )}
-              <Dropdown
-                label={`How the brief reads: ${styleLabel}`}
-                title="How the brief reads"
-                width={260}
-                chevron={false}
-                className={QUIET}
-                button={<>{styleLabel}<Glyph name="chevronDown" size={14} /></>}
-              >
-                {(close) => BRIEF_STYLES.map((s) => (
-                  <MenuItem key={s.id} icon={s.icon} label={s.label} active={style === s.id} onSelect={() => { close(); setStyle(s.id); }} />
-                ))}
-              </Dropdown>
-            </div>
+            <Summary
+              tasks={tasks}
+              alerts={alerts}
+              written={style === "points" ? briefLines.slice(0, 3) : []}
+              freshAlerts={freshAlerts}
+              loading={loading}
+              onRewrite={style === "points" && online ? () => write(true) : undefined}
+              onMoney={() => setTab("finance")}
+            />
           )}
           {briefError && style === "points" && <p className="fn-rise -mt-3 text-[13px] text-[var(--text-secondary)]">{briefError}</p>}
           </>
         )}
 
-        <div className={`flex flex-col gap-6 ${todayChat ? "" : "md:mt-4"}`}>
+        <div className="flex flex-col gap-6">
           <ChatDock hero />
         </div>
-      </div>
+      </section>
 
-      <aside aria-label="At a glance" className="flex min-w-0 flex-[1_1_340px] flex-col gap-4">
+      <aside aria-label="At a glance" className="sheet sheet-side max-md:max-w-none max-md:p-0 md:flex md:flex-col">
+        <h2 className="mb-3 text-[24px] font-bold leading-[1.1] tracking-[-0.025em]">At a glance</h2>
+        <NextMeeting onAll={() => setTab("transcribe")} />
         <DueToday tasks={tasks} upcoming={upcoming} focus={focus} onDone={complete} onAll={() => setTab("todo")} />
         <SpentToday onOpen={() => setTab("finance")} yTotal={yTotal} />
         <QuickNotes quick={quick} onMore={() => setTab("notes")} />
       </aside>
     </div>
   );
+}
+
+const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+const count = (n: number, one: string, many = `${one}s`) => `${WORDS[n] ?? n} ${n === 1 ? one : many}`;
+const capitalised = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+
+/**
+ * The summary: one line for the day, then only what needs you, each with one button. Written from
+ * your own data, so it's there at once. With "Written by the assistant" in Settings, the
+ * assistant's lines take the rows' place.
+ */
+function Summary({ tasks, alerts, written, freshAlerts, loading, onRewrite, onMoney }: {
+  tasks: Todo[]; alerts: string[]; written: string[]; freshAlerts: string[]; loading: boolean;
+  onRewrite?: () => void; onMoney: () => void;
+}) {
+  const { todos } = useStore();
+  const cal = useCalendar();
+  const now = useNow(60_000);
+  const view = cal.status === "connected" ? nextMeeting(cal.meetings, now) : null;
+  const meeting = view && new Date(view.meeting.start).toDateString() === now.toDateString() ? view.meeting : null;
+  const meetings = cal.status === "connected" ? cal.meetings.filter((m) => new Date(m.start).toDateString() === now.toDateString() && new Date(m.end ?? m.start) >= now).length : 0;
+
+  const stuck = stuckTasks(alive(todos), now.getTime())[0];
+  const task = stuck?.todo ?? tasks[0];
+  const money = alerts[0]?.match(/^(.*?)\s*\((.*)\)$/);
+  const rows: { key: string; icon: string; tone: string; title: string; meta: ReactNode; action: string; run: () => void }[] = [];
+  if (meeting) rows.push({
+    key: "meeting", icon: "wave", tone: "tile-red", title: `${meeting.title} at ${clockTime(new Date(meeting.start))}`,
+    meta: meetingDetail(meeting) || timeRange(meeting), action: "Prepare", run: () => openAssistant(`Prepare me for ${meeting.title}: `),
+  });
+  if (task) rows.push({
+    key: "task", icon: stuck ? "clock" : "todo", tone: stuck ? "tile-amber" : "tile-ink", title: task.title || "Untitled task",
+    meta: stuck ? <span className="font-semibold text-[var(--warning)]">{capitalised(stuck.why)}</span> : task.dueAt ? <span className="tm">{dueWord(task, now)}</span> : "",
+    action: "Start", run: () => openItem("todo", task.id),
+  });
+  if (alerts[0]) rows.push({
+    key: "money", icon: "wallet", tone: "tile-amber", title: money?.[1] ?? alerts[0], meta: money?.[2] ?? "", action: "Review", run: onMoney,
+  });
+
+  const parts = [meetings ? count(meetings, "meeting") : "", tasks.length ? count(tasks.length, "task") : ""].filter(Boolean);
+  const load = meetings + tasks.length;
+  const line = !load ? "A clear day." : `${load <= 6 ? "A light day" : "A full day"}: ${parts.join(", ")}.`;
+
+  return (
+    <section aria-label="Summary of your day" className="fn-rise max-w-[920px]">
+      <div className="flex items-center gap-2.5 text-[13px] text-[var(--text-muted)]">
+        <span className="ai-chip"><Icon name="sparkle" size={14} /> Summary</span>
+        <span className="flex-1" />
+        {onRewrite && (
+          <button type="button" className="btn btn-secondary btn-icon" onClick={onRewrite} disabled={loading} aria-label={loading ? "Writing…" : "Write the summary again"} title="Write the summary again">
+            <Icon name="repeat" size={16} />
+          </button>
+        )}
+      </div>
+      <p className="mt-3.5 text-[24px] font-semibold leading-[1.3] tracking-[-0.02em] md:text-[28px]">
+        {line}{rows.length > 0 && <span className="text-[var(--text-muted)]"> {capitalised(count(rows.length, "thing"))} {rows.length === 1 ? "needs" : "need"} you.</span>}
+      </p>
+      {written.length > 0 ? (
+        <div className="mt-4 flex flex-col gap-2.5 text-[16px] leading-[1.6] text-[var(--text-secondary)]">
+          {written.map((l, i) => {
+            const { glyph, text } = leadingEmoji(l);
+            return <Row key={i} glyph={glyph}>{text}</Row>;
+          })}
+          {freshAlerts.slice(0, 2).map((a) => (
+            <Row key={a} glyph={<Glyph name="warning" size={16} className="text-[var(--warning)]" />}>{a}</Row>
+          ))}
+        </div>
+      ) : (
+        <ul className="mt-4 flex flex-col gap-0.5">
+          {rows.map((r) => (
+            <li key={r.key} className="row items-center">
+              <span className={`tile ${r.tone}`} aria-hidden><Icon name={r.icon} size={18} /></span>
+              <span className="min-w-0 flex-1">
+                <span className="row-title truncate">{r.title}</span>
+                {r.meta && <span className="row-meta">{r.meta}</span>}
+              </span>
+              <button type="button" className="btn btn-secondary btn-sm max-md:h-11" onClick={r.run}>{r.action}</button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/** When a task is due, in a word or two: the time today, otherwise the day. */
+function dueWord(t: Todo, now: Date) {
+  const due = new Date(t.dueAt!);
+  if (due.toDateString() !== now.toDateString()) return `Overdue, ${due.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+  return due.getHours() || due.getMinutes() ? clockTime(due) : "Today";
 }
 
 function Row({ glyph, children }: { glyph: ReactNode; children: ReactNode }) {
@@ -266,18 +307,146 @@ function Row({ glyph, children }: { glyph: ReactNode; children: ReactNode }) {
   );
 }
 
-const CARD_HEAD = "flex items-center gap-2 px-3 pb-2 pt-3";
-const CARD_TITLE = "min-w-0 flex-1 text-[15px] font-medium md:text-[16px]";
+const CARD_HEAD = "flex min-h-[30px] items-center gap-2 pb-1";
+const CARD_TITLE = "min-w-0 flex-1 text-[13px] font-semibold text-[var(--text-muted)]";
+
+// ---- Next meeting ------------------------------------------------------------------------
+// From Google Calendar, as the Mac app's card is from the Mac's calendars: the meeting on now,
+// else the next one in the coming 12 hours, recorded in one click.
+
+const WITHIN_MS = 12 * 3600_000;
+
+/** Which meeting the card shows, what its first line says, and what comes after it. */
+export function nextMeeting(meetings: CalendarMeeting[], now: Date): { meeting: CalendarMeeting; when: string; then: CalendarMeeting | null } | null {
+  const t = now.getTime();
+  const ahead = meetings
+    .filter((m) => Date.parse(m.end) > t && Date.parse(m.start) <= t + WITHIN_MS)
+    .sort((a, b) => a.start.localeCompare(b.start));
+  // Of those under way, the one that began last: the meeting, not the afternoon's focus block.
+  const meeting = ahead.filter((m) => Date.parse(m.start) <= t).pop() ?? ahead[0];
+  if (!meeting) return null;
+  const then = ahead.find((m) => m !== meeting && Date.parse(m.start) > Math.max(t, Date.parse(meeting.start))) ?? null;
+  return { meeting, when: whenLine(meeting, now), then };
+}
+
+/** "Now · started 5 min ago", "In 12 min", "At 3:30 PM", "Tomorrow at 9:00 AM". */
+export function whenLine(m: CalendarMeeting, now: Date) {
+  const start = new Date(m.start);
+  const diff = start.getTime() - now.getTime();
+  if (diff <= 0) {
+    const ago = Math.floor(-diff / 60_000);
+    return ago < 1 ? "Now · just started" : ago < 60 ? `Now · started ${ago} min ago` : `Now · until ${clockTime(new Date(m.end))}`;
+  }
+  if (diff < 60 * 60_000) return `In ${Math.max(1, Math.round(diff / 60_000))} min`;
+  return `${dayWord(start, now)} ${clockTime(start)}`;
+}
+
+/** "At", "Tomorrow at", "Friday at". */
+function dayWord(d: Date, now: Date) {
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  if (d.toDateString() === now.toDateString()) return "At";
+  if (d.toDateString() === tomorrow.toDateString()) return "Tomorrow at";
+  return `${d.toLocaleDateString("en-US", { weekday: "long" })} at`;
+}
+
+function NextMeeting({ onAll }: { onAll: () => void }) {
+  const cal = useCalendar();
+  const talks = useTalks();
+  const rec = useRecorder();
+  // The minute's tick draws it again; the time is read as it's drawn, so "started 5 min ago" isn't a minute behind.
+  useNow(60_000);
+  const now = new Date();
+  const { record, busy } = useRecordMeeting();
+  const [hidden, hide] = useStoredFlag("four-notes:next-meeting-dismissed");
+
+  if (cal.status === "unavailable" || cal.status === "checking") return null;
+  if (cal.status === "disconnected") {
+    if (hidden) return null;
+    return (
+      <section aria-labelledby="today-meeting" className="glance">
+        <div className={CARD_HEAD}>
+          <h2 id="today-meeting" className={CARD_TITLE}>Next meeting</h2>
+          <button type="button" className="btn btn-plain btn-sm btn-icon" aria-label="Not now" title="Not now" onClick={hide}>
+            <Icon name="x" size={14} />
+          </button>
+        </div>
+        <div className="flex flex-col items-start gap-3 pb-1 pt-1">
+          <p className="text-[14px] text-[var(--text-secondary)]">See your next meeting here, and record it in one click.</p>
+          <button type="button" className="btn btn-secondary btn-sm max-md:h-11" onClick={connectCalendar}><Icon name="calendar" size={14} /> Connect calendar</button>
+          {cal.error && <p className="text-[13px] text-[var(--danger)]" role="alert">{cal.error}</p>}
+        </div>
+      </section>
+    );
+  }
+
+  const view = nextMeeting(cal.meetings, now);
+  const m = view?.meeting;
+  const talk = m ? talkFor(m, talks) : undefined;
+  const recording = Boolean(talk && rec.talkId === talk.id && rec.status !== "idle");
+  const blocked = rec.status !== "idle";
+  const detail = m ? meetingDetail(m) : "";
+  return (
+    <section aria-labelledby="today-meeting" className="glance">
+      <div className={CARD_HEAD}>
+        <h2 id="today-meeting" className={CARD_TITLE}>Next meeting</h2>
+        <button type="button" className={HEAD_LINK} onClick={onAll}>All meetings</button>
+      </div>
+      {!view || !m ? (
+        <p className="pb-1 pt-1 text-[14px] text-[var(--text-secondary)]">No more meetings today.</p>
+      ) : (
+        <div className="flex flex-col gap-1 pb-1 pt-1">
+          <p className="fn-num text-[12px] text-[var(--text-muted)]">{view.when}</p>
+          <p className="line-clamp-2 text-[15px] font-medium leading-snug">{m.title}</p>
+          <p className="fn-num truncate text-[13px] text-[var(--text-secondary)]">{timeRange(m)}{detail ? ` · ${detail}` : ""}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {recording && talk ? (
+              <>
+                <span className="badge badge-danger badge-dot">Recording</span>
+                <button type="button" className="btn btn-secondary btn-sm max-md:h-11" onClick={() => openItem("talk", talk.id)}>Open</button>
+              </>
+            ) : talk ? (
+              <button type="button" className="btn btn-secondary btn-sm max-md:h-11" onClick={() => openItem("talk", talk.id)}>Open notes</button>
+            ) : (
+              <>
+                {m.link && (
+                  <button type="button" className="btn btn-primary btn-sm max-md:h-11" disabled={blocked} title={blocked ? "A recording is already running." : undefined} onClick={() => void record(m, true)}>
+                    <Icon name="arrowUpRight" size={14} /> Join and record
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className={`btn btn-sm max-md:h-11 ${m.link ? "btn-secondary" : "btn-primary"}`}
+                  disabled={blocked || busy === m.id}
+                  title={blocked ? "A recording is already running." : undefined}
+                  onClick={() => void record(m, false)}
+                >
+                  <Icon name="mic" size={14} /> Record
+                </button>
+              </>
+            )}
+          </div>
+          {view.then && (
+            <p className="mt-2 truncate text-[12px] text-[var(--text-muted)]">
+              Then {new Date(view.then.start).toDateString() === now.toDateString() ? "" : "tomorrow "}
+              {clockTime(new Date(view.then.start))} · {view.then.title}
+            </p>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
 
 function DueToday({ tasks, upcoming, focus, onDone, onAll }: {
   tasks: Todo[]; upcoming: Todo[]; focus: Todo[]; onDone: (t: Todo) => void; onAll: () => void;
 }) {
   const shown = tasks.slice(0, 5);
   return (
-    <section aria-labelledby="today-due" className="card p-1.5 md:p-2">
+    <section aria-labelledby="today-due" className="glance">
       <div className={CARD_HEAD}>
         <h2 id="today-due" className={CARD_TITLE}>Due today</h2>
-        <button type="button" className={HEAD_LINK} onClick={onAll}>All tasks</button>
+        <button type="button" className={HEAD_LINK} onClick={onAll}>Planner</button>
       </div>
       {shown.length ? (
         shown.map((t, i) => (
@@ -287,21 +456,20 @@ function DueToday({ tasks, upcoming, focus, onDone, onAll }: {
           </div>
         ))
       ) : (
-        <p className="px-3 pb-3 pt-1 text-[14px] text-[var(--text-secondary)]">{focus.length ? "Nothing has a date today." : "Nothing due today."}</p>
+        <p className="pb-1 pt-1 text-[14px] text-[var(--text-secondary)]">{focus.length ? "Nothing has a date today." : "Nothing due today."}</p>
       )}
       {tasks.length > shown.length && (
-        <button type="button" className={`${HEAD_LINK} mx-2 mb-1`} onClick={onAll}>{tasks.length - shown.length} more due</button>
+        <button type="button" className={`${HEAD_LINK} mb-1`} onClick={onAll}>{tasks.length - shown.length} more due</button>
       )}
       {!tasks.length && focus.length > 0 && (
         <>
-          <p className="group-label px-3 pb-1 pt-1">High priority, no date</p>
+          <p className="group-label pb-1 pt-1">High priority, no date</p>
           {focus.map((t) => <TaskRow key={t.id} todo={t} onDone={() => onDone(t)} />)}
         </>
       )}
       {upcoming.length > 0 && (
         <>
-          <div className="mx-3 my-1 h-px bg-[var(--border-subtle)]" />
-          <p className="group-label px-3 pb-1 pt-2">Coming up</p>
+          <p className="group-label pb-1 pt-3">Coming up</p>
           {upcoming.map((t) => <TaskRow key={t.id} todo={t} onDone={() => onDone(t)} />)}
         </>
       )}
@@ -324,7 +492,7 @@ function TaskRow({ todo, onDone }: { todo: Todo; onDone: () => void }) {
   const freq = todo.rrule?.match(/FREQ=(\w+)/i)?.[1]?.toUpperCase();
   const repeat = freq ? ({ DAILY: "Daily", WEEKLY: "Weekly", MONTHLY: "Monthly", YEARLY: "Yearly" } as Record<string, string>)[freq] : undefined;
   return (
-    <div className={`flex items-start gap-3 rounded-[18px] px-3 py-3 max-md:min-h-[52px] max-md:items-center max-md:py-2 ${flash ? "fn-flash" : ""}`}>
+    <div className={`row max-md:min-h-[52px] max-md:items-center ${flash ? "fn-flash" : ""}`}>
       <button
         type="button"
         className={`check relative mt-px before:absolute before:-inset-3 before:content-[''] max-md:h-6 max-md:w-6 ${overdue ? "border-[var(--danger)]" : ""}`}
@@ -332,10 +500,10 @@ function TaskRow({ todo, onDone }: { todo: Todo; onDone: () => void }) {
         onClick={onDone}
       />
       <button type="button" className="flex min-w-0 flex-1 flex-col gap-1 text-left" onClick={() => openItem("todo", todo.id)}>
-        <span className="truncate text-[14px] md:text-[14px]">{todo.title}</span>
+        <span className="row-title truncate">{todo.title}</span>
         {(when || note || repeat) && (
-          <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-[var(--text-muted)]">
-            {when && <span className={`fn-num shrink-0 ${overdue && !sameDay ? "text-[var(--danger)]" : ""}`}>{overdue && !sameDay ? `Overdue, ${when}` : when}</span>}
+          <span className="row-meta !mt-0 flex-nowrap gap-1.5">
+            {when && <span className={`fn-num tm shrink-0 ${overdue && !sameDay ? "!text-[var(--danger)]" : ""}`}>{overdue && !sameDay ? `Overdue, ${when}` : when}</span>}
             {when && (note || repeat) && <span aria-hidden>·</span>}
             {note ? (
               <span className="flex min-w-0 items-center gap-1"><Glyph name="link" size={12} /><span className="truncate">{note.title || "Untitled"}</span></span>
@@ -383,13 +551,13 @@ function SpentToday({ onOpen, yTotal }: { onOpen: () => void; yTotal: number }) 
     : yTotal > 0 ? `${formatMoney(yTotal, cur)} yesterday` : todays.length ? `${todays.length} ${todays.length === 1 ? "purchase" : "purchases"} today` : "Nothing logged yet today";
 
   return (
-    <section aria-labelledby="today-money" className="card flex items-center gap-4 px-[18px] py-4 md:block md:p-5">
+    <section aria-labelledby="today-money" className="glance flex items-center gap-4 md:block">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <h2 id="today-money" className="min-w-0 flex-1 text-[13px] text-[var(--text-secondary)] md:text-[16px] md:font-medium md:text-[var(--foreground)]">Spent today</h2>
-          <button type="button" className={`${HEAD_LINK} max-md:hidden`} onClick={onOpen}>Finance</button>
+          <h2 id="today-money" className={CARD_TITLE}>Spent today</h2>
+          <button type="button" className={`${HEAD_LINK} max-md:hidden`} onClick={onOpen}>Money</button>
         </div>
-        <p className="fn-display fn-num mt-1 text-[24px] md:mb-1 md:mt-3 md:text-[28px]">{formatMoney(total, cur)}</p>
+        <p className="fn-display fn-num mt-1 text-[28px] md:mb-1 md:text-[34px]">{formatMoney(total, cur)}</p>
         <p
           className={`fn-num text-[12px] md:text-[13px] ${over ? "text-[var(--danger)]" : "text-[var(--text-muted)] md:text-[var(--text-secondary)]"}`}
           title={allowance != null ? "What your monthly budgets have left, spread over the days left this month" : undefined}
@@ -410,7 +578,7 @@ function SpentToday({ onOpen, yTotal }: { onOpen: () => void; yTotal: number }) 
         {allowance == null && merchants && <p className="mt-2 truncate text-[12px] text-[var(--text-muted)] max-md:hidden">{merchants}</p>}
       </div>
       {allowance != null && <Ring pct={pct} over={over} />}
-      <button type="button" className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--hover)] md:hidden" onClick={onOpen} aria-label="Open Finance">
+      <button type="button" className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--hover)] md:hidden" onClick={onOpen} aria-label="Open Money">
         <Glyph name="arrowRight" size={18} />
       </button>
     </section>
@@ -441,10 +609,10 @@ function QuickNotes({ quick, onMore }: { quick: Note[]; onMore: () => void }) {
   };
   const shown = quick.slice(0, 3);
   return (
-    <section aria-labelledby="today-quick" className="card p-1.5 md:p-2">
+    <section aria-labelledby="today-quick" className="glance">
       <div className={CARD_HEAD}>
         <h2 id="today-quick" className={CARD_TITLE}>Quick notes</h2>
-        <span className="text-[12px] text-[var(--text-muted)]">Today&apos;s go into the brief</span>
+        <span className="text-[12px] text-[var(--text-muted)]">Today&apos;s go into the summary</span>
       </div>
       <form onSubmit={(e) => { e.preventDefault(); save(); }}>
         <label htmlFor="quick-note-input" className="sr-only">Add a quick note. Enter saves it, Shift+Enter starts a new line.</label>
@@ -455,7 +623,7 @@ function QuickNotes({ quick, onMore }: { quick: Note[]; onMore: () => void }) {
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); save(); } }}
           rows={1}
           placeholder="Jot something down"
-          className="block max-h-32 min-h-10 w-full resize-none rounded-[18px] border border-[var(--border)] bg-[var(--surface-muted)] px-3.5 py-2 text-[14px] leading-6 outline-none transition-colors [field-sizing:content] placeholder:text-[var(--text-muted)] hover:border-[var(--border-strong)] focus:border-[var(--border-strong)] max-md:min-h-11 max-md:text-[16px]"
+          className="block max-h-32 min-h-[42px] w-full resize-none rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--surface)] px-3.5 py-2 text-[15px] leading-6 outline-none transition-colors [field-sizing:content] placeholder:text-[var(--text-muted)] hover:border-[var(--border-strong)] focus:border-[var(--border-strong)] max-md:min-h-11 max-md:text-[16px]"
         />
       </form>
       {shown.length > 0 && (
@@ -464,7 +632,7 @@ function QuickNotes({ quick, onMore }: { quick: Note[]; onMore: () => void }) {
         </ul>
       )}
       {quick.length > shown.length && (
-        <button type="button" className={`${HEAD_LINK} mx-2 mb-1`} onClick={onMore}>All notes</button>
+        <button type="button" className={`${HEAD_LINK} mb-1`} onClick={onMore}>All notes</button>
       )}
     </section>
   );

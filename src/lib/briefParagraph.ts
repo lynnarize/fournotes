@@ -153,8 +153,8 @@ export function composeBrief(input: BriefParagraphInput): BriefPiece[] {
 export type BriefStyle = "paragraph" | "points";
 
 export const BRIEF_STYLES: { id: BriefStyle; label: string; detail: string; icon: string }[] = [
-  { id: "paragraph", label: "One paragraph", detail: "Your day told as a short story. Click an underlined phrase for the details.", icon: "alignLeft" },
-  { id: "points", label: "Point by point", detail: "The written brief, then each task and heads-up on its own line.", icon: "listBullet" },
+  { id: "paragraph", label: "From your data", detail: "One line for the day, then only what needs you. There at once, with no model.", icon: "alignLeft" },
+  { id: "points", label: "From the assistant", detail: "The same line, then the assistant's own words on what matters today.", icon: "listBullet" },
 ];
 
 const STYLE_KEY = "four-notes:brief-style";

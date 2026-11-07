@@ -61,7 +61,7 @@ export default function BackgroundJobs() {
       .monthlySummary(prev, cur, txs.map((t) => ({ merchant: t.merchant, amount: baseAmount(t, cur), category: t.category, date: t.date })))
       .then(({ text }) => {
         saveSummary({ month: prev, total, currency: cur, byCategory: {}, text, createdAt: new Date().toISOString() });
-        toast(`Your ${d.toLocaleDateString("en-US", { month: "long" })} spending review is ready in Finance`);
+        toast(`Your ${d.toLocaleDateString("en-US", { month: "long" })} spending review is ready in Money`);
       })
       .catch(() => {});
   }, [store.ready, toast]);

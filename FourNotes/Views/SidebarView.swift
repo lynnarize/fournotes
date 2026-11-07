@@ -77,17 +77,18 @@ struct SidebarView: View {
                     ServerRunningRow(kind: kind)
                         .transition(.opacity.combined(with: .offset(y: 6)))
                 }
-                NavRow(icon: "settings", title: "Settings", shortcut: "⌘,",
-                       badge: updates.hasUnseenUpdate ? "A new version is available" : nil) {
-                    // With a new version waiting, open where it can be downloaded.
-                    if updates.hasUnseenUpdate { nav.openSettings(section: "about") } else { nav.present(.settings) }
+                // Settings, and where the data lives.
+                HStack(spacing: 4) {
+                    SettingsLink(badge: updates.hasUnseenUpdate ? "A new version is available" : nil) {
+                        // With a new version waiting, open where it can be downloaded.
+                        if updates.hasUnseenUpdate { nav.openSettings(section: "about") } else { nav.present(.settings) }
+                    }
+                    Spacer(minLength: 0)
+                    SyncStatus(sync: AppModel.shared.sync.isAvailable ? AppModel.shared.sync : nil)
                 }
-                // Where the data lives.
-                SyncStatusRow(sync: AppModel.shared.sync.isAvailable ? AppModel.shared.sync : nil)
             }
         }
         .padding(.top, 2)
-        .padding(.bottom, 4)
         .frame(width: 236, alignment: .leading)
         .animation(Motion.standard, value: servers.running)
         .entrance()
@@ -307,7 +308,7 @@ extension Tab {
     var sidebarIcon: String {
         switch self {
         case .today: return "today"
-        case .notes: return "note"
+        case .notes: return "lines"
         case .todo: return "calendar"
         case .finance: return "wallet"
         case .transcribe: return "wave"
@@ -318,29 +319,59 @@ extension Tab {
 
 /// Where the data lives, as the web sidebar's last line: "Saved on this Mac", or the
 /// sync state, green once synced, red on an error. Opens Settings at Sync.
-private struct SyncStatusRow: View {
+/// The foot of the sidebar's left half: small, on the frame.
+private struct SettingsLink: View {
     @Environment(\.palette) private var p
-    @EnvironmentObject private var nav: Navigation
+    @State private var hovering = false
+    var badge: String?
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Icon("settings", size: 16)
+                    .overlay(alignment: .topTrailing) {
+                        if badge != nil {
+                            Circle().fill(p.danger).frame(width: 7, height: 7)
+                                .overlay(Circle().stroke(p.frame, lineWidth: 1.5))
+                                .offset(x: 3, y: -2)
+                        }
+                    }
+                Text("Settings").font(FN.font(13, .medium)).lineLimit(1)
+            }
+            .foregroundStyle(p.textSecondary)
+            .padding(.horizontal, 12)
+            .frame(height: 32)
+            .background(hovering ? p.hover : .clear, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.fn)
+        .onHover { hovering = $0 }
+        .motion(hovering, Motion.quick)
+        .help(badge ?? "")
+        .accessibilityLabel("Settings")
+        .accessibilityValue(badge ?? "")
+        .keyboardShortcut(",", modifiers: .command)
+    }
+}
+
+/// Where the data lives, in a word. Opens sync settings.
+private struct SyncStatus: View {
+    @Environment(\.palette) private var p
     /// Nil when this build has no sync.
     var sync: GoogleSync?
 
     var body: some View {
-        VStack(spacing: 0) {
-            Rectangle().fill(p.borderSubtle).frame(height: 1)
-            if let sync {
-                SyncLine(sync: sync)
-            } else {
-                HStack(spacing: 8) {
-                    Icon("cloud", size: 16)
-                    Text("Saved on this Mac").lineLimit(1)
-                    Spacer(minLength: 0)
-                }
-                .font(FN.small)
-                .foregroundStyle(p.textMuted)
-                .padding(.horizontal, 12)
-                .frame(minHeight: 32)
-                .padding(.top, 10)
+        if let sync {
+            SyncLine(sync: sync)
+        } else {
+            HStack(spacing: 6) {
+                Icon("cloud", size: 15)
+                Text("On this Mac").lineLimit(1)
             }
+            .font(FN.font(13))
+            .foregroundStyle(p.textSecondary)
+            .padding(.horizontal, 10)
         }
     }
 }
@@ -352,23 +383,23 @@ private struct SyncLine: View {
     @State private var hovering = false
 
     private var label: String {
-        guard sync.account != nil else { return "Saved on this Mac" }
+        guard sync.account != nil else { return "Not synced" }
         switch sync.status {
-        case .syncing: return "Syncing… · Google Drive"
-        case .offline: return "Offline · Google Drive"
-        case .error: return "Sync error · Google Drive"
-        case .synced: return "Synced · Google Drive"
-        case .idle: return sync.lastSynced == nil ? "Not synced yet · Google Drive" : "Synced · Google Drive"
+        case .syncing: return "Syncing…"
+        case .offline: return "Offline"
+        case .error: return "Sync error"
+        case .synced: return "Synced"
+        case .idle: return sync.lastSynced == nil ? "Not synced yet" : "Synced"
         }
     }
 
     private var tone: Color {
-        guard sync.account != nil else { return p.textMuted }
+        guard sync.account != nil else { return p.textSecondary }
         switch sync.status {
-        case .error: return p.danger
-        case .synced: return p.success
-        case .idle: return sync.lastSynced == nil ? p.textMuted : p.success
-        case .syncing, .offline: return p.textMuted
+        case .error: return p.spark
+        case .synced: return Color.hex(0x5FB97F)
+        case .idle: return sync.lastSynced == nil ? p.textSecondary : Color.hex(0x5FB97F)
+        case .syncing, .offline: return p.textSecondary
         }
     }
 
@@ -380,30 +411,23 @@ private struct SyncLine: View {
 
     var body: some View {
         Button { nav.openSettings(section: "sync") } label: {
-            HStack(spacing: 8) {
-                Icon("cloud", size: 16)
+            HStack(spacing: 6) {
+                Icon("cloud", size: 15)
                     .foregroundStyle(tone)
                     .opacity(sync.status == .syncing ? 0.6 : 1)
                     .motion(sync.status, Motion.quick)
-                Text(label).lineLimit(1).truncationMode(.tail)
-                    .foregroundStyle(hovering ? p.foreground : p.textMuted)
-                Spacer(minLength: 0)
-                if sync.account == nil {
-                    Text("Turn on sync")
-                        .font(FN.font(12, .medium))
-                        .foregroundStyle(p.foreground)
-                        .underline(hovering)
-                }
+                Text(label).font(FN.font(13)).lineLimit(1).truncationMode(.tail)
+                    .foregroundStyle(p.textSecondary)
             }
-            .font(FN.small)
-            .padding(.horizontal, 12)
-            .frame(minHeight: 32)
-            .padding(.top, 10)
+            .padding(.horizontal, 10)
+            .frame(height: 32)
+            .background(hovering ? p.hover : .clear, in: Capsule(style: .circular))
             .contentShape(Rectangle())
         }
         .buttonStyle(.fn)
         .onHover { hovering = $0 }
+        .motion(hovering, Motion.quick)
         .help(help)
-        .accessibilityLabel(sync.account == nil ? "Saved on this Mac. Turn on sync" : label)
+        .accessibilityLabel(label)
     }
 }

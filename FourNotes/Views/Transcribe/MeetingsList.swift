@@ -107,8 +107,8 @@ struct MeetingsSection: View {
                         .font(FN.font(13, .medium)).foregroundStyle(p.foreground)
                     Text(denied
                          ? "Turn on Calendar for Four Notes in System Settings to record a meeting with its name and who's invited."
-                         : "Record one with its name and who's invited, and get a nudge a couple of minutes before it starts.")
-                        .font(FN.font(13)).lineSpacing(2).foregroundStyle(p.textMuted)
+                         : "Record one with its name and who's invited, from your calendar.")
+                        .font(FN.font(13)).lineSpacing(1).foregroundStyle(p.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 SecondaryButton(title: denied ? "Open System Settings" : "Connect calendar", small: true) {

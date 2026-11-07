@@ -87,11 +87,13 @@ struct FinanceDashboard: View {
     var body: some View {
         let spent = FinanceMath.spend(monthTxs, cur)
         if side {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 0) {
                 Text("Coming up")
                     .font(FN.font(24, .bold))
                     .tracking(-0.6)
                     .foregroundStyle(p.foreground)
+                    .lineBox(24, 26.4)
+                    .padding(.bottom, 12)
                 upcomingCard
                 splitsCard
                 budgetsCard
@@ -121,22 +123,39 @@ struct FinanceDashboard: View {
     private func numbers(_ spent: Double) -> some View {
         let byCat = Insights.spendByCategory(monthTxs, cur).filter { $0.value > 0 }
             .sorted { $0.value > $1.value }.map { ($0.key, $0.value) }
+        let colors = categoryColors(byCat, p)
         return VStack(alignment: .leading, spacing: 0) {
-            Text(Money.format(spent, cur))
-                .font(FN.display(52))
-                .tracking(FN.displayTracking(52))
-                .monospacedDigit()
-                .foregroundStyle(p.foreground)
-            Text(isCurrent ? "Spent so far" : "Spent in \(Self.monthName(month))")
-                .font(FN.font(15))
-                .foregroundStyle(p.textMuted)
-                .padding(.top, 8)
+            HStack(alignment: .bottom, spacing: 24) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(Money.format(spent, cur))
+                        .font(FN.display(52))
+                        .tracking(FN.displayTracking(52))
+                        .monospacedDigit()
+                        .foregroundStyle(p.foreground)
+                        .lineBox(52, 54.6)
+                    Text(isCurrent ? "Spent so far" : "Spent in \(Self.monthName(month))")
+                        .font(FN.font(15))
+                        .foregroundStyle(p.textMuted)
+                        .lineBox(15, 22.5)
+                }
+                Spacer(minLength: 0)
+                if let delta = deltaLine(spent) {
+                    HStack(spacing: 4) {
+                        if FinanceMath.spend(prevTxs, cur) > 0 {
+                            Icon("arrowUpRight", size: 15).rotationEffect(.degrees(spent < FinanceMath.spend(prevTxs, cur) ? 90 : 0))
+                        }
+                        Text(delta).font(FN.font(14, .semibold)).lineBox(14, 21)
+                    }
+                    .foregroundStyle(p.warning)
+                    .padding(.bottom, 2)
+                }
+            }
             if spent > 0 {
                 GeometryReader { geo in
                     HStack(spacing: 2) {
                         ForEach(Array(byCat.enumerated()), id: \.offset) { i, c in
                             Rectangle()
-                                .fill(p.finSeries[i % p.finSeries.count])
+                                .fill(colors[c.0] ?? p.finRest)
                                 .frame(width: max(2, (geo.size.width - CGFloat(byCat.count - 1) * 2) * c.1 / spent))
                         }
                     }
@@ -145,17 +164,21 @@ struct FinanceDashboard: View {
                 .background(p.surfaceMuted)
                 .clipShape(Capsule(style: .circular))
                 .padding(.top, 16)
-                ForEach(Array(byCat.prefix(4).enumerated()), id: \.offset) { i, c in
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 24)], spacing: 0) {
+                    ForEach(Array(byCat.prefix(4).enumerated()), id: \.offset) { i, c in
                     HStack(spacing: 10) {
-                        RoundedRectangle(cornerRadius: 3).fill(p.finSeries[i % p.finSeries.count]).frame(width: 10, height: 10)
+                        RoundedRectangle(cornerRadius: 3).fill(colors[c.0] ?? p.finRest).frame(width: 10, height: 10)
                         Text(c.0).font(FN.font(14.5)).foregroundStyle(p.foreground).lineLimit(1)
                         Spacer(minLength: 8)
                         Text(Money.format(c.1, cur)).font(FN.font(14.5, .semibold)).monospacedDigit().foregroundStyle(p.foreground)
                         Text("\(Int((c.1 / spent * 100).rounded()))%").font(FN.font(14.5)).monospacedDigit().foregroundStyle(p.textMuted)
-                            .frame(width: 38, alignment: .trailing)
+                            .frame(width: 40, alignment: .trailing)
                     }
-                    .padding(.top, 8)
+                    .frame(minHeight: 21.75)
+                    .padding(.vertical, 6)
+                    }
                 }
+                .padding(.top, 10)
             }
             Button { trends.toggle() } label: {
                 HStack(spacing: 10) {
@@ -172,8 +195,20 @@ struct FinanceDashboard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.fn)
-            .padding(.top, 14)
+            .padding(.top, 12)
         }
+    }
+
+    /// "12% more than this point in October", or nothing to compare with.
+    private func deltaLine(_ spent: Double) -> String? {
+        let previous = FinanceMath.spend(prevTxs, cur)
+        let than = isCurrent ? "this point in \(lastMonthName)" : lastMonthName
+        guard previous > 0 else { return spent > 0 ? "Nothing logged by \(than)" : nil }
+        let change = (spent - previous) / previous
+        if abs(change) < 0.005 { return "The same as \(than)" }
+        let n = abs(change * 100)
+        let shown = n >= 10 ? String(Int(n.rounded())) : String(format: "%.1f", n)
+        return "\(shown)% \(change > 0 ? "more" : "less") than \(than)"
     }
 
     // MARK: - The month in one sentence
@@ -189,7 +224,8 @@ struct FinanceDashboard: View {
             ? max(0, (budgetTotal - before) / Double(days - dayOfMonth + 1))
             : before / Double(max(1, dayOfMonth - 1))
         let left = allowance - spentToday
-        return HStack(spacing: 8) {
+        let openSplits = monthTxs.filter { ($0.splits ?? []).contains { !$0.settled } }.count
+        return FlowLayout(spacing: 8, alignment: .leading) {
             Text(isCurrent ? "This month" : Self.monthName(month)).font(FN.font(16, .medium)).foregroundStyle(p.foreground)
             if isCurrent && allowance > 0 {
                 pulseChip(left >= 0 ? "\(Money.format(left, cur)) left for today" : "\(Money.format(-left, cur)) over today's pace",
@@ -199,10 +235,17 @@ struct FinanceDashboard: View {
                 Button(action: onAddIncome) { pulseChip("Add income") }.buttonStyle(.fn)
             }
             Button(action: onOpenTransactions) { pulseChip(Self.plural(monthTxs.count, "transaction")) }.buttonStyle(.fn)
-            Spacer(minLength: 0)
+            if openSplits > 0 {
+                Button(action: onOpenTransactions) { pulseChip("\(Self.plural(openSplits, "split bill")) open", red: true) }.buttonStyle(.fn)
+            }
+            if isCurrent && allowance <= 0 {
+                Button(action: onBudgets) { pulseChip("Set a budget") }.buttonStyle(.fn)
+            }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // The kit's padding, inside its 1pt border.
+        .padding(.horizontal, 17)
+        .padding(.vertical, 13)
         .background(p.surface, in: RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous).strokeBorder(p.border, lineWidth: 1))
     }
@@ -212,6 +255,7 @@ struct FinanceDashboard: View {
             .font(FN.font(14, .semibold))
             .monospacedDigit()
             .lineLimit(1)
+            .fixedSize()
             .foregroundStyle(red ? p.danger : p.textSecondary)
             .padding(.horizontal, 12)
             .frame(height: 30)
@@ -240,7 +284,7 @@ struct FinanceDashboard: View {
 
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
-                Icon("sparkle", size: 16).foregroundStyle(p.accent)
+                Icon("sparkle", size: 16).foregroundStyle(p.ai)
                 Group {
                     if let lead {
                         Text(lead.label.map { "\($0): \(Self.clean(lead.body))" } ?? Self.clean(lead.body))
@@ -253,6 +297,8 @@ struct FinanceDashboard: View {
                     }
                 }
                 .font(FN.font(16))
+                .lineSpacing(3.2)
+                .padding(.vertical, 1.6)
                 .foregroundStyle(p.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
@@ -299,6 +345,8 @@ struct FinanceDashboard: View {
                     Icon("warning", size: 16).foregroundStyle(p.warning)
                     Text("Spending spike today: \(Text(Money.format(spentToday, cur)).foregroundStyle(p.foreground)), against a usual day of \(Money.format(usualDay, cur)).")
                         .font(FN.font(16))
+                        .lineSpacing(3.2)
+                        .padding(.vertical, 1.6)
                         .monospacedDigit()
                         .foregroundStyle(p.textSecondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -428,29 +476,36 @@ struct FinanceDashboard: View {
 
     // MARK: - Budgets, upcoming payments, split bills
 
-    /// A block on the side sheet: no card, a hairline above it.
-    private func card<Content: View>(_ padding: EdgeInsets, spacing: CGFloat, @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: spacing) { content() }
-            .padding(.top, 14)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-            .overlay(alignment: .top) { Rectangle().fill(p.border).frame(height: 1) }
+    /// A block on the side sheet: no card, a hairline between neighbours (the web's `.glance`).
+    private func card<Content: View>(first: Bool = false, spacing: CGFloat = 0, @ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if !first {
+                Rectangle().fill(p.border).frame(height: 1)
+                    .padding(.top, 18)
+                    .padding(.bottom, 16)
+            }
+            VStack(alignment: .leading, spacing: spacing) { content() }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     private func cardTitle(_ title: String) -> some View {
         Text(title).font(FN.font(13, .semibold)).foregroundStyle(p.textMuted)
+            .lineBox(13, 19.5)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var budgetsCard: some View {
         let budgets = Insights.budgetStatus(monthTxs, store.settings)
         let daysLeft = days - dayOfMonth + 1
-        return card(EdgeInsets(top: 24, leading: 24, bottom: 24, trailing: 24), spacing: 18) {
+        return card(spacing: 14) {
             HStack {
                 cardTitle("Budgets")
                 if !budgets.isEmpty {
                     KitButton(kind: .plain, title: "Edit", small: true, action: onBudgets).padding(.trailing, -8)
                 }
             }
+            .frame(minHeight: 30)
             if budgets.isEmpty {
                 Text("No budgets yet. Give a category a monthly limit and see how it's going here.")
                     .font(FN.body).foregroundStyle(p.textSecondary)
@@ -461,8 +516,9 @@ struct FinanceDashboard: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(b.category).font(FN.font(16)).foregroundStyle(p.foreground).lineLimit(1)
+                            .lineBox(16, 24)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        Text("\(Money.format(b.spent, cur)) \(Text("of \(b.limit.formatted(.number))").foregroundStyle(p.textMuted))")
+                        Text("\(Money.format(b.spent, cur)) \(Text("of \(b.limit.formatted(.number.locale(Locale(identifier: "en_US"))))").foregroundStyle(p.textMuted))")
                             .font(FN.font(13)).monospacedDigit()
                             .foregroundStyle(p.textSecondary)
                     }
@@ -472,9 +528,9 @@ struct FinanceDashboard: View {
                          : "\(tone != nil ? "Almost used, " : "")\(Money.format(b.limit - b.spent, cur)) left\(isCurrent ? ", \(Self.plural(daysLeft, "day")) to go" : "")")
                         .font(FN.small).monospacedDigit()
                         .foregroundStyle(tone ?? p.textMuted)
+                        .lineBox(12, 16)
                 }
             }
-            Spacer(minLength: 0)
             KitButton(kind: .plain, title: "Add a budget", icon: "plus", small: true, action: onBudgets)
                 .padding(.leading, -8)
         }
@@ -483,20 +539,18 @@ struct FinanceDashboard: View {
     private var upcomingCard: some View {
         let upcoming = Glance.upcoming(todos: store.liveTodos, transactions: live, currency: cur)
         let total: Double? = upcoming.allSatisfy { $0.currency == cur } ? upcoming.reduce(0) { $0 + $1.amount } : nil
-        return card(EdgeInsets(top: 24, leading: 16, bottom: 16, trailing: 16), spacing: 8) {
+        return card(first: true) {
             HStack {
                 cardTitle("Bills")
                 if let total, !upcoming.isEmpty {
                     Text(Money.format(total, cur)).font(FN.font(13)).monospacedDigit().foregroundStyle(p.textMuted)
                 }
             }
-            .padding(.horizontal, 0)
-            .padding(.bottom, 8)
+            .frame(minHeight: 30)
             if upcoming.isEmpty {
                 Text("No bills due soon. Repeating bills you add to the Planner show up here.")
                     .font(FN.body).foregroundStyle(p.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 0)
                     .padding(.bottom, 8)
             }
             VStack(spacing: 0) {
@@ -515,16 +569,16 @@ struct FinanceDashboard: View {
         return HStack(spacing: 12) {
             VStack(spacing: 0) {
                 Text(MONTH_NAMES[Calendar.current.component(.month, from: date) - 1])
-                    .font(FN.font(11)).foregroundStyle(p.textMuted)
+                    .font(FN.font(11)).foregroundStyle(p.textMuted).lineBox(11, 16.5)
                 Text("\(Calendar.current.component(.day, from: date))")
-                    .font(FN.font(18, .medium)).monospacedDigit().foregroundStyle(p.foreground)
+                    .font(FN.font(18, .medium)).monospacedDigit().foregroundStyle(p.foreground).lineBox(18, 22.5)
             }
             .frame(width: 44)
             .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(item.title.isEmpty ? "Untitled bill" : item.title).font(FN.font(16)).foregroundStyle(p.foreground).lineLimit(1)
+                Text(item.title.isEmpty ? "Untitled bill" : item.title).font(FN.font(16)).foregroundStyle(p.foreground).lineLimit(1).lineBox(16, 24)
                 Text("\(sub), \(Money.format(item.amount, item.currency))")
-                    .font(FN.small).monospacedDigit().foregroundStyle(p.textMuted).lineLimit(1)
+                    .font(FN.small).monospacedDigit().foregroundStyle(p.textMuted).lineLimit(1).lineBox(12, 16)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             if let subscription = item.subscription {
@@ -552,27 +606,24 @@ struct FinanceDashboard: View {
                 }
             }
         }
-        .padding(.horizontal, 0)
         .padding(.vertical, 10)
     }
 
     private var splitsCard: some View {
         let openSplits = live.filter { ($0.splits ?? []).contains { !$0.settled } }.sorted { $0.date > $1.date }
         let owed = Insights.owedToMe(live, cur).reduce(0) { $0 + $1.amount }
-        return card(EdgeInsets(top: 24, leading: 16, bottom: 16, trailing: 16), spacing: 8) {
+        return card {
             HStack {
                 cardTitle("Owed to you")
                 if owed > 0 {
-                    Text(Money.format(owed, cur)).font(FN.font(13, .semibold)).monospacedDigit().foregroundStyle(p.textMuted)
+                    Text(Money.format(owed, cur)).font(FN.font(13, .semibold)).monospacedDigit().foregroundStyle(p.foreground)
                 }
             }
-            .padding(.horizontal, 0)
-            .padding(.bottom, 8)
+            .frame(minHeight: 30)
             if openSplits.isEmpty {
                 Text("Nobody owes you. Open a transaction below to split it.")
                     .font(FN.body).foregroundStyle(p.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 0)
                     .padding(.bottom, 8)
             }
             ForEach(openSplits.prefix(3)) { tx in
@@ -585,7 +636,7 @@ struct FinanceDashboard: View {
                     .font(FN.small)
                     .monospacedDigit()
                     .foregroundStyle(p.textMuted)
-                    .padding(.horizontal, 0)
+                    .lineBox(12, 16)
                     ForEach(Array((tx.splits ?? []).enumerated()), id: \.offset) { j, s in
                         if j > 0 { Rectangle().fill(p.borderSubtle).frame(height: 1) }
                         splitRow(tx, j, s)
@@ -595,7 +646,6 @@ struct FinanceDashboard: View {
             if openSplits.count > 3 {
                 Text("\(openSplits.count - 3) more open below, in Transactions")
                     .font(FN.small).foregroundStyle(p.textMuted)
-                    .padding(.horizontal, 0)
             }
         }
     }
@@ -609,9 +659,9 @@ struct FinanceDashboard: View {
                 .background(p.surfaceMuted, in: Circle())
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(s.name).font(FN.font(16)).foregroundStyle(p.foreground).lineLimit(1)
+                Text(s.name).font(FN.font(16)).foregroundStyle(p.foreground).lineLimit(1).lineBox(16, 24)
                 Text("\(s.settled ? "Paid" : "Owes you") \(Money.format(s.amount, tx.currency))")
-                    .font(FN.small).monospacedDigit().foregroundStyle(p.textMuted)
+                    .font(FN.small).monospacedDigit().foregroundStyle(p.textMuted).lineBox(12, 16)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             if s.settled {
@@ -621,7 +671,6 @@ struct FinanceDashboard: View {
                 SecondaryButton(title: "Mark settled", small: true) { settle(tx, j) }
             }
         }
-        .padding(.horizontal, 8)
         .padding(.vertical, 10)
     }
 

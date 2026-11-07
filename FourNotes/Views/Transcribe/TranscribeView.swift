@@ -63,7 +63,7 @@ struct TranscribeView: View {
             .paper(p)
             .transition(.opacity.combined(with: .offset(x: -8)))
             listColumn(selected: detail)
-                .frame(width: 340)
+                .frame(width: 360)
                 .frame(maxHeight: .infinity)
                 .paper(p)
                 .zIndex(1)
@@ -84,8 +84,8 @@ struct TranscribeView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 4) {
                 Text(Tab.transcribe.title)
-                    .font(FN.display(28))
-                    .tracking(FN.displayTracking(28))
+                    .font(FN.font(24, .bold))
+                    .tracking(-0.6)
                     .foregroundStyle(p.foreground)
                 Spacer()
                 if recorder.isActive {
@@ -109,8 +109,6 @@ struct TranscribeView: View {
                         .help("Record a conversation")
                 }
             }
-            .padding(.leading, 8)
-            .padding(.trailing, 4)
             .padding(.top, 24)
             .padding(.bottom, 12)
 
@@ -134,7 +132,6 @@ struct TranscribeView: View {
                     }
                 }
                 .buttonStyle(.fn)
-                .padding(.horizontal, 4)
                 .padding(.top, -4)
                 .padding(.bottom, 8)
                 .transition(.opacity)
@@ -175,7 +172,7 @@ struct TranscribeView: View {
                         VStack(spacing: 4) {
                             Text("No talks yet").font(FN.font(16, .medium)).foregroundStyle(p.foreground)
                             Text("Record a conversation in person, or a Zoom, Google Meet or WhatsApp call on this Mac. You get who said what, a summary, and a note if you want one.")
-                                .font(FN.body).lineSpacing(3).foregroundStyle(p.textMuted)
+                                .font(FN.body).lineSpacing(1.8).foregroundStyle(p.textMuted)
                                 .multilineTextAlignment(.center)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -190,20 +187,20 @@ struct TranscribeView: View {
                     }
                 }
                 .animation(Motion.list, value: rows.map(\.id))
-                .padding(.bottom, 90)
+                .padding(.bottom, 24)
             }
             .scrollIndicators(.never)
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 22)
         .animation(Motion.standard, value: query.isEmpty)
     }
 
     private var searchField: some View {
         HStack(spacing: 8) {
             Icon("search", size: 16).foregroundStyle(p.textMuted)
-            TextField("Search talks", text: $query)
+            TextField("", text: $query, prompt: Text("Search talks").foregroundStyle(p.textMuted))
                 .textFieldStyle(.plain)
-                .font(FN.body)
+                .font(FN.font(16))
                 .foregroundStyle(p.foreground)
                 .focused($searchFocused)
                 .onExitCommand { query = ""; searchFocused = false }

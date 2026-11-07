@@ -53,7 +53,7 @@ struct LibraryView: View {
             .paper(p)
             .transition(.opacity.combined(with: .offset(x: -8)))
             listColumn(selected: detail)
-                .frame(width: 340)
+                .frame(width: 360)
                 .frame(maxHeight: .infinity)
                 .paper(p)
                 .zIndex(1)
@@ -74,8 +74,8 @@ struct LibraryView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 4) {
                 Text("Library")
-                    .font(FN.display(28))
-                    .tracking(FN.displayTracking(28))
+                    .font(FN.font(24, .bold))
+                    .tracking(-0.6)
                     .foregroundStyle(p.foreground)
                 Spacer()
                 MenuButton(help: "Add to the library", align: .trailing, entries: { addEntries }) {
@@ -91,8 +91,6 @@ struct LibraryView: View {
                     .contentShape(Capsule(style: .circular))
                 }
             }
-            .padding(.leading, 8)
-            .padding(.trailing, 4)
             .padding(.top, 24)
             .padding(.bottom, 12)
 
@@ -116,7 +114,6 @@ struct LibraryView: View {
                     }
                 }
                 .buttonStyle(.fn)
-                .padding(.horizontal, 4)
                 .padding(.top, -4)
                 .padding(.bottom, 8)
                 .transition(.opacity)
@@ -161,9 +158,9 @@ struct LibraryView: View {
 
             indexLine
                 .padding(.horizontal, 8)
-                .padding(.bottom, 90)
+                .padding(.bottom, 24)
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 22)
         .animation(Motion.standard, value: query.isEmpty)
     }
 

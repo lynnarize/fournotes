@@ -24,11 +24,16 @@ struct NotesView: View {
 
     @State private var query = ""
     @State private var cleanedUp = false
+    /// All notes, or only the quick ones.
+    @State private var show = "all"
     @FocusState private var searchFocused: Bool
 
     private var liveNotes: [Note] { store.liveNotes }
 
+    private var quickCount: Int { liveNotes.filter(QuickNote.isQuick).count }
+
     private var list: [Note] {
+        let liveNotes = show == "quick" ? self.liveNotes.filter(QuickNote.isQuick) : self.liveNotes
         let q = query.trimmingCharacters(in: .whitespaces).lowercased()
         guard !q.isEmpty else {
             switch sort {
@@ -79,7 +84,7 @@ struct NotesView: View {
                     }
                     if !listHidden && !nav.focusMode {
                         listColumn
-                            .frame(width: 340)
+                            .frame(width: 360)
                             .frame(maxHeight: .infinity)
                             .paper(p)
                             .transition(.move(edge: .trailing).combined(with: .opacity))
@@ -141,25 +146,30 @@ struct NotesView: View {
                     .foregroundStyle(p.foreground)
                     .help("\(liveNotes.count) note\(liveNotes.count == 1 ? "" : "s")")
                 Spacer()
-                IconMenu("sort", size: 18, box: 36, help: "Sort notes") {
+                IconMenu("sort", size: 18, box: 34, help: "Sort notes") {
                     SORTS.map { option in
                         .item(option.label, checked: sort == option.id) { sort = option.id }
                     }
                 }
-                PrimaryButton(title: "New", icon: "plus", small: true, action: newNote)
-                    .fixedSize()
-                    .help("New note (⌘N)")
+                Button(action: newNote) {
+                    Icon("plus", size: 16)
+                        .foregroundStyle(p.accentForeground)
+                        .frame(width: 34, height: 34)
+                        .background(p.accent, in: Circle())
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.fn)
+                .help("New note (⌘N)")
+                .accessibilityLabel("New note")
             }
-            .padding(.leading, 8)
-            .padding(.trailing, 4)
             .padding(.top, 24)
             .padding(.bottom, 12)
 
             HStack(spacing: 8) {
                 Icon("search", size: 16).foregroundStyle(p.textMuted)
-                TextField("Search notes", text: $query)
+                TextField("", text: $query, prompt: Text("Search notes").foregroundStyle(p.textMuted))
                     .textFieldStyle(.plain)
-                    .font(FN.body)
+                    .font(FN.font(16))
                     .foregroundStyle(p.foreground)
                     .focused($searchFocused)
                     .onExitCommand { query = ""; searchFocused = false }
@@ -175,8 +185,13 @@ struct NotesView: View {
             .overlay(RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous)
                 .strokeBorder(searchFocused ? p.borderStrong : p.border, lineWidth: 1))
             .motion(searchFocused, Motion.quick)
-            .padding(.horizontal, 4)
             .padding(.bottom, 12)
+
+            if quickCount > 0 || show == "quick" {
+                SegmentedTabs(items: [("all", "All"), ("quick", "Quick")], selection: $show, fill: true,
+                              counts: ["all": liveNotes.count, "quick": quickCount])
+                    .padding(.bottom, 4)
+            }
 
             if query.trimmingCharacters(in: .whitespaces).count >= 3 {
                 Text("Best matches first")
@@ -190,16 +205,16 @@ struct NotesView: View {
             ScrollView {
                 let rows = list
                 let selectedID = selected?.id
-                LazyVStack(alignment: .leading, spacing: 4) {
+                LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(groups(rows), id: \.label) { group in
                         // Listed under the month, as on the web: "This month", "Last month", "August".
                         if !group.label.isEmpty {
                             Text(group.label)
-                                .font(FN.small)
+                                .font(FN.font(13, .semibold))
                                 .foregroundStyle(p.textMuted)
-                                .padding(.horizontal, 8)
-                                .padding(.top, 12)
-                                .padding(.bottom, 2)
+                                .lineBox(13, 19.5)
+                                .padding(.top, 18)
+                                .padding(.bottom, 4)
                         }
                         ForEach(group.notes) { note in
                             noteCard(note, isSelected: note.id == selectedID)
@@ -213,11 +228,14 @@ struct NotesView: View {
                     }
                 }
                 .animation(Motion.list, value: rows.map(\.id))
-                .padding(.bottom, 90)
+                .padding(.bottom, 24)
+                // In the scroll view, so a raised row reaches 10pt past the column unclipped.
+                .padding(.horizontal, 22)
             }
             .scrollIndicators(.never)
+            .padding(.horizontal, -22)
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 22)
         .animation(Motion.standard, value: query.isEmpty)
     }
 
@@ -280,37 +298,36 @@ struct NotesView: View {
 
         return Button { open(note.id) } label: {
             NoteRowBody(isSelected: isSelected) {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 8) {
+                HStack(alignment: .top, spacing: 14) {
+                    Icon(!source.isEmpty ? "scan" : QuickNote.isQuick(note) ? "pin" : "lines", size: 17)
+                        .foregroundStyle(p.textMuted)
+                        .frame(width: 22, height: 22)
+                    VStack(alignment: .leading, spacing: 0) {
                         Text(note.title.isEmpty ? "Untitled" : note.title)
                             .font(FN.font(16, .medium))
                             .foregroundStyle(note.title.isEmpty ? p.textMuted : p.foreground)
                             .lineLimit(1)
-                        Spacer(minLength: 4)
-                        Text(cardDate(note.updatedAt))
-                            .font(FN.small)
-                            .monospacedDigit()
-                            .foregroundStyle(p.textMuted)
-                    }
-                    Text(preview.isEmpty ? "No text yet" : preview)
-                        .font(FN.font(13))
-                        .foregroundStyle(p.textSecondary)
-                        .lineSpacing(3.5)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                    if !tags.isEmpty || !linked.isEmpty || !source.isEmpty {
-                        HStack(spacing: 6) {
-                            if !tags.isEmpty { tagRow(tags) }
+                            .lineBox(16, 22)
+                        Text(preview.isEmpty ? "No text yet" : preview)
+                            .font(FN.font(14))
+                            .foregroundStyle(p.textSecondary)
+                            .lineLimit(1)
+                            .lineBox(14, 20.3)
+                        HStack(spacing: 10) {
+                            Text(cardDate(note.updatedAt)).monospacedDigit()
+                            ForEach(Array(tags.prefix(2)), id: \.self) { Text($0.prefix(1).uppercased() + $0.dropFirst()) }
                             if !linked.isEmpty {
-                                HStack(spacing: 4) { Icon("link", size: 12); Text(linked) }
+                                HStack(spacing: 4) { Icon("link", size: 13); Text(linked) }
                                     .help("Linked to this note")
                             }
-                            if !source.isEmpty { Text(source) }
                         }
-                        .font(FN.small)
+                        .font(FN.font(13.5))
                         .foregroundStyle(p.textMuted)
                         .lineLimit(1)
+                        .lineBox(13.5, 20.25)
+                        .padding(.top, 3)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
@@ -410,11 +427,16 @@ private struct NoteRowBody<Content: View>: View {
 
     var body: some View {
         content()
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(10)
             .frame(maxWidth: .infinity, alignment: .topLeading)
-            .background(isSelected ? p.accentSubtle : (hovering ? p.hover : .clear),
+            .background(isSelected ? p.surface : (hovering ? p.surfaceMuted : .clear),
                         in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
+            .overlay {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous).strokeBorder(p.border, lineWidth: 1)
+                }
+            }
+            .padding(.horizontal, -10)
             .contentShape(Rectangle())
             .onHover { hovering = $0 }
             .motion(isSelected, Motion.quick)

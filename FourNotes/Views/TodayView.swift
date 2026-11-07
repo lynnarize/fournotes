@@ -126,7 +126,7 @@ struct TodayView: View {
                         .padding(.vertical, 24)
                 }
                 .scrollBounceBehavior(.basedOnSize)
-                .frame(width: 380)
+                .frame(width: 340)
                 .frame(maxHeight: .infinity)
                 .paper(p)
             }
@@ -162,11 +162,13 @@ struct TodayView: View {
     /// the assistant.
     /// At a glance: on the side sheet, or under the page when the window is narrow.
     private var glance: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 0) {
             Text("At a glance")
                 .font(FN.font(24, .bold))
                 .tracking(-0.6)
                 .foregroundStyle(p.foreground)
+                .lineBox(24, 26.4)
+                .padding(.bottom, 12)
             NextMeetingCard()
             DueTodayCard(tasks: tasks, upcoming: upcoming, focus: focus)
             SpentTodayCard(yesterdayTotal: yesterdayTotal)
@@ -183,9 +185,11 @@ struct TodayView: View {
                     .foregroundStyle(p.foreground)
                     .lineLimit(2)
                     .minimumScaleFactor(0.7)
+                    .lineBox(40, 42)
                 Text(Self.dateLine(now))
                     .font(FN.font(15))
                     .foregroundStyle(p.textMuted)
+                    .lineBox(15, 22.5)
             }
 
             if !nav.todayChat {
@@ -207,15 +211,14 @@ struct TodayView: View {
             }
 
             ChatDock(minimized: false, hero: true)
-                .padding(.top, nav.todayChat ? 0 : 8)
         }
     }
 
-    /// "Wednesday, October 21".
+    /// "Wednesday, October 21, 2026".
     private static func dateLine(_ date: Date) -> String {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US")
-        f.dateFormat = "EEEE, MMMM d"
+        f.dateFormat = "EEEE, MMMM d, yyyy"
         return f.string(from: date)
     }
 

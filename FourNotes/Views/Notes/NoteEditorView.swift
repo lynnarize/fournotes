@@ -307,10 +307,10 @@ struct NoteEditorView: View {
     private var header: some View {
         HStack(spacing: 4) {
             if !focusMode {
-                IconButton(listHidden ? "collapseRight" : "collapseLeft", size: 18, box: 36,
+                IconButton(listHidden ? "collapseLeft" : "collapseRight", size: 18, box: 34,
                            help: listHidden ? "Show note list" : "Hide note list", action: onToggleList)
             }
-            IconButton(focusMode ? "shrink" : "expand", size: 18, box: 36,
+            IconButton(focusMode ? "shrink" : "expand", size: 18, box: 34,
                        help: focusMode ? "Exit focus mode (Esc)" : "Focus mode", action: onToggleFocus)
 
             // Where you are, as on the web: muted, the note's name a shade stronger.
@@ -405,7 +405,9 @@ struct NoteEditorView: View {
                                onCommit: saveTitle)
                     .tracking(FN.displayTracking(36))
                     .foregroundStyle(p.text)
-                    .padding(.bottom, 24)
+                    // The web's line of 37.8 in a box of 42, with 24 under it.
+                    .padding(.top, -4.5)
+                    .padding(.bottom, 24.7)
 
                 Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 16, verticalSpacing: 10) {
                     // Focus mode keeps only what you might still change.
@@ -445,6 +447,7 @@ struct NoteEditorView: View {
             Text(label)
                 .font(FN.font(13))
                 .foregroundStyle(p.faint)
+                .lineBox(13, 19.5)
                 .frame(width: 120, alignment: .leading)
             value()
                 .font(FN.font(13))
@@ -462,12 +465,12 @@ struct NoteEditorView: View {
     /// ones that matter; the toggle at its end shows the rest on lines below
     /// it, and hides them again. It is only there when they don't all fit.
     private var toolbar: some View {
-        ToolbarLayout(expanded: toolbarExpanded) {
+        ToolbarLayout(expanded: toolbarExpanded, spacing: 2) {
             HStack(spacing: 2) { insertMenu }.fixedSize()
             group {
                 IconMenu("textSize", size: 18, box: 32, help: "Text style") { textStyleEntries }
-                TextMenu(title: fontLabel, width: 92, help: "Font") { fontEntries }
-                TextMenu(title: "\(Int(state.fontSize))", width: 44, help: "Font size") { sizeEntries }
+                TextMenu(title: fontLabel, width: 105, help: "Font") { fontEntries }
+                TextMenu(title: "\(Int(state.fontSize))", width: 52, help: "Font size") { sizeEntries }
             }
             group {
                 tb("bold", "Bold (⌘B)", active: state.bold) { controller.toggleBold() }
@@ -688,7 +691,7 @@ struct NoteEditorView: View {
                             .padding(.bottom, 12)
                     }
                 }
-                .padding(.top, 20)
+                .padding(.top, 16)
             }
         }
         .background(p.bg)
@@ -794,14 +797,29 @@ struct NoteEditorView: View {
     /// Length and age on the left; reminders and the assistant on the right, as on
     /// the web. The far right is the assistant's: its "Ask Four Notes" pill sits
     /// over that corner, so the buttons stop short of it.
+    /// "just now", "5 minutes ago", "3 hours ago", "yesterday", "on Nov 4".
+    private static func edited(_ iso: String, now: Date = Date()) -> String {
+        guard let date = DateKit.date(iso) else { return "" }
+        let cal = Calendar.current
+        let seconds = max(0, now.timeIntervalSince(date))
+        if seconds < 60 { return "just now" }
+        if seconds < 3600 { let m = Int(seconds / 60); return "\(m) minute\(m == 1 ? "" : "s") ago" }
+        if seconds < 86_400, cal.isDate(date, inSameDayAs: now) { let h = Int(seconds / 3600); return "\(h) hour\(h == 1 ? "" : "s") ago" }
+        if cal.isDateInYesterday(date) { return "yesterday" }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US")
+        f.dateFormat = cal.isDate(date, equalTo: now, toGranularity: .year) ? "MMM d" : "MMM d, yyyy"
+        return "on \(f.string(from: date))"
+    }
+
     private var footer: some View {
         VStack(spacing: 0) {
             Rectangle().fill(p.borderSubtle).frame(height: 1)
             HStack(alignment: .center, spacing: 8) {
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     Text("\(wordCount) word\(wordCount == 1 ? "" : "s")").monospacedDigit()
                     Text("·")
-                    Text("Edited \(Fmt.relative(note.updatedAt))")
+                    Text("Edited \(Self.edited(note.updatedAt))")
                 }
                 .font(FN.small)
                 .foregroundStyle(p.faint)

@@ -178,13 +178,15 @@ private struct TextMenuLabel: View {
         let lit = hovering || open
         HStack(spacing: 3) {
             Text(title).lineLimit(1)
+            // Given a width, the chevron sits at its end, as a select's does.
+            if width != nil { Spacer(minLength: 0) }
             Icon("chevronDown", size: 12).opacity(0.7)
         }
         .font(FN.font(13))
         .monospacedDigit()
         .foregroundStyle(lit ? p.text : p.muted)
         .padding(.horizontal, 8)
-        .frame(minWidth: width, alignment: .leading)
+        .frame(width: width, alignment: .leading)
         .frame(height: 30)
         .background(lit ? (open ? p.accentSubtle : p.hover) : .clear,
                     in: RoundedRectangle(cornerRadius: 14, style: .continuous))

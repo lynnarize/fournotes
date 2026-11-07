@@ -16,7 +16,7 @@ struct RepeatingTaskTests {
     }
 
     @Test("tick, untick, tick: one bill logged, one next repeat")
-    func retick() {
+    func retick() throws {
         let (store, url) = store()
         defer { try? FileManager.default.removeItem(at: url) }
         let bill = store.addTodo {
@@ -34,7 +34,10 @@ struct RepeatingTaskTests {
         let upcoming = store.liveTodos.filter { $0.title == "Pay internet bill" && !$0.done }
         #expect(logged.count == 1)
         #expect(upcoming.count == 1)
-        #expect(upcoming.first?.dueAt?.hasPrefix("2026-10-23") == true)
+        // The next repeat skips past today, so which month it lands in depends on the day this runs.
+        let dueAt = try #require(upcoming.first?.dueAt)
+        #expect(dueAt.contains("-23T02:00"))
+        #expect(try #require(DateKit.date(dueAt)) > Date())
     }
 
     @Test("unticking takes the bill and the next repeat back")

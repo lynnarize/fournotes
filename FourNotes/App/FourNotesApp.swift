@@ -98,12 +98,23 @@ struct FourNotesApp: App {
     @AppStorage("fournotes.theme") private var themeRaw = ThemeChoice.system.rawValue
 
     init() {
+        Self.floatScrollers()
         let model = AppModel.shared
         _store = StateObject(wrappedValue: model.store)
         _nav = StateObject(wrappedValue: model.nav)
         _toasts = StateObject(wrappedValue: model.toasts)
         _engine = StateObject(wrappedValue: model.engine)
         _assistant = StateObject(wrappedValue: model.assistant)
+    }
+
+    /// With a mouse plugged in, scrollers take a 16pt strip off every sheet, so a page that
+    /// scrolls sits narrower than one that doesn't. They float over the paper instead. "Always"
+    /// in System Settings is someone's choice, and stays.
+    private static func floatScrollers() {
+        let key = "AppleShowScrollBars"
+        let chosen = CFPreferencesCopyValue(key as CFString, kCFPreferencesAnyApplication,
+                                            kCFPreferencesCurrentUser, kCFPreferencesAnyHost) as? String
+        UserDefaults.standard.set(chosen == "Always" ? nil : "WhenScrolling", forKey: key)
     }
 
     private var theme: ThemeChoice { ThemeChoice(rawValue: themeRaw) ?? .system }

@@ -150,10 +150,10 @@ struct Badge: View {
 
     var body: some View {
         Text(text)
-            .font(FN.font(11, .medium))
+            .font(FN.font(12, .medium))
             .foregroundStyle(tone ?? p.accent)
-            .padding(.horizontal, 6)
-            .frame(height: 20)
+            .padding(.horizontal, 8)
+            .frame(height: 22)
             .background(subtle ?? p.accentSubtle, in: Capsule(style: .circular))
             .fixedSize()
     }
@@ -248,6 +248,30 @@ struct IconButton: View {
     }
 }
 
+/// The kit's `.btn-secondary .btn-icon`: a round 34pt button with a quiet fill.
+struct RoundButton: View {
+    @Environment(\.palette) private var p
+    @State private var hovering = false
+    let icon: String
+    let help: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Icon(icon, size: 18)
+                .foregroundStyle(hovering ? p.foreground : p.textSecondary)
+                .frame(width: 34, height: 34)
+                .background(hovering ? p.controlTrack : p.surfaceMuted, in: Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.fn)
+        .onHover { hovering = $0 }
+        .motion(hovering, Motion.quick)
+        .help(help)
+        .accessibilityLabel(help)
+    }
+}
+
 /// A ghost text button: muted until hovered.
 struct GhostButton<Label: View>: View {
     @Environment(\.palette) private var p
@@ -272,7 +296,7 @@ struct GhostButton<Label: View>: View {
     }
 }
 
-/// The kit's `.btn`: a round button, 36pt tall (`.btn-sm`, 32pt, when `small`).
+/// The kit's `.btn`: a round button, 34pt tall (`.btn-sm`, 30pt, when `small`).
 /// One primary per surface; secondary, plain and danger for the rest.
 struct KitButton: View {
     enum Kind { case primary, secondary, plain, danger }
@@ -299,12 +323,11 @@ struct KitButton: View {
                 if let icon { Icon(icon, size: small ? 14 : large ? 18 : 16) }
                 Text(title).lineLimit(1)
             }
-            .font(FN.font(small ? 13 : large ? 15 : 14, kind == .plain ? .regular : .medium))
+            .font(FN.font(small ? 13 : large ? 15 : 14, kind == .plain ? .regular : .semibold))
             .foregroundStyle(foreground(lit))
             .padding(.horizontal, small ? 12 : large ? 20 : 14)
-            .frame(height: small ? 32 : large ? 44 : 36)
+            .frame(height: small ? 30 : large ? 44 : 34)
             .background(background(lit), in: Capsule(style: .circular))
-            .overlay { if kind == .secondary { Capsule(style: .circular).strokeBorder(p.border, lineWidth: 1) } }
             .opacity(off ? 0.45 : 1)
             .motion(lit, Motion.quick)
             .contentShape(Capsule(style: .circular))
@@ -317,7 +340,7 @@ struct KitButton: View {
     private func foreground(_ lit: Bool) -> Color {
         switch kind {
         case .primary: return tone == nil ? p.accentForeground : .white
-        case .secondary: return p.foreground
+        case .secondary: return lit ? p.foreground : p.textSecondary
         case .plain: return lit ? p.foreground : p.textSecondary
         case .danger: return p.danger
         }
@@ -326,7 +349,7 @@ struct KitButton: View {
     private func background(_ lit: Bool) -> Color {
         switch kind {
         case .primary: return tone ?? (lit ? p.accentStrong : p.accent)
-        case .secondary: return lit ? p.surfaceMuted : p.surface
+        case .secondary: return lit ? p.controlTrack : p.surfaceMuted
         case .plain: return lit ? p.hover : .clear
         case .danger: return lit ? p.dangerSubtle : .clear
         }

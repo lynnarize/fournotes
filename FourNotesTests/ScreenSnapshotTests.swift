@@ -28,10 +28,70 @@ struct ScreenSnapshotTests {
 
     @Test("Each tab of the main window", arguments: FourNotes.Tab.allCases)
     func tab(_ tab: FourNotes.Tab) throws {
+        seed()
         for dark in [false, true] {
             AppModel.shared.nav.tab = tab
-            try render(RootView(), name: "tab-\(tab.rawValue)", dark: dark, size: CGSize(width: 1280, height: 820))
+            try render(RootView(), name: "tab-\(tab.rawValue)", dark: dark, size: CGSize(width: 1360, height: 860))
         }
+    }
+
+    @Test("The Planner's other views", arguments: ["list", "board"])
+    func planner(view: String) throws {
+        seed()
+        UserDefaults.standard.set(view, forKey: "fournotes.planner.view")
+        defer { UserDefaults.standard.removeObject(forKey: "fournotes.planner.view") }
+        for dark in [false, true] {
+            AppModel.shared.nav.tab = .todo
+            try render(RootView(), name: "tab-todo-\(view)", dark: dark, size: CGSize(width: 1360, height: 860))
+        }
+    }
+
+    @Test("The edge dock on its real panel: the tab, a note out, and the drawer")
+    func edgeDockPanel() async throws {
+        seed()
+        let dock = EdgeDock.shared
+        dock.install(AppModel.shared)
+        EdgeStickies.shared.install(AppModel.shared)
+        dock.setEnabled(true)
+        // Awaited, not a run loop spun here: this test runs on the main queue, and a nested
+        // run loop leaves the blocks queued behind it, where opening sets the drawer's shape.
+        try await Task.sleep(for: .seconds(0.6))
+        let panel = try #require(NSApp.windows.first { $0 is DockPanel })
+        try capture(panel, "edge-tab")
+        if let note = AppModel.shared.store.liveNotes.first {
+            EdgeStickies.shared.stick(note.id)
+            try await Task.sleep(for: .seconds(2.4))
+            try capture(panel, "edge-bubbles")
+            StickyWindows.shared.keep([])
+        }
+        dock.open()
+        try await Task.sleep(for: .seconds(1.2))
+        #expect(dock.geometry.bodyWidth == DockGeometry.drawerWidth)
+        try capture(panel, "edge-open")
+        dock.close()
+        try await Task.sleep(for: .seconds(0.8))
+        #expect(!dock.isOpen)
+        #expect(panel.frame.width == DockGeometry.handlePeekWidth + DockGeometry.handleMargin)
+    }
+
+    private func capture(_ window: NSWindow, _ name: String) throws {
+        let view = try #require(window.contentView)
+        let rep = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: rep)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(name).png")
+        try #require(rep.representation(using: .png, properties: [:])).write(to: url)
+        print("SNAPSHOT | \(url.path)")
+    }
+
+    /// The web app's sample data, so the two can be set side by side. Only in a test run that
+    /// asks for it, and only ever on an empty store.
+    private func seed() {
+        guard ProcessInfo.processInfo.environment["FOURNOTES_SAMPLES"] == "1" else { return }
+        let store = AppModel.shared.store
+        store.needsOnboarding = false
+        // The test host's own window may have opened setup on this empty store already.
+        AppModel.shared.nav.sheet = nil
+        if store.liveNotes.isEmpty { store.loadSamples() }
     }
 
     @Test("First-run setup, each step", arguments: 0...9)

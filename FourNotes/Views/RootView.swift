@@ -42,6 +42,8 @@ struct RootView: View {
         // the first lines.
         .scrollEdgeEffectHidden(true, for: .top)
         .frame(minWidth: 1040, minHeight: 640)
+        // The web's body tracking, -0.01em of 16px, which every size there inherits as is.
+        .tracking(-0.16)
         .overlay { paletteOverlay }
         .animation(Motion.quick, value: nav.sheet == .palette)
         // First-run setup takes the whole window, not a sheet.

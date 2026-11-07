@@ -33,7 +33,7 @@ struct ChatDock: View {
 
     /// Things to start with on Today: two fill in the start of a request, one asks.
     private static let starters: [(icon: String, title: String, text: String)] = [
-        ("noteAdd", "Write a note", "Write a note about "),
+        ("pen", "Write a note", "Write a note about "),
         ("receipt", "Log spending", "Spent "),
         ("calendarCheck", "Plan my day", "What should I focus on today?"),
     ]
@@ -51,8 +51,8 @@ struct ChatDock: View {
                     .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { panelFrame = $0 }
                     .onExitCommand { collapse() }
                     .frame(maxWidth: .infinity, alignment: .trailing)
-                    .padding(.trailing, 24)
-                    .padding(.bottom, 20)
+                    .padding(.trailing, 12)
+                    .padding(.bottom, 12)
                     // Opens out of the pill's corner, and folds back into it.
                     .transition(.scale(scale: 0.4, anchor: .bottomTrailing).combined(with: .opacity))
             }
@@ -189,8 +189,9 @@ struct ChatDock: View {
             Spacer()
             AskPill(busy: assistant.busy, unread: unread) { reveal(focus: true) }
         }
-        .padding(.trailing, 24)
-        .padding(.bottom, 24)
+        // 24 from the window's corner, as on the web; the main area is already 12 in.
+        .padding(.trailing, 12)
+        .padding(.bottom, 12)
     }
 
     private var panel: some View {

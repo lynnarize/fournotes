@@ -1,8 +1,8 @@
 import SwiftUI
 
 // The toolbar on the frame, as on the web (src/components/Toolbar.tsx): the mark, the sidebar
-// toggle and New beside the traffic lights, and the omnibar in the middle. The omnibar is the
-// one way in: it searches, asks and captures (⌘K), and Scan and Record live inside it.
+// toggle, New, back and forward beside the traffic lights, and the omnibar in the middle. The
+// omnibar is the one way in: it searches, asks and captures (⌘K), and Scan and Record live in it.
 
 struct ToolbarView: View {
     @Environment(\.palette) private var p
@@ -15,11 +15,13 @@ struct ToolbarView: View {
             HStack(spacing: 8) {
                 // The traffic lights.
                 Color.clear.frame(width: 70, height: 1)
-                Logo(size: 30).padding(.trailing, 4)
+                Logo(size: 30).padding(.horizontal, 6)
                 RoundFrameButton(icon: "sidebar", help: sidebarOpen ? "Hide sidebar" : "Show sidebar") {
                     sidebarOpen.toggle()
                 }
                 RoundFrameButton(icon: "compose", help: "New") { nav.present(.palette) }
+                RoundFrameButton(icon: "chevronLeft", help: "Back", disabled: nav.past.isEmpty) { nav.goBack() }
+                RoundFrameButton(icon: "chevron", help: "Forward", disabled: nav.ahead.isEmpty) { nav.goForward() }
                 Spacer()
             }
             omnibar.frame(maxWidth: 600)
@@ -75,17 +77,19 @@ private struct RoundFrameButton: View {
     @State private var hovering = false
     let icon: String
     let help: String
+    var disabled = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Icon(icon, size: 18)
-                .foregroundStyle(p.foreground)
+                .foregroundStyle(disabled ? p.textMuted : p.foreground)
                 .frame(width: 38, height: 38)
-                .background(hovering ? p.surfaceMuted : p.surface, in: Circle())
+                .background(hovering && !disabled ? p.surfaceMuted : p.surface, in: Circle())
                 .contentShape(Circle())
         }
         .buttonStyle(.fn)
+        .disabled(disabled)
         .onHover { hovering = $0 }
         .motion(hovering, Motion.quick)
         .help(help)

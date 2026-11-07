@@ -182,15 +182,15 @@ struct TodoView: View {
         let weekAgo = Date().addingTimeInterval(-7 * 86_400)
         let doneThisWeek = live.filter { $0.done && (DateKit.date($0.completedAt).map { $0 >= weekAgo } ?? false) }.count
         let day = Calendar.current.date(byAdding: .day, value: dayOffset, to: Date()) ?? Date()
-        let date = day.formatted(.dateTime.weekday(.wide).month(.wide).day().year())
+        let date = day.formatted(.dateTime.weekday(.wide).month(.wide).day().year().locale(Locale(identifier: "en_US")))
         return PageHead(title: "Planner",
                         sub: view == .day ? (dayOffset == 0 ? "Today, \(date)" : date)
                             : "\(live.filter { !$0.done }.count) open, \(doneThisWeek) done this week") {
             HStack(spacing: 8) {
                 if view == .day {
                     if dayOffset != 0 { SecondaryButton(title: "Today") { dayOffset = 0 }.fixedSize() }
-                    IconButton("chevronLeft", size: 18, box: 34, help: "Previous day") { dayOffset -= 1 }
-                    IconButton("chevron", size: 18, box: 34, help: "Next day") { dayOffset += 1 }
+                    RoundButton(icon: "chevronLeft", help: "Previous day") { dayOffset -= 1 }
+                    RoundButton(icon: "chevron", help: "Next day") { dayOffset += 1 }
                 }
                 SegmentedTabs(items: PlannerMode.allCases.map { ($0.rawValue, $0.rawValue.capitalized) },
                               selection: Binding(get: { view.rawValue },
@@ -483,7 +483,8 @@ private struct TodoCard: View {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(todo.title.isEmpty ? "New task" : todo.title)
                             .font(FN.body)
-                            .lineSpacing(3)
+                            .lineSpacing(1.8)
+                            .padding(.vertical, 0.9)
                             .foregroundStyle(todo.done || todo.title.isEmpty ? p.textMuted : p.foreground)
                             .strikethrough(todo.done)
                             .multilineTextAlignment(.leading)
@@ -522,7 +523,8 @@ private struct TodoCard: View {
             }
             .buttonStyle(.fn)
         }
-        .padding(14)
+        // The kit's 14, inside its 1pt border.
+        .padding(15)
         .background(p.surface, in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous)
             .strokeBorder(selected ? p.accent : (hovering ? p.borderStrong : p.border), lineWidth: 1))

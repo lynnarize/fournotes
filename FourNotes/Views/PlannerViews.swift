@@ -11,17 +11,22 @@ struct PageHead<Trailing: View>: View {
     @Environment(\.palette) private var p
     let title: String
     var sub: String?
+    var badge: String?
     @ViewBuilder var trailing: () -> Trailing
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(title)
-                    .font(FN.display(40))
-                    .tracking(FN.displayTracking(40))
-                    .foregroundStyle(p.foreground)
+                HStack(spacing: 12) {
+                    Text(title)
+                        .font(FN.display(40))
+                        .tracking(FN.displayTracking(40))
+                        .foregroundStyle(p.foreground)
+                        .lineBox(40, 42)
+                    if let badge { Badge(text: badge) }
+                }
                 if let sub {
-                    Text(sub).font(FN.font(15)).monospacedDigit().foregroundStyle(p.textMuted)
+                    Text(sub).font(FN.font(15)).monospacedDigit().foregroundStyle(p.textMuted).lineBox(15, 22.5)
                 }
             }
             Spacer(minLength: 12)
@@ -55,7 +60,8 @@ struct PlanTaskRow: View {
                     }
                     if todo.done { Icon("check", size: 12, weight: 2.5).foregroundStyle(p.accentForeground) }
                 }
-                .frame(width: 22, height: 22)
+                .frame(width: 20, height: 20)
+                .padding(.top, 1)
                 .contentShape(Circle().inset(by: -6))
             }
             .buttonStyle(.fn)
@@ -68,6 +74,7 @@ struct PlanTaskRow: View {
                         .strikethrough(todo.done)
                         .foregroundStyle(todo.done ? p.textMuted : p.foreground)
                         .lineLimit(2)
+                        .lineBox(16, 22)
                     if meta != nil || todo.rrule != nil || note != nil {
                         HStack(spacing: 10) {
                             if let meta {
@@ -81,6 +88,7 @@ struct PlanTaskRow: View {
                             }
                             if let note { metaItem("link", note.title.isEmpty ? "Note" : note.title) }
                         }
+                        .lineBox(13.5, 20.25)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -117,7 +125,7 @@ struct PlanTaskRow: View {
         return todo.priority == .high ? p.warning : p.borderStrong
     }
 
-    private var ringWidth: CGFloat { todo.priority == .high && !todo.done ? 2.25 : 1.75 }
+    private var ringWidth: CGFloat { todo.priority == .high && !todo.done ? 2.25 : 1.5 }
 
     private func metaItem(_ icon: String, _ text: String) -> some View {
         HStack(spacing: 4) {
@@ -129,7 +137,7 @@ struct PlanTaskRow: View {
 }
 
 private func shortDate(_ d: Date) -> String {
-    d.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+    d.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().locale(Locale(identifier: "en_US")))
 }
 
 private struct SectionHead: View {
@@ -141,7 +149,8 @@ private struct SectionHead: View {
         Text(title)
             .font(FN.font(13, .semibold))
             .foregroundStyle(late ? p.danger : p.textMuted)
-            .padding(.top, 22)
+            .lineBox(13, 19.5)
+            .padding(.top, 12)
             .padding(.bottom, 6)
     }
 }
@@ -244,7 +253,7 @@ struct PlannerDay: View {
 
     private var nowLine: some View {
         HStack(spacing: 10) {
-            Text(Fmt.time(now)).font(FN.font(12, .bold)).monospacedDigit().foregroundStyle(p.danger)
+            Text(Fmt.time(now)).font(FN.font(12, .bold)).monospacedDigit().foregroundStyle(p.danger).lineBox(12, 18)
             Rectangle().fill(p.spark.opacity(0.7)).frame(height: 1.5)
         }
         .padding(.vertical, 2)
@@ -262,6 +271,8 @@ struct PlannerDay: View {
         }
         .scrollIndicators(.never)
         .padding(.horizontal, -6)
+        .padding(.top, -2)
+        .padding(.bottom, 4)
     }
 
     private func dayCell(_ i: Int) -> some View {
@@ -274,13 +285,15 @@ struct PlannerDay: View {
             only = nil
         } label: {
             VStack(spacing: 4) {
-                Text(d.formatted(.dateTime.weekday(.abbreviated)))
+                Text(d.formatted(.dateTime.weekday(.abbreviated).locale(Locale(identifier: "en_US"))))
                     .font(FN.font(12))
                     .foregroundStyle(i == 0 ? p.danger : p.textMuted)
+                    .lineBox(12, 18)
                 Text("\(cal.component(.day, from: d))")
                     .font(FN.font(21, .semibold))
                     .monospacedDigit()
                     .foregroundStyle(tone)
+                    .lineBox(21, 21)
             }
             .frame(width: 58, height: 70)
             .overlay(alignment: .bottom) {
@@ -305,8 +318,9 @@ struct PlannerDay: View {
             if overdue > 0 { chip("\(overdue) overdue", .overdue, red: true) }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        // The kit's padding, inside its 1pt border.
+        .padding(.horizontal, 17)
+        .padding(.vertical, 13)
         .background(p.surface, in: RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous).strokeBorder(p.border, lineWidth: 1))
         .padding(.top, 16)
@@ -342,13 +356,14 @@ private struct PlanMeetingRow: View {
         HStack(alignment: .center, spacing: 14) {
             Circle().fill(p.spark).frame(width: 9, height: 9).frame(width: 22, height: 22)
             VStack(alignment: .leading, spacing: 3) {
-                Text(meeting.title).font(FN.font(16, .medium)).foregroundStyle(p.foreground).lineLimit(1)
+                Text(meeting.title).font(FN.font(16, .medium)).foregroundStyle(p.foreground).lineLimit(1).lineBox(16, 22)
                 HStack(spacing: 10) {
                     Text(NextMeeting.range(meeting)).font(FN.font(13.5, .semibold)).monospacedDigit().foregroundStyle(p.textSecondary)
                     if !meeting.detail.isEmpty {
                         Text(meeting.detail).font(FN.font(13.5)).foregroundStyle(p.textMuted).lineLimit(1)
                     }
                 }
+                .lineBox(13.5, 20.25)
             }
             Spacer(minLength: 8)
             if recordable {

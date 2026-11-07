@@ -39,14 +39,15 @@ struct ChatComposer: View {
             }
 
             // 16pt on a 24pt line, as the web's textarea.
-            TextField(placeholder, text: $text, axis: .vertical)
+            TextField("", text: $text, prompt: Text(placeholder).foregroundStyle(p.textMuted), axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(FN.font(16))
-                .lineSpacing(4.5)
+                .lineSpacing(3.2)
                 .foregroundStyle(p.foreground)
                 .lineLimit(1...8)
                 .focused(focused)
-                .padding(8)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 9.6)
                 .onSubmit {
                     if listOpen { pick(options[min(active, options.count - 1)], trigger) } else { send() }
                 }
@@ -81,7 +82,8 @@ struct ChatComposer: View {
                 sendButton
             }
         }
-        .padding(10)
+        // The kit's 10, inside its 1pt border.
+        .padding(11)
         .background {
             shape.fill(p.surface)
                 .shadow(color: floating ? p.shadowStrong : .clear, radius: 24, y: 10)

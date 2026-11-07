@@ -57,7 +57,7 @@ struct FinanceView: View {
         HStack(alignment: .top, spacing: 12) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    PageHead(title: "Money") { header }
+                    PageHead(title: "Money", badge: "Beta") { header }
 
                     dashboard(scrollTo: scrollTo)
 
@@ -87,12 +87,12 @@ struct FinanceView: View {
                         .padding(.horizontal, 22)
                         .padding(.vertical, 24)
                 }
-                .frame(width: 380)
+                .frame(width: 340)
                 .frame(maxHeight: .infinity)
                 .paper(p)
             }
         }
-        .onGeometryChange(for: Bool.self, of: { $0.size.width < 1060 }) { narrow = $0 }
+        .onGeometryChange(for: Bool.self, of: { $0.size.width < 1040 }) { narrow = $0 }
         .onAppear { if newCurrency.isEmpty { newCurrency = cur } }
         // The review is rewritten each time Finance opens after the month's
         // spending changed, or on a new day.
@@ -161,8 +161,7 @@ struct FinanceView: View {
 
     /// Beside the page title: the month, scanning, and the rest of Money's actions.
     private var header: some View {
-        HStack(spacing: 10) {
-            Spacer(minLength: 0)
+        HStack(spacing: 8) {
             HStack(spacing: 0) {
                 MonthStep(icon: "chevronLeft", help: "Previous month") { month = FinanceMath.shiftMonth(month, by: -1) }
                 Text(Fmt.monthYear(month))
@@ -173,13 +172,13 @@ struct FinanceView: View {
                     .motion(month, Motion.screen)
                 MonthStep(icon: "chevron", help: "Next month") { month = FinanceMath.shiftMonth(month, by: 1) }
             }
-            .frame(height: 36)
-            .background(p.surface, in: Capsule(style: .circular))
-            .overlay(Capsule(style: .circular).strokeBorder(p.border, lineWidth: 1))
+            .frame(height: 34)
+            .background(p.surfaceMuted, in: Capsule(style: .circular))
 
             SecondaryButton(title: "Scan receipt", icon: "scan") { assistant.pickAndScan() }
+                .fixedSize()
 
-            // `.btn-secondary .btn-icon`: a round bordered "…".
+            // `.btn-secondary .btn-icon`: a round "…".
             MenuButton(help: "More finance actions", align: .trailing) {
                 [
                     .item("Monthly report…", icon: "download") { showReport = true },
@@ -212,7 +211,7 @@ struct FinanceView: View {
                 .onSubmit(addTransaction)
                 .padding(.horizontal, 16)
                 .frame(height: 44)
-                .frame(minWidth: 240, maxWidth: .infinity)
+                .frame(minWidth: 170, maxWidth: .infinity)
                 .layoutPriority(1)
             HStack(spacing: 6) {
                 MenuButton(help: "Currency") {
@@ -222,7 +221,7 @@ struct FinanceView: View {
                 }
                 TextField("0", text: $newAmount)
                     .textFieldStyle(.plain)
-                    .font(FN.body)
+                    .font(FN.font(16))
                     .monospacedDigit()
                     .foregroundStyle(p.foreground)
                     .onSubmit(addTransaction)
@@ -234,9 +233,9 @@ struct FinanceView: View {
             MenuButton(help: "Category") {
                 store.categories.map { c in .item(c, checked: c == newCategory) { newCategory = c } }
             } label: {
-                BarMenuLabel(title: newCategory, muted: false)
+                BarMenuLabel(title: newCategory, muted: false, spread: true)
                     .padding(.horizontal, 16)
-                    .frame(height: 44)
+                    .frame(width: 172, height: 44)
                     .background(p.surfaceMuted, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             }
             .fixedSize()
@@ -253,7 +252,8 @@ struct FinanceView: View {
             .fixedSize()
             .accessibilityLabel("Add transaction")
         }
-        .padding(6)
+        // The kit's 6, inside its 1pt border.
+        .padding(7)
         .background(p.surface, in: RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: FN.radiusPanel, style: .continuous).strokeBorder(p.border, lineWidth: 1))
     }
@@ -315,9 +315,9 @@ struct FinanceView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 HStack(spacing: 8) {
                     Icon("search", size: 16).foregroundStyle(p.textMuted)
-                    TextField("Search merchants or items", text: $query)
+                    TextField("", text: $query, prompt: Text("Search merchants or items").foregroundStyle(p.textMuted))
                         .textFieldStyle(.plain)
-                        .font(FN.body)
+                        .font(FN.font(16))
                         .foregroundStyle(p.foreground)
                         .onExitCommand { query = "" }
                 }
@@ -326,8 +326,7 @@ struct FinanceView: View {
                 .background(p.surface, in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous).strokeBorder(p.border, lineWidth: 1))
                 SelectMenu(options: [("", "All categories")] + categories.map { ($0, $0) },
-                           selection: $categoryFilter, help: "Filter by category")
-                    .fixedSize()
+                           selection: $categoryFilter, width: 170, help: "Filter by category")
             }
 
             if txs.isEmpty {
@@ -463,10 +462,11 @@ struct FinanceView: View {
         try? await Task.sleep(for: .seconds(1.5))
         guard !Task.isCancelled else { return }
         reviewRequested = basis
-        await summarize()
+        await summarize(asked: false)
     }
 
-    private func summarize() async {
+    /// A review that was only written in the background fails quietly: nobody asked for it.
+    private func summarize(asked: Bool = true) async {
         guard !summarizing else { return }
         summarizing = true
         defer { summarizing = false }
@@ -480,7 +480,7 @@ struct FinanceView: View {
                 byCategory: Insights.spendByCategory(txs, cur),
                 text: text, createdAt: DateKit.nowIso()))
         } catch {
-            toasts.push((error as? APIError)?.errorDescription ?? "Failed", tone: .error)
+            if asked { toasts.push((error as? APIError)?.errorDescription ?? "Failed", tone: .error) }
         }
     }
 }
@@ -513,7 +513,7 @@ private struct TableHeader: View {
             title("Category", .category).frame(width: Columns.category, alignment: .leading)
             title("Amount", .amount).frame(width: Columns.amount, alignment: .trailing)
                 .padding(.trailing, 12)
-            Color.clear.frame(width: Columns.delete - 24, height: 1)
+            Color.clear.frame(width: Columns.delete - 12, height: 1)
         }
         .padding(.leading, 24)
         .padding(.trailing, 12)
@@ -667,7 +667,7 @@ private struct TransactionRow: View {
             // Shown on hover; red under the pointer.
             DeleteButton(action: onDelete)
                 .opacity(hovering ? 1 : 0)
-                .frame(width: Columns.delete - 24)
+                .frame(width: Columns.delete - 12)
         }
         .padding(.leading, 24)
         .padding(.trailing, 12)
@@ -805,7 +805,7 @@ private struct MonthStep: View {
         Button(action: action) {
             Icon(icon, size: 16)
                 .foregroundStyle(hovering ? p.foreground : p.textSecondary)
-                .frame(width: 36, height: 36)
+                .frame(width: 36, height: 34)
                 .background(hovering ? p.hover : .clear, in: Circle())
                 .contentShape(Circle())
         }
@@ -825,9 +825,8 @@ private struct MoreCircle: View {
     var body: some View {
         Icon("more", size: 18)
             .foregroundStyle(p.textSecondary)
-            .frame(width: 36, height: 36)
-            .background(hovering || open ? p.surfaceMuted : p.surface, in: Circle())
-            .overlay(Circle().strokeBorder(p.border, lineWidth: 1))
+            .frame(width: 34, height: 34)
+            .background(hovering || open ? p.controlTrack : p.surfaceMuted, in: Circle())
             .contentShape(Circle())
             .onHover { hovering = $0 }
             .motion(hovering || open, Motion.quick)
@@ -840,13 +839,16 @@ private struct BarMenuLabel: View {
     @State private var hovering = false
     let title: String
     let muted: Bool
+    /// The chevron at the far end, as a select's.
+    var spread = false
 
     var body: some View {
         HStack(spacing: 4) {
             Text(title).lineLimit(1)
+            if spread { Spacer(minLength: 0) }
             Icon("chevronDown", size: 12).opacity(0.7)
         }
-        .font(FN.body)
+        .font(FN.font(16))
         .foregroundStyle(hovering ? p.foreground : (muted ? p.textMuted : p.textSecondary))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }

@@ -412,6 +412,12 @@ extension Color {
 
 extension View {
     /// Paper laid on the frame. A screen has one sheet, or a main sheet and a side sheet.
+    /// A line of Geist at `size` in a CSS line box of `height`. SwiftUI sets it in the font's
+    /// own line (1.3 × size), so text the web sets tighter or looser would land elsewhere.
+    func lineBox(_ size: CGFloat, _ height: CGFloat) -> some View {
+        padding(.vertical, (height - size * 1.3) / 2)
+    }
+
     func paper(_ p: Palette) -> some View {
         background(p.bg, in: RoundedRectangle(cornerRadius: FN.radiusSurface, style: .continuous))
             .clipShape(RoundedRectangle(cornerRadius: FN.radiusSurface, style: .continuous))

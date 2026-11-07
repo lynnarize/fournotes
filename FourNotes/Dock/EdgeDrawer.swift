@@ -98,7 +98,7 @@ struct EdgeDrawer: View {
         return HStack(spacing: 12) {
             TasksRing()
             VStack(alignment: .leading, spacing: 0) {
-                Text(Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day()))
+                Text(Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day().locale(Locale(identifier: "en_US"))))
                     .font(FN.font(15, .semibold))
                     .foregroundStyle(d.frameText)
                 Text(open == 0 ? "Nothing due today" : "\(open) due today")
@@ -295,13 +295,13 @@ struct EdgeDrawer: View {
                 section("Coming up")
                 ForEach(upcoming) { item in
                     HStack(spacing: 10) {
-                        Circle().strokeBorder(d.hairStrong, lineWidth: 1.75).frame(width: 20, height: 20)
+                        DockCheckbox(checked: false)
                         Text(item.title).font(FN.font(15, .medium)).foregroundStyle(d.text).lineLimit(1)
                         Spacer(minLength: 8)
                         Text(Money.format(item.amount, item.currency, compact: true))
                             .font(FN.font(13, .semibold)).monospacedDigit().foregroundStyle(d.secondary)
                     }
-                    .padding(.vertical, 7)
+                    .padding(.vertical, 5)
                 }
             }
         }

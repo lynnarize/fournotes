@@ -59,6 +59,7 @@ struct DockScene: View {
         let chosen = DockStyle.style(for: theme, scheme: scheme)
         let style = frameRaw == "light" && scheme != .dark ? chosen.withLightFrame : chosen
         DockRoot(dock: dock)
+            .tracking(-0.16)
             .environment(\.colorScheme, scheme)
             .environment(\.palette, theme.palette(for: scheme))
             .environment(\.dock, style)

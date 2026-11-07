@@ -5,27 +5,48 @@ import SwiftUI
 // spent today against today's share of your budgets, and quick notes — a line to jot
 // in, and the newest few.
 
-private func cardHead(_ title: String, _ p: Palette) -> some View {
+@MainActor private func cardHead(_ title: String, _ p: Palette) -> some View {
     Text(title)
         .font(FN.font(13, .semibold))
         .foregroundStyle(p.textMuted)
         .lineLimit(1)
+        .lineBox(13, 19.5)
         .frame(maxWidth: .infinity, alignment: .leading)
 }
 
-/// A block on a side sheet: no card, a hairline above it.
+/// The head of a block: 30 tall with its 4 underneath, more when what's beside it needs it.
+private struct GlanceHead<Trailing: View>: View {
+    @Environment(\.palette) private var p
+    let title: String
+    @ViewBuilder var trailing: () -> Trailing
+
+    var body: some View {
+        HStack(spacing: 8) {
+            cardHead(title, p)
+            trailing()
+        }
+        .frame(minHeight: 26)
+        .padding(.bottom, 4)
+    }
+}
+
+/// A block on a side sheet: no card, a hairline between neighbours (the web's `.glance`).
 private struct GlanceBlock<Content: View>: View {
     @Environment(\.palette) private var p
-    /// The insets the content was written for inside a card, taken back out.
-    var padding: CGFloat = 8
+    /// The first block on the sheet has no hairline above it.
+    var first = false
     @ViewBuilder var content: () -> Content
 
     var body: some View {
-        content()
-            .padding(.horizontal, padding == 8 ? -12 : 0)
-            .padding(.top, padding == 8 ? 2 : 14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .overlay(alignment: .top) { Rectangle().fill(p.border).frame(height: 1) }
+        VStack(alignment: .leading, spacing: 0) {
+            if !first {
+                Rectangle().fill(p.border).frame(height: 1)
+                    .padding(.top, 18)
+                    .padding(.bottom, 16)
+            }
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -49,6 +70,8 @@ struct TodaySummary: View {
         let wash: Color
         let title: String
         let meta: String
+        /// The meta is a time or a day, set like one.
+        var timed = false
         let action: String
         let run: () -> Void
     }
@@ -71,7 +94,7 @@ struct TodaySummary: View {
         if let task = tasks.first {
             out.append(Row(id: "task", icon: "todo", tone: p.textSecondary, wash: p.surfaceMuted,
                            title: task.title.isEmpty ? "Untitled task" : task.title,
-                           meta: DateKit.date(task.dueAt).map { Fmt.due(DateKit.iso($0)) } ?? "", action: "Start") {
+                           meta: dueWord(task, now: now), timed: true, action: "Start") {
                 nav.open(ChangeLink(kind: .todos, id: task.id))
             })
         }
@@ -107,7 +130,6 @@ struct TodaySummary: View {
             Text("\(Text(line).foregroundStyle(p.foreground))\(Text(tail(rows.count)).foregroundStyle(p.textMuted))")
                 .font(FN.font(28, .semibold))
                 .tracking(-0.56)
-                .lineSpacing(4)
                 .padding(.top, 14)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -120,6 +142,16 @@ struct TodaySummary: View {
                 .padding(.top, 16)
             }
         }
+    }
+
+    /// When a task is due, in a word or two: the time today, otherwise the day.
+    private func dueWord(_ todo: Todo, now: Date) -> String {
+        guard let due = DateKit.date(todo.dueAt) else { return "" }
+        guard Calendar.current.isDate(due, inSameDayAs: now) else {
+            return "Overdue, \(due.formatted(.dateTime.month(.abbreviated).day().locale(Locale(identifier: "en_US"))))"
+        }
+        let c = Calendar.current.dateComponents([.hour, .minute], from: due)
+        return (c.hour == 0 && c.minute == 0) || (c.hour == 23 && c.minute == 59) ? "Today" : Fmt.time(due)
     }
 
     /// " Three things need you."
@@ -136,9 +168,13 @@ struct TodaySummary: View {
                 .frame(width: 34, height: 34)
                 .background(r.wash, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             VStack(alignment: .leading, spacing: 3) {
-                Text(r.title).font(FN.font(16, .medium)).foregroundStyle(p.foreground).lineLimit(1)
+                Text(r.title).font(FN.font(16, .medium)).foregroundStyle(p.foreground).lineLimit(1).lineBox(16, 22)
                 if !r.meta.isEmpty {
-                    Text(r.meta).font(FN.font(13.5)).foregroundStyle(p.textMuted).lineLimit(1)
+                    Text(r.meta)
+                        .font(FN.font(13.5, r.timed ? .semibold : .regular))
+                        .foregroundStyle(r.timed ? p.textSecondary : p.textMuted)
+                        .lineLimit(1)
+                        .lineBox(13.5, 20.25)
                 }
             }
             Spacer(minLength: 8)
@@ -214,7 +250,7 @@ struct NextMeetingCard: View {
             }
         } else if !dismissed {
             card {
-                IconButton("x", size: 12, box: 22, help: "Not now") {
+                IconButton("x", size: 14, box: 30, help: "Not now") {
                     withAnimation(Motion.standard) { dismissed = true }
                 }
             } content: { connect }
@@ -224,20 +260,12 @@ struct NextMeetingCard: View {
     private func card<Trailing: View, Content: View>(@ViewBuilder _ trailing: () -> Trailing,
                                                      @ViewBuilder content: () -> Content) -> some View {
         let trailing = trailing(), content = content()
-        return GlanceBlock {
+        return GlanceBlock(first: true) {
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 8) {
-                    cardHead("Next meeting", p)
-                    trailing
-                }
-                .padding(.horizontal, 12)
-                .padding(.top, 12)
-                .padding(.bottom, 8)
+                GlanceHead(title: "Next meeting") { trailing }
                 content
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 12)
-                    .padding(.top, 2)
-                    .padding(.bottom, 12)
+                    .padding(.vertical, 4)
             }
         }
     }
@@ -316,11 +344,13 @@ struct NextMeetingCard: View {
 
     private var connect: some View {
         let denied = calendar.access == .denied
-        return VStack(alignment: .leading, spacing: 10) {
+        return VStack(alignment: .leading, spacing: 12) {
             Text(denied
                  ? "Calendar access is off. Turn it on in System Settings to see your next meeting here."
                  : "See your next meeting here, and record it in one click.")
                 .font(FN.body)
+                .lineSpacing(2.8)
+                .padding(.vertical, 1.4)
                 .foregroundStyle(p.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             SecondaryButton(title: denied ? "Open System Settings" : "Connect calendar", icon: "calendar", small: true) {
@@ -355,52 +385,44 @@ struct DueTodayCard: View {
     let tasks: [Todo]
     let upcoming: [Todo]
     let focus: [Todo]
+    @ObservedObject private var calendar = MeetingCalendar.shared
+    @AppStorage(NextMeeting.dismissedKey) private var meetingDismissed = false
 
     var body: some View {
         let shown = Array(tasks.prefix(5))
-        GlanceBlock {
+        GlanceBlock(first: calendar.access != .allowed && meetingDismissed) {
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 8) {
-                    cardHead("Due today", p)
+                GlanceHead(title: "Due today") {
                     HeadLink(title: "Planner") { nav.tab = .todo }
                 }
-                .padding(.horizontal, 12)
-                .padding(.top, 12)
-                .padding(.bottom, 8)
-
                 if shown.isEmpty {
                     Text(focus.isEmpty ? "Nothing due today." : "Nothing has a date today.")
                         .font(FN.body)
                         .foregroundStyle(p.textSecondary)
-                        .padding(.horizontal, 12)
-                        .padding(.top, 4)
-                        .padding(.bottom, 12)
+                        .lineBox(14, 21)
+                        .padding(.vertical, 4)
                 }
                 ForEach(shown) { TodayTaskRow(todo: $0) }
                 if tasks.count > shown.count {
                     HeadLink(title: "\(tasks.count - shown.count) more due") { nav.tab = .todo }
-                        .padding(.horizontal, 8)
+                        .padding(.bottom, 4)
                 }
                 if tasks.isEmpty && !focus.isEmpty {
-                    SectionTitle("High priority, no date")
-                        .padding(.horizontal, 12)
-                        .padding(.top, 4)
-                        .padding(.bottom, -2)
+                    groupLabel("High priority, no date").padding(.top, 4).padding(.bottom, 4)
                     ForEach(focus) { TodayTaskRow(todo: $0) }
                 }
                 if !upcoming.isEmpty {
-                    Rectangle().fill(p.borderSubtle).frame(height: 1)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 4)
-                    SectionTitle("Coming up")
-                        .padding(.horizontal, 12)
-                        .padding(.top, 8)
-                        .padding(.bottom, -2)
+                    groupLabel("Coming up").padding(.top, 12).padding(.bottom, 4)
                     ForEach(upcoming) { TodayTaskRow(todo: $0) }
                 }
             }
             .animation(Motion.list, value: tasks.map(\.id) + upcoming.map(\.id))
         }
+    }
+
+    /// The web's `.group-label`.
+    private func groupLabel(_ title: String) -> some View {
+        Text(title).font(FN.font(13, .semibold)).foregroundStyle(p.textMuted).lineBox(13, 19.5)
     }
 }
 
@@ -437,7 +459,7 @@ private struct TodayTaskRow: View {
 
     var body: some View {
         let note = todo.noteId.flatMap { id in store.liveNotes.first { $0.id == id } }
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: 14) {
             Button(action: complete) {
                 // The kit's round `.check`, red-rimmed when overdue.
                 Circle()
@@ -452,17 +474,19 @@ private struct TodayTaskRow: View {
             .accessibilityLabel("Complete \(todo.title)")
 
             Button { nav.open(ChangeLink(kind: .todos, id: todo.id)) } label: {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 0) {
                     Text(todo.title)
-                        .font(FN.body)
+                        .font(FN.font(16, .medium))
                         .foregroundStyle(p.foreground)
                         .lineLimit(1)
+                        .lineBox(16, 22)
                     if !when.isEmpty || note != nil || repeats != nil {
                         HStack(spacing: 6) {
                             if !when.isEmpty {
                                 Text(when)
+                                    .font(FN.font(13.5, .semibold))
                                     .monospacedDigit()
-                                    .foregroundStyle(overdue && !sameDay ? p.danger : p.textMuted)
+                                    .foregroundStyle(overdue && !sameDay ? p.danger : p.textSecondary)
                             }
                             if !when.isEmpty && (note != nil || repeats != nil) { Text("·") }
                             if let note {
@@ -477,8 +501,10 @@ private struct TodayTaskRow: View {
                                 }
                             }
                         }
-                        .font(FN.small)
+                        .font(FN.font(13.5))
                         .foregroundStyle(p.textMuted)
+                        .lineBox(13.5, 20.25)
+                        .padding(.top, 4)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -491,10 +517,11 @@ private struct TodayTaskRow: View {
                     .font(FN.font(13))
                     .monospacedDigit()
                     .foregroundStyle(p.textSecondary)
+                    .lineBox(13, 19.5)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 12)
+        .padding(10)
+        .padding(.horizontal, -10)
         .flashes(nav.isFlashing(todo.id), palette: p)
         .transition(.opacity.combined(with: .offset(x: -8)))
     }
@@ -553,9 +580,9 @@ struct SpentTodayCard: View {
                 : "\(todays.count) \(todays.count == 1 ? "purchase" : "purchases") today"
         }()
 
-        GlanceBlock(padding: 20) {
+        GlanceBlock {
             VStack(alignment: .leading, spacing: 0) {
-                HStack {
+                HStack(spacing: 8) {
                     cardHead("Spent today", p)
                     HeadLink(title: "Money") { nav.tab = .finance }
                 }
@@ -565,11 +592,13 @@ struct SpentTodayCard: View {
                     .monospacedDigit()
                     .foregroundStyle(p.foreground)
                     .contentTransition(.numericText())
-                    .padding(.top, 12)
+                    .lineBox(34, 35.7)
+                    .padding(.top, 4)
                 Text(sub)
                     .font(FN.font(13))
                     .monospacedDigit()
                     .foregroundStyle(over ? p.danger : p.textSecondary)
+                    .lineBox(13, 19.5)
                     .padding(.top, 4)
                     .help(allowance != nil ? "What your monthly budgets have left, spread over the days left this month" : "")
                 if allowance != nil {
@@ -584,6 +613,7 @@ struct SpentTodayCard: View {
                     }
                     .font(FN.small)
                     .foregroundStyle(p.textMuted)
+                    .lineBox(12, 18)
                     .padding(.top, 8)
                 } else if !merchants.isEmpty {
                     Text(merchants).font(FN.small).foregroundStyle(p.textMuted).lineLimit(1).padding(.top, 8)
@@ -608,25 +638,21 @@ struct QuickNotesCard: View {
         let shown = Array(quickNotes.prefix(3))
         GlanceBlock {
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 8) {
-                    cardHead("Quick notes", p)
-                    Text("Today's go into the summary").font(FN.small).foregroundStyle(p.textMuted)
+                GlanceHead(title: "Quick notes") {
+                    Text("Today's go into the summary").font(FN.small).foregroundStyle(p.textMuted).lineLimit(1).fixedSize()
                 }
-                .padding(.horizontal, 12)
-                .padding(.top, 12)
-                .padding(.bottom, 8)
 
-                TextField("Jot something down", text: $draft, axis: .vertical)
+                TextField("", text: $draft, prompt: Text("Jot something down").foregroundStyle(p.textMuted), axis: .vertical)
                     .textFieldStyle(.plain)
-                    .font(FN.body)
-                    .lineSpacing(7)
+                    .font(FN.font(15))
+                    .lineSpacing(4.5)
                     .foregroundStyle(p.foreground)
                     .lineLimit(1...5)
                     .focused($focused)
                     .onSubmit(save)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
-                    .frame(minHeight: 40)
+                    .frame(minHeight: 42)
                     .background(p.surface, in: RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: FN.radiusControl, style: .continuous)
                         .strokeBorder(focused ? p.borderStrong : p.border, lineWidth: 1))

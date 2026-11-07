@@ -9,7 +9,32 @@ import SwiftUI
 final class Navigation: ObservableObject {
     /// Opening a tab clears its "something new" dot.
     @Published var tab: Tab = .today {
-        didSet { pulsing.remove(tab) }
+        didSet {
+            pulsing.remove(tab)
+            guard tab != oldValue, !walking else { return }
+            past.append(oldValue)
+            ahead.removeAll()
+        }
+    }
+    /// The tabs behind and ahead of this one, for the toolbar's back and forward.
+    @Published private(set) var past: [Tab] = []
+    @Published private(set) var ahead: [Tab] = []
+    private var walking = false
+
+    func goBack() {
+        guard let previous = past.popLast() else { return }
+        ahead.append(tab)
+        walking = true
+        tab = previous
+        walking = false
+    }
+
+    func goForward() {
+        guard let next = ahead.popLast() else { return }
+        past.append(tab)
+        walking = true
+        tab = next
+        walking = false
     }
     /// A window shows one sheet at a time, so there is one place that says
     /// which. Three independent booleans meant ⌘, over an open palette silently

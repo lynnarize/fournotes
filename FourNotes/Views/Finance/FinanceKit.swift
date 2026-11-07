@@ -176,23 +176,29 @@ struct SegmentedTabs: View {
     var alert: String?
     /// Segments share the width given, as the web's `.seg .flex` with `flex-1` buttons.
     var fill = false
+    /// A quiet number beside a segment's label.
+    var counts: [String: Int] = [:]
 
     var body: some View {
         HStack(spacing: 2) {
             ForEach(items, id: \.id) { item in
                 let on = selection == item.id
                 Button { withAnimation(Motion.standard) { selection = item.id } } label: {
-                    Text(item.label)
-                        .font(FN.font(13, on ? .medium : .regular))
+                    HStack(spacing: 6) {
+                        Text(item.label).font(FN.font(13.5, .semibold))
+                        if let count = counts[item.id] {
+                            Text("\(count)").font(FN.font(13.5)).monospacedDigit().foregroundStyle(p.textMuted)
+                        }
+                    }
                         .foregroundStyle(on || hovered == item.id ? p.foreground : p.textSecondary)
-                        .padding(.horizontal, 12)
+                        .padding(.horizontal, 14)
                         .frame(maxWidth: fill ? .infinity : nil)
-                        .frame(height: 30)
+                        .frame(height: 28)
                         .background {
                             if on {
                                 Capsule(style: .circular)
                                     .fill(scheme == .dark ? p.surfaceRaised : p.surface)
-                                    .shadow(color: .black.opacity(0.06), radius: 1, y: 1)
+                                    .shadow(color: .black.opacity(0.07), radius: 1, y: 1)
                                     .matchedGeometryEffect(id: "segment", in: raised)
                             }
                         }

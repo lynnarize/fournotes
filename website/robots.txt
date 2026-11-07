@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /brand/board.html
+
+Sitemap: https://fournotes.xyz/sitemap.xml

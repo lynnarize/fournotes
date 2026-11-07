@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Four Notes: notes, plans, meetings and money in one calm app</title>
+<meta name="description" content="Four Notes keeps your notes, plans, meetings and money in one calm app for Mac and the web, with an assistant that files what you tell it. Free, private, no account.">
+<link rel="canonical" href="https://fournotes.xyz/">
+<meta name="theme-color" content="#111113">
+<meta name="color-scheme" content="light">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Four Notes">
+<meta property="og:url" content="https://fournotes.xyz/">
+<meta property="og:title" content="Four Notes: four notebooks, one calm place">
+<meta property="og:description" content="Notes, plans, meetings and money, with an assistant that files what you tell it. Free for the Mac and the web.">
+<meta property="og:image" content="https://fournotes.xyz/assets/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="assets/icons/icon.svg" type="image/svg+xml">
+<link rel="icon" href="assets/icons/favicon-64.png" type="image/png" sizes="64x64">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<link rel="preload" href="assets/fonts/geist-100_900-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="styles.css">
+<script>
+  // Motion only hides things when it is really going to show them again.
+  (function () {
+    var r = document.documentElement;
+    var calm = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!calm) r.classList.add('live');
+    setTimeout(function () { if (!window.__fnReady) r.classList.remove('live'); }, 4000);
+  })();
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Four Notes",
+  "url": "https://fournotes.xyz/",
+  "operatingSystem": "macOS 26 or later, Web",
+  "applicationCategory": "ProductivityApplication",
+  "downloadUrl": "https://github.com/lynnarize/fournotes-macos/releases",
+  "codeRepository": "https://github.com/lynnarize/fournotes-macos",
+  "description": "Notes, plans, meetings and money, with an assistant that files what you tell it.",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="logo" viewBox="0 0 800 800"><path fill="currentColor" d="M261 218C265 217 269 217 272 218C275 218 278 219 281 220C284 221 286 222 289 224C292 225 294 228 296 230C298 232 301 236 302 238C304 240 304 242 305 245C306 248 307 252 308 256C309 260 309 264 309 268C310 272 309 275 309 279C309 283 309 284 308 291C307 298 305 310 302 321C300 332 297 340 292 357C288 374 277 407 273 420C269 433 270 432 269 436C268 440 267 443 267 446C266 449 266 453 266 455C266 457 266 458 267 459C267 460 268 461 269 461C270 461 270 461 271 461C272 461 271 462 274 460C277 458 276 461 289 451C302 442 339 415 352 406C365 397 360 400 366 397C372 394 380 389 385 387C390 384 392 384 395 383C398 381 403 380 406 380C409 379 410 379 413 379C416 378 422 378 425 378C428 379 430 379 433 380C436 380 437 380 441 382C445 383 448 384 456 389C464 394 480 406 489 411C498 417 502 419 508 421C514 424 520 426 525 427C530 428 535 429 539 429C543 430 544 430 548 429C552 429 559 428 564 427C569 427 571 426 576 424C581 423 588 420 593 417C598 415 604 411 608 408C612 405 616 402 620 399C624 396 627 394 631 390C635 386 640 382 644 376C649 370 655 361 658 357C661 353 660 355 662 354C664 353 666 352 667 352C668 351 670 351 671 351C672 350 674 350 676 351C678 351 681 352 683 353C685 354 687 355 688 356C689 357 690 358 691 360C692 362 693 364 694 366C694 368 694 370 694 372C694 374 695 374 693 377C692 380 689 386 686 391C682 396 678 401 674 406C670 411 665 416 661 421C656 426 652 429 647 433C642 438 637 442 632 445C627 449 621 452 616 455C611 458 606 461 600 463C594 466 587 469 581 470C575 472 570 473 564 474C558 475 553 476 548 476C543 476 538 476 533 475C528 475 524 474 520 473C516 473 517 473 512 472C507 470 498 467 491 464C484 462 483 461 473 455C463 449 441 434 433 429C425 424 427 426 424 426C421 425 416 426 414 426C412 426 411 426 409 427C407 428 406 428 402 430C398 432 391 435 386 439C381 442 380 442 370 450C360 458 333 478 323 486C313 493 314 492 310 494C306 497 301 500 296 502C291 505 285 507 281 509C277 511 274 511 270 512C266 513 262 513 258 514C254 514 252 513 249 513C246 512 244 511 241 510C239 509 236 507 234 505C232 504 229 501 228 499C226 497 225 496 224 493C222 490 221 487 220 484C219 481 218 479 218 476C217 473 217 472 217 468C216 464 216 460 216 455C216 450 217 443 218 436C219 429 218 430 223 412C228 394 243 348 248 329C254 310 255 304 256 297C258 290 258 290 258 287C259 284 259 279 259 277C259 275 259 275 258 274C258 273 258 273 257 272C256 272 255 272 254 273C253 273 252 273 248 276C244 279 238 283 231 290C224 296 215 306 207 315C199 324 189 337 183 345C176 353 174 357 169 365C164 373 159 380 152 392C145 404 134 423 127 436C120 449 116 457 110 469C105 481 99 496 94 508C89 520 84 532 81 542C78 552 75 562 73 567C71 572 71 570 70 572C69 574 68 575 67 576C66 577 66 577 64 578C62 579 58 581 56 582C54 583 52 583 49 583C46 583 42 582 40 581C38 581 38 580 36 579C34 578 32 576 31 575C29 574 29 572 28 571C27 570 26 568 26 567C25 566 25 565 25 563C24 561 24 559 24 556C24 553 23 556 26 547C29 538 35 520 41 505C47 490 53 475 61 458C68 441 79 419 87 405C94 391 99 383 106 372C112 361 118 352 125 341C133 330 142 318 149 309C155 300 160 295 167 286C174 278 184 268 191 261C198 254 204 249 210 244C216 239 226 233 230 230C234 227 232 228 235 227C238 225 245 222 249 221C253 219 257 219 261 218Z"/><path style="fill:var(--spark)" d="M716 234C716 234 717 234 718 234C719 235 719 233 720 236C722 239 724 247 725 250C726 253 726 253 727 256C729 259 732 264 735 267C737 270 739 272 741 274C743 276 747 279 749 281C751 283 752 283 755 285C758 286 761 288 764 289C767 290 772 291 774 292C776 293 776 293 776 294C776 295 776 295 776 296C776 297 776 298 776 298C776 299 776 300 774 301C772 302 766 303 763 304C760 305 758 306 755 308C752 310 748 313 745 315C742 317 741 318 739 320C737 322 735 325 733 328C731 331 729 334 727 337C726 340 724 344 723 347C722 350 722 354 721 356C720 359 718 359 717 359C716 359 716 359 715 359C714 358 713 359 713 357C712 355 711 351 710 347C709 343 706 338 705 335C703 332 702 331 700 328C698 325 694 321 691 318C689 315 687 314 684 312C681 310 678 308 675 306C672 305 671 304 668 303C665 302 661 302 659 301C657 300 657 300 657 299C656 298 656 297 656 296C656 295 656 294 657 293C657 292 656 293 658 292C660 291 665 290 668 289C671 287 675 286 678 284C681 283 683 281 686 279C688 277 692 274 694 271C696 269 698 267 700 265C701 263 703 260 705 257C706 254 707 253 708 250C709 247 711 239 712 237C713 235 712 236 713 236C714 235 715 234 716 234Z"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></symbol>
+    <symbol id="i-scan" viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M4 12h16"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></symbol>
+    <symbol id="i-today" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/></symbol>
+    <symbol id="i-planner" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4M9 15l2 2 4-4"/></symbol>
+    <symbol id="i-wave" viewBox="0 0 24 24"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/></symbol>
+    <symbol id="i-lines" viewBox="0 0 24 24"><path d="M5 6h14M5 11h14M5 16h9"/></symbol>
+    <symbol id="i-money" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M3 10h18M16 14.5h2"/></symbol>
+    <symbol id="i-note" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.500V21M4.200 7.500l2.200 1.300M17.600 15.200l2.200 1.300M4.200 16.500l2.200-1.300M17.600 8.800l2.200-1.300"/></symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 19a5 5 0 0 1-.6-9.960A6 6 0 0 1 18 8.500a4.500 4.500 0 0 1-.5 10.500z"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 4l1.800 5.200L19 11l-5.200 1.800L12 18l-1.800-5.200L5 11l5.200-1.800z"/></symbol>
+    <symbol id="i-apple" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M16.400 12.600c0-2.600 2.100-3.800 2.200-3.900-1.200-1.800-3.100-2-3.700-2-1.600-.2-3.100.9-3.900.9-.8 0-2-.9-3.400-.9-1.700 0-3.300 1-4.200 2.600-1.800 3.100-.5 7.700 1.300 10.200.9 1.200 1.900 2.600 3.200 2.600 1.300-.1 1.800-.8 3.300-.8s2 .8 3.400.8c1.400 0 2.300-1.300 3.100-2.500 1-1.400 1.400-2.800 1.400-2.900-.1 0-2.700-1-2.700-4.100zM13.900 5c.7-.9 1.200-2 1-3.200-1 0-2.300.7-3 1.600-.7.8-1.200 2-1.100 3.100 1.200.1 2.300-.6 3.100-1.500z"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-arrow-ur" viewBox="0 0 24 24"><path d="M7 17 17 7M8 7h9v9"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.500 4.500 4.500L19 7.500"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3.500 2.500 20h19z"/><path d="M12 10v4M12 17h.01"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></symbol>
+  </defs>
+</svg>
+
+<a class="skip" href="#content">Skip to content</a>
+
+<!-- The app's toolbar, and the site's navigation, from first frame to last. -->
+<header class="bar" data-bar>
+  <a class="brand" href="#top" aria-label="Four Notes, back to top">
+    <svg class="brand-logo" aria-hidden="true"><use href="#logo"/></svg>
+    <span class="brand-name">Four Notes</span>
+  </a>
+  <button class="omni" type="button" data-palette-open aria-haspopup="dialog" aria-label="Search this site, or try capturing something">
+    <svg class="ico" aria-hidden="true"><use href="#i-search"/></svg>
+    <span class="omni-text">Search this site</span>
+    <span class="key omni-key" aria-hidden="true">⌘K</span>
+  </button>
+  <nav class="bar-nav" aria-label="Primary">
+    <a class="bar-link" href="https://app.fournotes.xyz" rel="noopener">Web app</a>
+    <a class="btn btn-paper btn-sm" href="https://github.com/lynnarize/fournotes-macos/releases" data-download>
+      <svg class="ico" aria-hidden="true"><use href="#i-apple"/></svg><span>Download</span>
+    </a>
+  </nav>
+</header>
+
+<main id="content" tabindex="-1">
+
+  <!-- Hero, then a framed preview of the app on the site's sheet. Words outside the frame, app inside. -->
+  <section class="stage" id="top" data-stage>
+    <div class="pin" data-pin>
+
+
+      <div class="paper-bg" aria-hidden="true"></div>
+
+      <div class="hero" data-hero>
+        <h1 class="display" aria-label="Four notebooks. One calm place.">
+          <span class="ln ln-1" aria-hidden="true">
+            <span class="wd" data-w="four">Four</span>
+            <span class="marks">
+              <span class="mk" data-mk="0"><svg viewBox="0 0 24 24"><circle class="mk-ring" cx="12" cy="12" r="10.700" pathLength="1"/></svg></span>
+              <span class="mk" data-mk="1"><svg viewBox="0 0 24 24"><circle class="mk-ring mk-ring--red" cx="12" cy="12" r="10.700" pathLength="1"/><path class="mk-fill" d="M12 5.400a6.600 6.600 0 0 1 0 13.200z"/></svg></span>
+              <span class="mk" data-mk="2"><svg viewBox="0 0 24 24"><circle class="mk-dot" cx="12" cy="12" r="9.500"/></svg></span>
+              <span class="mk" data-mk="3"><svg viewBox="0 0 24 24"><circle class="mk-done" cx="12" cy="12" r="12"/><path class="mk-tick" d="m6.600 12.400 3.700 3.700 7.100-7.600" pathLength="1"/></svg></span>
+            </span>
+            <span class="wd" data-w="notebooks">notebooks.</span>
+          </span>
+          <span class="ln ln-2" aria-hidden="true"><span class="wd" data-w="one">One calm place.</span></span>
+        </h1>
+        <p class="lede" data-hero-fade>Notes, plans, meetings and money, with an assistant that files what you tell it. Free for the Mac and the web.</p>
+        <div class="cta" data-hero-fade>
+          <a class="btn btn-ink btn-lg" href="https://github.com/lynnarize/fournotes-macos/releases" data-download>
+            <svg class="ico" aria-hidden="true"><use href="#i-apple"/></svg><span>Download for Mac</span>
+          </a>
+          <a class="link-go" href="https://app.fournotes.xyz" rel="noopener"><span>Open the web app</span><svg class="ico" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+        </div>
+        <p class="assure" data-hero-fade>No account. Works offline. macOS 26 or later.</p>
+      </div>
+
+
+      <figure class="frame" data-frame>
+        <div class="win" data-win data-ui>
+          <div class="win-bar" aria-hidden="true">
+            <span class="lights"><i></i><i></i><i></i></span>
+            <span class="win-omni">
+              <svg class="ico"><use href="#i-search"/></svg>
+              <span class="omni-text" data-omni-text>Search, ask or capture anything…</span>
+              <svg class="ico omni-tool"><use href="#i-scan"/></svg>
+              <svg class="ico omni-tool"><use href="#i-mic"/></svg>
+              <span class="key omni-tool">⌘K</span>
+            </span>
+          </div>
+          <div class="win-paper" data-paper aria-hidden="true"></div>
+          <nav class="side" aria-label="Chapters of the preview" data-side>
+            <ul>
+              <li><a href="#today" data-place="0" class="is-on"><svg class="ico" aria-hidden="true"><use href="#i-today"/></svg><span>Today</span><b data-count="today">4</b></a></li>
+              <li><a href="#planner" data-place="1"><svg class="ico" aria-hidden="true"><use href="#i-planner"/></svg><span>Planner</span><b data-count="planner">8</b></a></li>
+              <li><a href="#meetings" data-place="2"><svg class="ico" aria-hidden="true"><use href="#i-wave"/></svg><span>Meetings</span><b>3</b></a></li>
+              <li><a href="#notes" data-place="3"><svg class="ico" aria-hidden="true"><use href="#i-lines"/></svg><span>Notes</span><b>5</b></a></li>
+              <li><a href="#money" data-place="4"><svg class="ico" aria-hidden="true"><use href="#i-money"/></svg><span>Money</span><b data-count="money">11</b></a></li>
+            </ul>
+            <p class="side-label" aria-hidden="true">Recent</p>
+            <ul class="side-recent" aria-hidden="true">
+              <li><svg class="ico"><use href="#i-note"/></svg>Weekend in Bandung</li>
+              <li><svg class="ico"><use href="#i-note"/></svg>Rent contract 2026</li>
+              <li><svg class="ico"><use href="#i-note"/></svg>Venue shortlist</li>
+            </ul>
+            <p class="side-foot" aria-hidden="true"><svg class="ico"><use href="#i-cloud"/></svg>Saved on this Mac</p>
+          </nav>
+        </div>
+        <figcaption class="frame-note">Preview with sample data. <a href="https://app.fournotes.xyz" rel="noopener">Open the real web app</a></figcaption>
+      </figure>
+
+      <div class="chapters" data-chapters>
+
+        <article class="ch ch-today" id="today" data-ch="0" aria-label="Today">
+          <header class="ch-copy">
+            <div class="title-slot" aria-hidden="true"><span data-t="four">Four</span> <span data-t="notebooks">notebooks.</span> <br><span data-t="one">One calm place.</span></div>
+            <h2 class="ch-title">Your whole day on one sheet.</h2>
+            <p>Open it and see what is due, what is next and what you spent.</p>
+          </header>
+          <div class="ch-screen" data-ui>
+          <div class="ch-main">
+            <div class="ch-pad">
+              <p class="scr-title" data-greet>Good morning</p>
+              <p class="ch-date" data-date>Saturday, November 7</p>
+              <div class="sum" data-fadein>
+                <span class="aib"><svg class="ico" aria-hidden="true"><use href="#i-spark"/></svg>Summary</span>
+                <p class="sum-line">One meeting, two tasks. <span>The invoice needs you.</span></p>
+              </div>
+              <ul class="rows">
+                <li class="row" data-row>
+                  <span class="slot" data-slot="0"><svg viewBox="0 0 24 24"><circle class="mk-ring" cx="12" cy="12" r="10.700" pathLength="1"/></svg></span>
+                  <span class="bd"><span class="t">Send the Q3 invoice to Studio Kopi</span><span class="meta"><span class="tm">14:00</span><span class="warm">Pushed back 3 times</span></span></span>
+                </li>
+                <li class="row" data-row>
+                  <span class="slot" data-slot="1"><svg viewBox="0 0 24 24"><circle class="mk-ring mk-ring--red" cx="12" cy="12" r="10.700" pathLength="1"/><path class="mk-fill" d="M12 5.400a6.600 6.600 0 0 1 0 13.200z"/></svg></span>
+                  <span class="bd"><span class="t">Review Sarah's mockups</span><span class="meta"><span class="tm">16:00</span><span>Doing</span></span></span>
+                </li>
+                <li class="row" data-row>
+                  <span class="slot slot--dot" data-slot="2"><svg viewBox="0 0 24 24"><circle class="mk-dot" cx="12" cy="12" r="9.500"/></svg></span>
+                  <span class="bd"><span class="t">Product sync</span><span class="meta"><span class="tm">17:00</span><span>Google Meet</span></span></span>
+                  <span class="chip-rec"><i></i>Record</span>
+                </li>
+                <li class="row" data-row>
+                  <span class="slot" data-slot="3"><svg viewBox="0 0 24 24"><circle class="mk-done" cx="12" cy="12" r="12"/><path class="mk-tick" d="m6.600 12.400 3.700 3.700 7.100-7.600" pathLength="1"/></svg></span>
+                  <span class="bd"><span class="t t--done">Book the dentist</span><span class="meta"><span>Done this morning</span></span></span>
+                </li>
+              </ul>
+              <div class="filed" data-filed>
+                <p class="sec">Just filed</p>
+                <ul class="rows">
+                  <li class="row"><span class="tag tag-spend">Spend</span><span class="bd"><span class="t">Kopi Kenangan</span><span class="meta"><span class="tm">Today</span><span>Food &amp; Drink</span></span></span><span class="amt">Rp 38,000</span></li>
+                  <li class="row"><span class="tag tag-task">Task</span><span class="bd"><span class="t">Pay rent</span><span class="meta"><span class="tm">Fri 09:00</span><span>Reminder set</span></span></span></li>
+                  <li class="row"><span class="tag tag-task">Task</span><span class="bd"><span class="t">Call Budi</span><span class="meta"><span class="tm">Monday</span></span></span></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <figure class="ch-side">
+            <picture>
+              <source type="image/avif" srcset="assets/app/today-side.avif">
+              <img src="assets/app/today-side.webp" width="682" height="1610" alt="At a glance: what is due today, what is coming up and what you have spent." loading="lazy" decoding="async">
+            </picture>
+          </figure>
+          </div>
+        </article>
+
+        <section class="capture" data-capture aria-labelledby="say-title">
+          <div class="ch-copy say">
+            <h2 id="say-title" class="ch-title" data-ink>Say it once. It files itself.</h2>
+            <p>Type it the way you would text a friend. 25rb, 2.5jt and warteg all count, in English or Bahasa Indonesia.</p>
+          </div>
+          <div class="ch-screen cap-screen" data-ui>
+            <div class="scrim" data-scrim aria-hidden="true"></div>
+            <div class="panel" data-panel>
+              <p class="sec sec--row"><span class="sec-filed"><svg class="ico" aria-hidden="true"><use href="#i-spark"/></svg>Filed 3 things</span></p>
+              <div class="cap">
+                <div class="it" data-it><span class="tag tag-spend">Spend</span><span class="bd"><span class="t">Kopi Kenangan</span><span class="meta"><span class="tm">Today</span><span>Food &amp; Drink</span></span></span><span class="amt">Rp 38,000</span></div>
+                <div class="it" data-it><span class="tag tag-task">Task</span><span class="bd"><span class="t">Pay rent</span><span class="meta"><span class="tm">Fri 09:00</span><span>Reminder set</span></span></span></div>
+                <div class="it" data-it><span class="tag tag-task">Task</span><span class="bd"><span class="t">Call Budi</span><span class="meta"><span class="tm">Monday</span></span></span></div>
+                <div class="cap-foot"><span>From one sentence</span><span class="pb">Undo</span></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <article class="ch ch-planner" id="planner" data-ch="1" aria-labelledby="planner-title">
+          <header class="ch-copy">
+            <h2 id="planner-title" class="ch-title">Tasks, meetings and bills share one day.</h2>
+            <p>Your calendar and to-dos in one Planner. Move through it by date, or switch to List or Board.</p>
+          </header>
+          <div class="ch-screen" data-ui>
+          <div class="ch-main">
+            <figure class="shot">
+              <picture>
+                <source media="(max-width: 760px)" type="image/avif" srcset="assets/app/planner-phone.avif">
+                <source media="(max-width: 760px)" type="image/webp" srcset="assets/app/planner-phone.webp">
+                <source type="image/avif" srcset="assets/app/planner.avif">
+                <img src="assets/app/planner.webp" width="2336" height="1290" alt="The Planner on Saturday: a strip of dates, four tasks for today in time order, and a red line marking the current time." loading="lazy" decoding="async">
+              </picture>
+            </figure>
+          </div>
+          </div>
+        </article>
+
+        <article class="ch ch-meetings" id="meetings" data-ch="2" aria-labelledby="meetings-title">
+          <header class="ch-copy">
+            <h2 id="meetings-title" class="ch-title">Your words in ink. The rest in pencil.</h2>
+            <p>Write a few lines while it records. On the Mac, Enhance fills in the rest, lighter than yours, and every line plays from its moment.</p>
+          </header>
+          <div class="ch-screen" data-ui>
+          <div class="ch-main">
+            <div class="ch-pad ch-pad--head">
+              <p class="scr-title">Product sync</p>
+              <p class="ch-date">Yesterday, 10:00</p>
+            </div>
+            <div class="enh">
+              <p class="enh-key"><span><i class="k-ink"></i>You wrote</span><span><i class="k-pencil"></i>Added from the talk</span></p>
+              <p class="sec">Decisions</p>
+              <p class="me">Launch → Nov 12 (printer).</p>
+              <p class="ai" data-pencil>The printer can't deliver by Nov 5, so the launch moves a week. <time>00:42</time></p>
+              <p class="me">Budget 4jt incl. food.</p>
+              <p class="ai" data-pencil>Rp 4,000,000 for the venue, food included. <time>05:09</time></p>
+              <p class="sec">Owners</p>
+              <p class="me">Mockups: Sarah, Sat.</p>
+              <p class="ai" data-pencil>Final mockups by Saturday. <time>01:10</time></p>
+              <p class="me">Venue: same as last yr? Dimas checks.</p>
+              <p class="ai" data-pencil>Dimas asks Kopi Toko Djawa today and confirms the deposit by Friday. <time>12:40</time></p>
+              <p class="enh-foot"><span class="btn-mini">Add 3 action items to the Planner</span><span class="enh-private">Enhance is in the Mac app.</span></p>
+            </div>
+          </div>
+          <figure class="ch-side">
+            <picture>
+              <source type="image/avif" srcset="assets/app/meetings-side.avif">
+              <img src="assets/app/meetings-side.webp" width="720" height="1610" alt="The Meetings list: Product sync, a one to one with Sarah and a client call, each with a summary and who took part." loading="lazy" decoding="async">
+            </picture>
+          </figure>
+          </div>
+        </article>
+
+        <article class="ch ch-notes" id="notes" data-ch="3" aria-labelledby="notes-title">
+          <header class="ch-copy">
+            <h2 id="notes-title" class="ch-title">A note keeps the tasks it started.</h2>
+            <p>A trip note holds its packing list and the errands that came out of it. One search finds all of it.</p>
+          </header>
+          <div class="ch-screen" data-ui>
+          <div class="ch-main">
+            <figure class="shot">
+              <picture>
+                <source media="(max-width: 760px)" type="image/avif" srcset="assets/app/notes-phone.avif">
+                <source media="(max-width: 760px)" type="image/webp" srcset="assets/app/notes-phone.webp">
+                <source type="image/avif" srcset="assets/app/notes.avif">
+                <img src="assets/app/notes.webp" width="1592" height="1320" alt="A note called Weekend in Bandung, with tags, a linked task, a packing checklist and places to eat." loading="lazy" decoding="async">
+              </picture>
+            </figure>
+          </div>
+          <figure class="ch-side">
+            <picture>
+              <source type="image/avif" srcset="assets/app/notes-side.avif">
+              <img src="assets/app/notes-side.webp" width="720" height="1610" alt="The list of notes, each with a one line preview, its tag and any linked tasks." loading="lazy" decoding="async">
+            </picture>
+          </figure>
+          </div>
+        </article>
+
+        <article class="ch ch-money" id="money" data-ch="4" aria-labelledby="money-title">
+          <header class="ch-copy">
+            <h2 id="money-title" class="ch-title">One number first. The chart can wait.</h2>
+            <p>Scan a receipt, paste a wallet notification, or just say what you spent.</p>
+          </header>
+          <div class="ch-screen" data-ui>
+          <div class="ch-main">
+            <figure class="shot">
+              <picture>
+                <source media="(max-width: 760px)" type="image/avif" srcset="assets/app/money-phone.avif">
+                <source media="(max-width: 760px)" type="image/webp" srcset="assets/app/money-phone.webp">
+                <source type="image/avif" srcset="assets/app/money.avif">
+                <img src="assets/app/money.webp" width="1632" height="1430" alt="Money for November: Rp 1,586,500 spent so far, one bar split by category, and the latest transactions." loading="lazy" decoding="async">
+              </picture>
+            </figure>
+          </div>
+          <figure class="ch-side">
+            <picture>
+              <source type="image/avif" srcset="assets/app/money-side.avif">
+              <img src="assets/app/money-side.webp" width="682" height="1610" alt="Coming up: bills with their dates, a subscription it spotted, money owed to you and budgets." loading="lazy" decoding="async">
+            </picture>
+          </figure>
+          </div>
+        </article>
+      </div>
+
+      <div class="ch-screen ch-over" data-over data-ui aria-hidden="true">
+  <div class="toast" data-toast><svg class="ico"><use href="#i-check"/></svg>Filed 3 things<span>Undo</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- The small jobs: what it does for you, as a to-do list being ticked off. -->
+  <section class="jobs" id="jobs" aria-labelledby="jobs-title">
+    <h2 id="jobs-title" class="statement" data-ink>The small jobs, handled.</h2>
+    <p class="jobs-sub">Snap it, say it or ask it. Four Notes does the rest.</p>
+    <ul class="job-list">
+      <li class="job">
+        <span class="job-mk" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.700" pathLength="1"/><path d="m6.800 12.400 3.600 3.600 6.800-7.200" pathLength="1"/></svg></span>
+        <span class="job-do">Scan a receipt</span>
+        <span class="job-done">It becomes spending</span>
+      </li>
+      <li class="job">
+        <span class="job-mk" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.700" pathLength="1"/><path d="m6.800 12.400 3.600 3.600 6.800-7.200" pathLength="1"/></svg></span>
+        <span class="job-do">Say “remind me Friday”</span>
+        <span class="job-done">It reminds you Friday</span>
+      </li>
+      <li class="job">
+        <span class="job-mk" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.700" pathLength="1"/><path d="m6.800 12.400 3.600 3.600 6.800-7.200" pathLength="1"/></svg></span>
+        <span class="job-do">Record a voice memo</span>
+        <span class="job-done">A note with its to-dos</span>
+      </li>
+      <li class="job">
+        <span class="job-mk" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.700" pathLength="1"/><path d="m6.800 12.400 3.600 3.600 6.800-7.200" pathLength="1"/></svg></span>
+        <span class="job-do">Split a bill</span>
+        <span class="job-done">It tracks who owes you</span>
+      </li>
+      <li class="job">
+        <span class="job-mk" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.700" pathLength="1"/><path d="m6.800 12.400 3.600 3.600 6.800-7.200" pathLength="1"/></svg></span>
+        <span class="job-do">Ask a question</span>
+        <span class="job-done">Answered from your notes</span>
+      </li>
+    </ul>
+  </section>
+
+  <!-- The one live thing. -->
+  <section class="sheet try" id="bar" aria-labelledby="try-title">
+    <div class="try-head">
+      <h2 id="try-title" class="statement" data-ink>Go on, tell it something.</h2>
+      <p>This small demo runs in your browser. In the app, the model on your device understands far more.</p>
+    </div>
+    <form class="big-omni" data-demo-form autocomplete="off" data-ui>
+      <label class="sr" for="demo-input">Tell Four Notes what happened</label>
+      <svg class="ico" aria-hidden="true"><use href="#i-spark"/></svg>
+      <input id="demo-input" data-demo-input type="text" maxlength="140" placeholder="kopi 25rb di Starbucks, pay rent fri 9am" enterkeyhint="send">
+      <button type="submit" aria-label="File it"><svg class="ico" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+    </form>
+    <div class="tries" role="group" aria-label="Examples to try">
+      <button type="button" data-try>spent 45k on lunch at warteg, split with Andi</button>
+      <button type="button" data-try>remind me to pay rent 2.5jt every month on the 5th at 9am</button>
+      <button type="button" data-try>kopi 25rb di Starbucks</button>
+      <button type="button" data-try>buy milk tomorrow, netflix is 186k every month</button>
+    </div>
+    <div class="result" data-ui>
+      <ul class="rows" data-demo-rows aria-live="polite"></ul>
+      <p class="result-empty" data-demo-empty>Pick an example, or type your own. It shows what it would file.</p>
+    </div>
+
+    <div class="cmds" data-cmds>
+      <h3 class="sr">What the bar does</h3>
+      <ul>
+        <li><button type="button" class="cmd is-on" aria-pressed="true" aria-describedby="cmd-1"><span class="cmd-name">Capture</span><span class="keys" aria-hidden="true"><kbd>↵</kbd></span></button><p class="cmd-say" id="cmd-1">Type it, and it is filed. You see what went where, with Undo right there.</p></li>
+        <li><button type="button" class="cmd" aria-pressed="false" aria-describedby="cmd-2"><span class="cmd-name">Ask</span><span class="keys" aria-hidden="true"><kbd>⌘</kbd><kbd>↵</kbd></span></button><p class="cmd-say" id="cmd-2">Answers come from your notes, talks and Library, with numbered sources you can open.</p></li>
+        <li><button type="button" class="cmd" aria-pressed="false" aria-describedby="cmd-3"><span class="cmd-name">Scan</span><span class="keys" aria-hidden="true"><kbd>⇧</kbd><kbd>⌘</kbd><kbd>I</kbd></span></button><p class="cmd-say" id="cmd-3">A receipt becomes spending, handwriting becomes a note, a checklist becomes tasks.</p></li>
+        <li><button type="button" class="cmd" aria-pressed="false" aria-describedby="cmd-4"><span class="cmd-name">Record</span><span class="keys" aria-hidden="true"><kbd>⌥</kbd><kbd>⌘</kbd><kbd>R</kbd></span></button><p class="cmd-say" id="cmd-4">In person or on a call, transcribed on your Mac, with who said what.</p></li>
+        <li><button type="button" class="cmd" aria-pressed="false" aria-describedby="cmd-5"><span class="cmd-name">Dictate</span></button><p class="cmd-say" id="cmd-5">Say it instead. A voice memo becomes a note with its to-dos.</p></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- The Edge Dock. On desktop this is the real thing, on the real edge of the window. -->
+  <section class="sheet edge-s" id="edge" aria-labelledby="edge-title" data-edge-section>
+    <div class="edge-copy">
+      <h2 id="edge-title" class="statement" data-ink>It waits on the edge of your screen.</h2>
+      <p>A small tab sits over whatever you are working in. Open it for one input and the rest of your day, then get back to work.</p>
+      <p class="edge-hint"><span class="pill">Mac only</span><span class="edge-try">It is on this page too. Press <span class="keys keys--sm"><kbd>⇧</kbd><kbd>⌘</kbd><kbd>.</kbd></span> or use the tab on the right.</span></p>
+    </div>
+    <div class="edge" data-edge data-ui>
+      <div class="edge-body" data-edge-body>
+        <section class="drawer" aria-label="Edge Dock">
+          <header class="dh">
+            <span class="rg" aria-hidden="true"><svg viewBox="0 0 21 21" width="21" height="21"><circle cx="10.500" cy="10.500" r="9.250" class="rg-t"/><circle cx="10.500" cy="10.500" r="9.250" class="rg-v" data-ring transform="rotate(-90 10.500 10.500)"/></svg><span data-left>3</span></span>
+            <div class="dh-t"><b data-dock-date>Saturday, November 7</b><span data-dock-line>3 left today</span></div>
+            <a class="dib" href="https://app.fournotes.xyz" rel="noopener" aria-label="Open Four Notes"><svg class="ico" aria-hidden="true"><use href="#i-arrow-ur"/></svg></a>
+            <button class="dib" type="button" data-edge-close aria-label="Close the Edge Dock"><svg class="ico" aria-hidden="true"><use href="#i-close"/></svg></button>
+          </header>
+          <div class="ds">
+            <form class="fld" data-dock-form autocomplete="off">
+              <label class="sr" for="dock-input">Note, task, spend or question</label>
+              <input id="dock-input" data-dock-input type="text" placeholder="Note, task, spend or question" maxlength="100">
+              <span class="mini" aria-hidden="true"><svg class="ico"><use href="#i-mic"/></svg></span>
+            </form>
+            <div class="lst" data-dock-list>
+              <p class="sl"><span>Next up · in 20 min</span></p>
+              <div class="r"><span class="r-dot" aria-hidden="true"></span><span class="bd"><span class="t">Product sync</span><span class="meta"><span>17:00 · Google Meet</span></span></span><span class="chip-rec chip-rec--sm"><i></i>Record</span></div>
+              <p class="sl"><span>Due today</span></p>
+              <div class="r"><button class="rc" type="button" data-tick aria-pressed="false" aria-label="Send the Q3 invoice"></button><span class="bd"><span class="t">Send the Q3 invoice</span></span><span class="r-tm">14:00</span></div>
+              <div class="r"><button class="rc" type="button" data-tick aria-pressed="false" aria-label="Review Sarah's mockups"></button><span class="bd"><span class="t">Review Sarah's mockups</span></span><span class="r-tm">16:00</span></div>
+              <div class="r"><button class="rc" type="button" data-tick aria-pressed="false" aria-label="Buy groceries"></button><span class="bd"><span class="t">Buy groceries</span></span><span class="r-tm">18:00</span></div>
+              <p class="sl"><span>Coming up</span></p>
+              <div class="r"><span class="rk" aria-hidden="true"></span><span class="bd"><span class="t">Pay internet bill</span></span><span class="r-tm">Tue · Rp 350,000</span></div>
+              <div class="r"><span class="rk rk--hi" aria-hidden="true"></span><span class="bd"><span class="t">Pay rent</span></span><span class="r-tm">Thu · Rp 2,500,000</span></div>
+            </div>
+            <p class="ft"><span>Spent today</span><b data-spent>Rp 61,000</b></p>
+          </div>
+        </section>
+      </div>
+      <button class="hnd" type="button" data-edge-open aria-expanded="false" aria-label="Open the Edge Dock">
+        <span class="rg" aria-hidden="true"><svg viewBox="0 0 21 21" width="21" height="21"><circle cx="10.500" cy="10.500" r="9.250" class="rg-t"/><circle cx="10.500" cy="10.500" r="9.250" class="rg-v" data-ring transform="rotate(-90 10.500 10.500)"/></svg><span data-left>3</span></span>
+      </button>
+    </div>
+  </section>
+
+  <!-- Same notes, anywhere: statements pass, one screen stays. -->
+  <section class="anywhere" id="web" aria-labelledby="web-title" data-anywhere>
+    <div class="any-pin">
+      <div class="beats">
+        <div class="beat" data-beat="0">
+          <h2 id="web-title" class="beat-title">Open it in any browser.</h2>
+          <p>The web app has the same five places as the Mac app, and it fits your phone. <a href="https://app.fournotes.xyz" rel="noopener">app.fournotes.xyz</a></p>
+        </div>
+        <div class="beat" data-beat="1">
+          <h3 class="beat-title">One file, in your Drive.</h3>
+          <p>Turn on sync and your Mac and the web app share one file in a private folder of your Google Drive. Scans and keys stay where they are.</p>
+        </div>
+        <div class="beat" data-beat="2">
+          <h3 class="beat-title">Light, Paper or Dark.</h3>
+          <p>Or simply follow your device.</p>
+          <div class="seg" role="group" aria-label="See a theme">
+            <button type="button" data-theme-pick="0" aria-pressed="false">Light</button>
+            <button type="button" data-theme-pick="2" aria-pressed="true">Paper</button>
+            <button type="button" data-theme-pick="3" aria-pressed="false">Dark</button>
+          </div>
+        </div>
+      </div>
+      <div class="phone" data-phone>
+        <div class="handset" data-handset>
+          <div class="iphone" data-ui>
+            <i class="ib ib-action"></i><i class="ib ib-up"></i><i class="ib ib-down"></i><i class="ib ib-side"></i>
+            <div class="screen">
+              <div class="status" aria-hidden="true">
+                <span class="status-time">9:41</span>
+                <span class="island"></span>
+                <svg class="status-icons" viewBox="0 0 66 12"><path d="M1 8.500h2.400V11H1zM5.200 6h2.400v5H5.200zM9.400 3.500h2.400V11H9.400zM13.600 1h2.400v10h-2.400z"/><path d="M31 3.100c2.100 0 4 .800 5.500 2.200l1-1.100C35.700 2.500 33.400 1.600 31 1.600s-4.700.900-6.500 2.600l1 1.100C27 3.900 28.900 3.100 31 3.100zm0 3.300c1.200 0 2.300.500 3.200 1.300l1-1.100C33.900 5.400 32.500 4.800 31 4.800s-2.900.600-4.200 1.800l1 1.100C28.700 6.900 29.800 6.400 31 6.400zM31 8l-1.900 1.900L31 11.800l1.900-1.900z"/><rect x="43.500" y="1.500" width="19" height="9.500" rx="2.800" fill="none" stroke="currentColor" opacity=".45"/><rect x="45" y="3" width="16" height="6.500" rx="1.500"/><path d="M63.800 4.600v3.300c.700-.300 1.200-.900 1.200-1.700s-.500-1.300-1.200-1.600z" opacity=".5"/></svg>
+              </div>
+              <picture class="is-on" data-screen="0">
+                <source type="image/avif" srcset="assets/app/phone-light.avif">
+                <img src="assets/app/phone-light.webp" width="900" height="1948" alt="Today on a phone: a summary of the day, with a bar of five places along the bottom." loading="lazy" decoding="async">
+              </picture>
+              <picture data-screen="1">
+                <source type="image/avif" srcset="assets/app/phone-notes.avif">
+                <img src="assets/app/phone-notes.webp" width="900" height="1948" alt="The note Weekend in Bandung, open on a phone." loading="lazy" decoding="async">
+              </picture>
+              <picture data-screen="2">
+                <source type="image/avif" srcset="assets/app/phone-paper.avif">
+                <img src="assets/app/phone-paper.webp" width="900" height="1948" alt="Today in the Paper theme: warm paper and ink brown text." loading="lazy" decoding="async">
+              </picture>
+              <picture data-screen="3">
+                <source type="image/avif" srcset="assets/app/phone-dark.avif">
+                <img src="assets/app/phone-dark.webp" width="900" height="1948" alt="Today in the Dark theme." loading="lazy" decoding="async">
+              </picture>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Private. The proof is a real file path. -->
+  <section class="private" id="private" aria-labelledby="private-title">
+    <h2 id="private-title" class="statement" data-ink>One file on your Mac.</h2>
+    <p class="private-sub">Everything you create stays there, and Settings shows you where.</p>
+    <ul class="facts" data-facts>
+      <li><span class="fact-mk" aria-hidden="true"><svg class="ico"><use href="#i-check"/></svg></span><span><b>No account</b>Sign in with Google only if you want sync.</span></li>
+      <li><span class="fact-mk" aria-hidden="true"><svg class="ico"><use href="#i-check"/></svg></span><span><b>No analytics, tracking or ads</b>The app itself has none of them.</span></li>
+      <li><span class="fact-mk" aria-hidden="true"><svg class="ico"><use href="#i-check"/></svg></span><span><b>Works offline</b>With Apple Intelligence, the assistant runs on your Mac for free.</span></li>
+      <li><span class="fact-mk" aria-hidden="true"><svg class="ico"><use href="#i-check"/></svg></span><span><b>No Four Notes server</b>Requests go straight to the model you chose.</span></li>
+      <li><span class="fact-mk" aria-hidden="true"><svg class="ico"><use href="#i-check"/></svg></span><span><b>Keys stay in your Keychain</b>Never in a note, a backup or an export.</span></li>
+      <li><span class="fact-mk" aria-hidden="true"><svg class="ico"><use href="#i-check"/></svg></span><span><b>Yours to take with you</b>Export a backup, or erase everything, whenever you like.</span></li>
+    </ul>
+    <p class="models"><span class="models-lead">Answers can come from</span>
+      <span>Apple Intelligence</span><span>Ollama</span><span>LM Studio</span><span>Claude</span><span>OpenRouter</span><span>OpenCode</span></p>
+    <p class="fine">Apple Intelligence, local models and the Edge Dock are only in the Mac app. The web app uses a cloud model or your own key.</p>
+  </section>
+
+  <!-- The close. The pen stroke draws itself across the sheet. -->
+  <section class="sheet final" id="download" aria-labelledby="final-title">
+    <h2 id="final-title" class="statement" data-ink>Give your day one calm place.</h2>
+    <p class="final-sub">Download it or open it in your browser, pick your currency, and you are set.</p>
+    <div class="cta">
+      <a class="btn btn-ink btn-lg" href="https://github.com/lynnarize/fournotes-macos/releases" data-download>
+        <svg class="ico" aria-hidden="true"><use href="#i-apple"/></svg><span>Download for Mac</span>
+      </a>
+      <a class="link-go" href="https://app.fournotes.xyz" rel="noopener"><span>Open the web app</span><svg class="ico" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+    </div>
+    <p class="final-meta"><a href="https://github.com/lynnarize/fournotes-macos/releases" rel="noopener" data-version-link>Version <span data-version>0.5 beta</span></a> · macOS 26 or later · Web app in any modern browser</p>
+    <p class="final-meta">Four Notes is free. If it helps you, <a href="https://ko-fi.com/lynnarize" rel="noopener">a coffee keeps it going</a>.</p>
+    <svg class="stroke" viewBox="0 200 800 400" role="img" aria-label="The Four Notes pen stroke" data-stroke>
+      <defs>
+        <mask id="draw" maskUnits="userSpaceOnUse" x="0" y="150" width="800" height="500">
+          <path data-stroke-path d="M46 568C86 452 158 308 262 246C300 224 288 288 276 330C258 392 230 448 242 476C256 500 300 468 340 438C392 398 424 392 472 426C526 462 604 468 672 372" fill="none" stroke="#fff" stroke-width="66" stroke-linecap="round" stroke-linejoin="round"/>
+        </mask>
+      </defs>
+      <path fill="currentColor" mask="url(#draw)" d="M261 218C265 217 269 217 272 218C275 218 278 219 281 220C284 221 286 222 289 224C292 225 294 228 296 230C298 232 301 236 302 238C304 240 304 242 305 245C306 248 307 252 308 256C309 260 309 264 309 268C310 272 309 275 309 279C309 283 309 284 308 291C307 298 305 310 302 321C300 332 297 340 292 357C288 374 277 407 273 420C269 433 270 432 269 436C268 440 267 443 267 446C266 449 266 453 266 455C266 457 266 458 267 459C267 460 268 461 269 461C270 461 270 461 271 461C272 461 271 462 274 460C277 458 276 461 289 451C302 442 339 415 352 406C365 397 360 400 366 397C372 394 380 389 385 387C390 384 392 384 395 383C398 381 403 380 406 380C409 379 410 379 413 379C416 378 422 378 425 378C428 379 430 379 433 380C436 380 437 380 441 382C445 383 448 384 456 389C464 394 480 406 489 411C498 417 502 419 508 421C514 424 520 426 525 427C530 428 535 429 539 429C543 430 544 430 548 429C552 429 559 428 564 427C569 427 571 426 576 424C581 423 588 420 593 417C598 415 604 411 608 408C612 405 616 402 620 399C624 396 627 394 631 390C635 386 640 382 644 376C649 370 655 361 658 357C661 353 660 355 662 354C664 353 666 352 667 352C668 351 670 351 671 351C672 350 674 350 676 351C678 351 681 352 683 353C685 354 687 355 688 356C689 357 690 358 691 360C692 362 693 364 694 366C694 368 694 370 694 372C694 374 695 374 693 377C692 380 689 386 686 391C682 396 678 401 674 406C670 411 665 416 661 421C656 426 652 429 647 433C642 438 637 442 632 445C627 449 621 452 616 455C611 458 606 461 600 463C594 466 587 469 581 470C575 472 570 473 564 474C558 475 553 476 548 476C543 476 538 476 533 475C528 475 524 474 520 473C516 473 517 473 512 472C507 470 498 467 491 464C484 462 483 461 473 455C463 449 441 434 433 429C425 424 427 426 424 426C421 425 416 426 414 426C412 426 411 426 409 427C407 428 406 428 402 430C398 432 391 435 386 439C381 442 380 442 370 450C360 458 333 478 323 486C313 493 314 492 310 494C306 497 301 500 296 502C291 505 285 507 281 509C277 511 274 511 270 512C266 513 262 513 258 514C254 514 252 513 249 513C246 512 244 511 241 510C239 509 236 507 234 505C232 504 229 501 228 499C226 497 225 496 224 493C222 490 221 487 220 484C219 481 218 479 218 476C217 473 217 472 217 468C216 464 216 460 216 455C216 450 217 443 218 436C219 429 218 430 223 412C228 394 243 348 248 329C254 310 255 304 256 297C258 290 258 290 258 287C259 284 259 279 259 277C259 275 259 275 258 274C258 273 258 273 257 272C256 272 255 272 254 273C253 273 252 273 248 276C244 279 238 283 231 290C224 296 215 306 207 315C199 324 189 337 183 345C176 353 174 357 169 365C164 373 159 380 152 392C145 404 134 423 127 436C120 449 116 457 110 469C105 481 99 496 94 508C89 520 84 532 81 542C78 552 75 562 73 567C71 572 71 570 70 572C69 574 68 575 67 576C66 577 66 577 64 578C62 579 58 581 56 582C54 583 52 583 49 583C46 583 42 582 40 581C38 581 38 580 36 579C34 578 32 576 31 575C29 574 29 572 28 571C27 570 26 568 26 567C25 566 25 565 25 563C24 561 24 559 24 556C24 553 23 556 26 547C29 538 35 520 41 505C47 490 53 475 61 458C68 441 79 419 87 405C94 391 99 383 106 372C112 361 118 352 125 341C133 330 142 318 149 309C155 300 160 295 167 286C174 278 184 268 191 261C198 254 204 249 210 244C216 239 226 233 230 230C234 227 232 228 235 227C238 225 245 222 249 221C253 219 257 219 261 218Z"/>
+      <path data-stroke-spark style="fill:var(--spark)" d="M716 234C716 234 717 234 718 234C719 235 719 233 720 236C722 239 724 247 725 250C726 253 726 253 727 256C729 259 732 264 735 267C737 270 739 272 741 274C743 276 747 279 749 281C751 283 752 283 755 285C758 286 761 288 764 289C767 290 772 291 774 292C776 293 776 293 776 294C776 295 776 295 776 296C776 297 776 298 776 298C776 299 776 300 774 301C772 302 766 303 763 304C760 305 758 306 755 308C752 310 748 313 745 315C742 317 741 318 739 320C737 322 735 325 733 328C731 331 729 334 727 337C726 340 724 344 723 347C722 350 722 354 721 356C720 359 718 359 717 359C716 359 716 359 715 359C714 358 713 359 713 357C712 355 711 351 710 347C709 343 706 338 705 335C703 332 702 331 700 328C698 325 694 321 691 318C689 315 687 314 684 312C681 310 678 308 675 306C672 305 671 304 668 303C665 302 661 302 659 301C657 300 657 300 657 299C656 298 656 297 656 296C656 295 656 294 657 293C657 292 656 293 658 292C660 291 665 290 668 289C671 287 675 286 678 284C681 283 683 281 686 279C688 277 692 274 694 271C696 269 698 267 700 265C701 263 703 260 705 257C706 254 707 253 708 250C709 247 711 239 712 237C713 235 712 236 713 236C714 235 715 234 716 234Z"/>
+    </svg>
+  </section>
+</main>
+
+<footer class="foot">
+  <p class="foot-what">Four Notes, for the Mac and the web</p>
+  <ul class="foot-links">
+    <li><a href="https://github.com/lynnarize/fournotes-macos/releases" rel="noopener">Releases</a></li>
+    <li><a href="https://github.com/lynnarize/fournotes-macos" rel="noopener">GitHub</a></li>
+    <li><a href="brand/">Brand kit</a></li>
+    <li><a href="https://ko-fi.com/lynnarize" rel="noopener">Ko-fi</a></li>
+    <li><a href="mailto:lynnarize@gmail.com?subject=Four%20Notes">Contact</a></li>
+  </ul>
+  <p class="foot-year">© <span data-year>2026</span> Four Notes</p>
+</footer>
+
+<!-- ⌘K, anywhere on the page. -->
+<dialog class="palette" data-palette aria-label="Search this site, or try capturing something">
+  <form method="dialog" class="pal-in" data-pal-form autocomplete="off" data-ui>
+    <svg class="ico" aria-hidden="true"><use href="#i-search"/></svg>
+    <label class="sr" for="pal-input">Search, ask or capture</label>
+    <input id="pal-input" data-pal-input type="text" placeholder="Search this site, or try a sentence…" maxlength="140" enterkeyhint="go">
+    <span class="key" aria-hidden="true">esc</span>
+  </form>
+  <div class="pal-body" data-pal-body data-ui></div>
+</dialog>
+
+<script defer src="assets/vendor/gsap.min.js"></script>
+<script defer src="assets/vendor/ScrollTrigger.min.js"></script>
+<script defer src="assets/vendor/lenis.min.js"></script>
+<script defer src="app.js"></script>
+
+<!-- Vercel Web Analytics and Speed Insights, served by Vercel once enabled. -->
+<script>
+  window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+  window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+  if (!/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) {
+    ['/_vercel/insights/script.js', '/_vercel/speed-insights/script.js'].forEach(function (src) {
+      var tag = document.createElement('script');
+      tag.defer = true;
+      tag.src = src;
+      document.head.appendChild(tag);
+    });
+  }
+</script>
+</body>
+</html>

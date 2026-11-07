@@ -100,7 +100,7 @@ enum LegalDocument: String, Identifiable, CaseIterable {
         .p("These terms apply to your use of Four Notes for Mac (“the app”). By using the app you agree to them. If you don’t agree, please don’t use it."),
 
         .h2("1. The app"),
-        .p("Four Notes is a free Mac app for notes, to-dos and tracking spending, with an optional AI assistant. It is distributed through [GitHub](https://github.com/lynnarize/fournotes-macos/releases). Features may change between versions; some are marked *beta* and may be incomplete. The app doesn’t update itself — you choose when to install a new version."),
+        .p("Four Notes is a free Mac app for notes, to-dos and tracking spending, with an optional AI assistant. It is distributed through [GitHub](https://github.com/lynnarize/fournotes/releases). Features may change between versions; some are marked *beta* and may be incomplete. The app doesn’t update itself — you choose when to install a new version."),
 
         .h2("2. Your content"),
         .p("You own what you create in the app. It is stored on your Mac, and you are responsible for it and for keeping backups — you can export one any time from Settings → Data & privacy. How the app handles your information is described in the Privacy Policy."),

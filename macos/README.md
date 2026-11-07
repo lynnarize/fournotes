@@ -197,7 +197,7 @@ Anyway**). A Developer ID signature and notarization remove that step.
   commit count and `FNGitCommit` the short hash (`-dirty` with uncommitted
   changes). Settings → About shows all three, so any build can be traced to
   its commit.
-- **Releases** are tagged `v<version>`. One command keeps the app, the tag and
+- **Releases** are tagged `macos-v<version>`. One command keeps the app, the tag and
   the GitHub release in step — it sets the version, commits, builds the disk
   image from that commit, then asks before tagging, pushing and publishing:
 

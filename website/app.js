@@ -34,7 +34,7 @@
       if (cached && Date.now() - cached.at < FRESH) return apply(cached.rel);
     } catch { /* storage unavailable */ }
     try {
-      const res = await fetch('https://api.github.com/repos/lynnarize/fournotes-macos/releases/latest', { headers: { Accept: 'application/vnd.github+json' }, cache: 'no-store' });
+      const res = await fetch('https://api.github.com/repos/lynnarize/fournotes/releases/latest', { headers: { Accept: 'application/vnd.github+json' }, cache: 'no-store' });
       if (!res.ok) return;
       const data = await res.json();
       const match = [data.name, data.tag_name].map(s => /(\d+\.\d+(?:\.\d+)?(?:-[0-9A-Za-z.]+)?)/.exec(s || '')).find(Boolean);

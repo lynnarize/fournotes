@@ -1,10 +1,10 @@
 #!/bin/bash
 # Cuts a release so the app, the tag and the GitHub release all say the same
 # version: sets MARKETING_VERSION, commits, builds the disk image from that
-# commit, tags it v<version> and publishes it on GitHub.
+# commit, tags it macos-v<version> and publishes it on GitHub.
 #
-#   ./scripts/release.sh 0.1.2          tag v0.1.2
-#   ./scripts/release.sh 0.1.2-beta     tag v0.1.2-beta (the app shows 0.1.2)
+#   ./scripts/release.sh 0.1.2          tag macos-v0.1.2
+#   ./scripts/release.sh 0.1.2-beta     tag macos-v0.1.2-beta (the app shows 0.1.2)
 #
 # Needs a clean tree on main, and `gh` signed in. Asks before pushing.
 set -euo pipefail
@@ -14,7 +14,7 @@ TAG_VERSION="${1:-}"
 [[ "$TAG_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] \
     || { echo "Usage: $0 <major.minor.patch[-suffix]>"; exit 1; }
 VERSION="${TAG_VERSION%%-*}"   # CFBundleShortVersionString takes numbers only
-TAG="v$TAG_VERSION"
+TAG="macos-v$TAG_VERSION"
 
 [[ "$(git branch --show-current)" == "main" ]] || { echo "Release from main."; exit 1; }
 git diff --quiet HEAD -- || { echo "Commit or stash your changes first."; exit 1; }

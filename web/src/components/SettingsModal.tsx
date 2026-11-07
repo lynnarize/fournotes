@@ -26,7 +26,7 @@ import { Icon, useToast } from "./ui";
 
 const KOFI_URL = "https://ko-fi.com/lynnarize";
 /** The native Mac app's latest release (a disk image) on GitHub. */
-const MAC_DOWNLOAD_URL = "https://github.com/lynnarize/fournotes-macos/releases/latest";
+const MAC_DOWNLOAD_URL = "https://github.com/lynnarize/fournotes/releases/latest";
 const VERSION = process.env.NEXT_PUBLIC_APP_VERSION;
 const COMMIT = process.env.NEXT_PUBLIC_APP_COMMIT;
 

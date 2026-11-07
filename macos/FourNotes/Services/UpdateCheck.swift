@@ -6,7 +6,7 @@ import Foundation
 // The version is MARKETING_VERSION in project.yml; the build number and commit
 // are stamped into Info.plist at build time (the "Stamp build number" script in
 // project.yml), so every build says exactly which commit it came from. Releases
-// are tagged v<version> by scripts/release.sh. The check runs when asked and,
+// are tagged macos-v<version> by scripts/release.sh. The check runs when asked and,
 // unless turned off in Settings → About, once a day on its own. It sends
 // nothing but the request itself — see the Privacy Policy.
 //
@@ -16,7 +16,7 @@ import Foundation
 // replaced.
 
 enum AppVersion {
-    static let releasesPage = URL(string: "https://github.com/lynnarize/fournotes-macos/releases")!
+    static let releasesPage = URL(string: "https://github.com/lynnarize/fournotes/releases")!
 
     private static var info: [String: Any] { Bundle.main.infoDictionary ?? [:] }
 
@@ -109,7 +109,7 @@ final class UpdateCheck: ObservableObject {
     /// Wait after launch, so the check never competes with opening the app.
     private static let launchDelay: Duration = .seconds(30)
 
-    private static let latest = URL(string: "https://api.github.com/repos/lynnarize/fournotes-macos/releases/latest")!
+    private static let latest = URL(string: "https://api.github.com/repos/lynnarize/fournotes/releases/latest")!
     private let defaults = UserDefaults.standard
     private var loop: Task<Void, Never>?
 
